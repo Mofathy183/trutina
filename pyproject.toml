@@ -45,7 +45,7 @@ name = "Layered architecture: apps -> infrastructure -> core -> shared/config"
 type = "layers"
 layers = [
     "trutina.cli | trutina.api",
-    "trutina.infrastructure",
+    "trutina.storage_mongo",
     "trutina.core",
     "trutina.shared | trutina.config",
 ]
