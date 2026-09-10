@@ -142,7 +142,7 @@ a generic `500` rather than raising inside the handler itself.
 apps/cli, apps/api          <- you are here
         │
         ▼
-trutina-infrastructure     (Mongo* repos)
+trutina-storage-mongo     (Mongo* repos)
         │
         ▼
 trutina-core                (AccountService, JournalService, PostingService)
@@ -151,10 +151,10 @@ trutina-core                (AccountService, JournalService, PostingService)
 trutina-shared, trutina-config
 ```
 
-Depends on (per `apps/api/pyproject.toml`): `trutina-core`, `trutina-infrastructure`,
+Depends on (per `apps/api/pyproject.toml`): `trutina-core`, `trutina-storage-mongo`,
 `trutina-config`, `fastapi[standard]`, `uvicorn[standard]`. Never imports
 `trutina-cli`, or any other `apps/*` package — enforced by the workspace's `layers`
-import-linter contract (`trutina.cli | trutina.api → trutina.infrastructure →
+import-linter contract (`trutina.cli | trutina.api → trutina.storage_mongo →
 trutina.core → trutina.shared | trutina.config`).
 
 ## Extending
