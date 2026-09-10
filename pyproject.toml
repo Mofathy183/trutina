@@ -41,7 +41,7 @@ root_packages = ["trutina"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Layered architecture: apps -> infrastructure -> core -> shared/config"
+name = "Layered architecture: apps -> storage -> core -> shared/config"
 type = "layers"
 layers = [
     "trutina.cli | trutina.api",
