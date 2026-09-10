@@ -50,11 +50,11 @@ from beanie.exceptions import DocumentNotFound
 from pymongo.errors import DuplicateKeyError
 from trutina.core.account.repo import AccountRepo
 from trutina.core.account.schemas import Account
-from trutina.infrastructure.mongo.account.document import AccountDocument
-from trutina.infrastructure.mongo.error_translation import violated_index
-from trutina.infrastructure.mongo.shared import MongoExecutor
 from trutina.shared.errors import AppError, ErrorCode
 from trutina.shared.rule import account_lookup_key
+from trutina.storage_mongo.account.document import AccountDocument
+from trutina.storage_mongo.error_translation import violated_index
+from trutina.storage_mongo.shared import MongoExecutor
 
 
 class MongoAccountRepo(AccountRepo):

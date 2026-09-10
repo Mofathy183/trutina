@@ -3,12 +3,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pymongo.errors import ConnectionFailure
 from trutina.config import MongoSettings
-from trutina.infrastructure.mongo import MongoConnection, connect, disconnect
+from trutina.storage_mongo import MongoConnection, connect, disconnect
 
 
 @pytest.mark.unit
 class TestConnect:
-    @patch("trutina.infrastructure.mongo.connection.AsyncMongoClient")
+    @patch("trutina.storage_mongo.connection.AsyncMongoClient")
     async def test_returns_connection_when_ping_succeeds(
         self,
         client_cls,
@@ -32,7 +32,7 @@ class TestConnect:
         assert connection.client is client
         assert connection.db == "db"
 
-    @patch("trutina.infrastructure.mongo.connection.AsyncMongoClient")
+    @patch("trutina.storage_mongo.connection.AsyncMongoClient")
     async def test_closes_client_when_ping_fails(
         self,
         client_cls,

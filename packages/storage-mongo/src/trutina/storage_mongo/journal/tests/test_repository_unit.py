@@ -4,13 +4,13 @@ from decimal import Decimal
 import pytest
 from pymongo.errors import DuplicateKeyError
 from trutina.core.journal.schemas import JournalEntry, JournalLine
-from trutina.infrastructure.mongo.journal import (
+from trutina.shared.errors import ErrorCode
+from trutina.storage_mongo.journal import (
     JournalDocument,
     JournalLineSubDocument,
     MongoJournalRepo,
 )
-from trutina.infrastructure.mongo.shared import MongoExecutor
-from trutina.shared.errors import ErrorCode
+from trutina.storage_mongo.shared import MongoExecutor
 
 from tests.factories import make_credit_line, make_debit_line, make_journal_entry
 

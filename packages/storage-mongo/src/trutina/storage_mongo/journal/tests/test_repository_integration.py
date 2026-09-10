@@ -44,8 +44,8 @@ from decimal import Decimal
 import pytest
 from trutina.core.journal.repo import JournalRepo
 from trutina.core.journal.schemas import JournalEntry
-from trutina.infrastructure.mongo.journal import JournalDocument
 from trutina.shared.errors import AppError, ErrorCode
+from trutina.storage_mongo.journal import JournalDocument
 
 from tests.factories import (
     make_credit_line,

@@ -5,11 +5,11 @@ from pymongo.errors import (
     ServerSelectionTimeoutError,
     WriteError,
 )
-from trutina.infrastructure.mongo.error_translation import (
+from trutina.shared.errors import AppError, ErrorCode
+from trutina.storage_mongo.error_translation import (
     translate_mongo_errors,
     violated_index,
 )
-from trutina.shared.errors import AppError, ErrorCode
 
 
 def _make_duplicate_key_error(

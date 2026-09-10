@@ -88,9 +88,9 @@ from decimal import Decimal
 
 from trutina.core.posting.repo import PostingRepo
 from trutina.core.posting.schemas.ledger_posting import LedgerPosting
-from trutina.infrastructure.mongo.posting.document import PostingDocument
-from trutina.infrastructure.mongo.shared import MongoExecutor
 from trutina.shared.rule import account_lookup_key
+from trutina.storage_mongo.posting.document import PostingDocument
+from trutina.storage_mongo.shared import MongoExecutor
 
 
 class MongoPostingRepo(PostingRepo):

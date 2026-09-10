@@ -1,7 +1,7 @@
 import pytest
 from pymongo import IndexModel
 from trutina.core.account.schemas import AccountCategory
-from trutina.infrastructure.mongo.account import AccountDocument
+from trutina.storage_mongo.account import AccountDocument
 
 
 @pytest.mark.unit

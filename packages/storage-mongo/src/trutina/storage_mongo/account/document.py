@@ -50,7 +50,7 @@ uq_account_name_key index.
 
 from pymongo import ASCENDING, IndexModel
 from trutina.core.account.schemas.account import AccountCategory
-from trutina.infrastructure.mongo.shared import TimestampedDocument
+from trutina.storage_mongo.shared import TimestampedDocument
 
 
 class AccountDocument(TimestampedDocument):

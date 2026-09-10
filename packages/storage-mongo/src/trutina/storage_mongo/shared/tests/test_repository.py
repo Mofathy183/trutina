@@ -1,7 +1,7 @@
 import pytest
 from pymongo.errors import ConnectionFailure
-from trutina.infrastructure.mongo.shared import MongoExecutor
 from trutina.shared.errors import AppError, ErrorCode
+from trutina.storage_mongo.shared import MongoExecutor
 
 
 @pytest.mark.unit

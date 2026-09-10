@@ -1,7 +1,7 @@
 from datetime import UTC
 
 import pytest
-from trutina.infrastructure.mongo.shared import TimestampedDocument
+from trutina.storage_mongo.shared import TimestampedDocument
 
 
 class _ConcreteTimestamped(TimestampedDocument):

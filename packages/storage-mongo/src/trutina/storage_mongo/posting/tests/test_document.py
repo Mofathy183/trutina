@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 from pymongo import IndexModel
-from trutina.infrastructure.mongo.posting import PostingDocument
+from trutina.storage_mongo.posting import PostingDocument
 
 
 @pytest.mark.unit

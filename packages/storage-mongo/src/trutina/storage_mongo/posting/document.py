@@ -83,7 +83,7 @@ corruption immediately rather than propagating it silently.
 from datetime import datetime
 
 from pymongo import ASCENDING, IndexModel
-from trutina.infrastructure.mongo.shared import TimestampedDocument
+from trutina.storage_mongo.shared import TimestampedDocument
 
 
 class PostingDocument(TimestampedDocument):

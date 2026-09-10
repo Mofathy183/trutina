@@ -41,7 +41,7 @@ repository automatically benefits from the same execution behavior.
 from collections.abc import Coroutine
 from typing import Any, TypeVar
 
-from trutina.infrastructure.mongo.error_translation import translate_mongo_errors
+from trutina.storage_mongo.error_translation import translate_mongo_errors
 
 T = TypeVar("T")
 

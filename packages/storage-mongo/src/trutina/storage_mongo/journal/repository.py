@@ -73,16 +73,16 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from trutina.core.journal.repo import JournalRepo
 from trutina.core.journal.schemas import JournalEntry, JournalLine
-from trutina.infrastructure.mongo.error_translation import (
+from trutina.shared.errors import AppError, ErrorCode
+from trutina.storage_mongo.error_translation import (
     translate_mongo_errors,
     violated_index,
 )
-from trutina.infrastructure.mongo.journal.document import (
+from trutina.storage_mongo.journal.document import (
     JournalDocument,
     JournalLineSubDocument,
 )
-from trutina.infrastructure.mongo.shared import MongoExecutor
-from trutina.shared.errors import AppError, ErrorCode
+from trutina.storage_mongo.shared import MongoExecutor
 
 _COUNTER_KEY = "journal_number"
 

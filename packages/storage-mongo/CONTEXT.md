@@ -1,6 +1,6 @@
-# trutina-infrastructure — Architectural Context
+# trutina-storage-mongo — Architectural Context
 
-This document explains why `trutina-infrastructure` is shaped the way it
+This document explains why `trutina-storage-mongo` is shaped the way it
 is. For how to use it, see `README.md`. Nothing here should be duplicated
 there.
 
@@ -100,7 +100,7 @@ crosses this boundary" rule — not a downgrade to `AppError.unknown()`.
   failure. This package exists specifically so core never needs either.
 - **Layered dependency direction.** The root import-linter `layers`
   contract fixes the order `trutina.cli | trutina.api` →
-  `trutina.infrastructure` → `trutina.core` →
+  `trutina.storage_mongo` → `trutina.core` →
   `trutina.shared | trutina.config`. This package must never import from
   `trutina.cli` or `trutina.api`.
 - **No business rules in a repository.** Uniqueness pre-checks, the
@@ -137,7 +137,7 @@ layer.
 
 ## Layering within this package
 
-There is no import-linter contract scoped _inside_ `trutina.infrastructure`
+There is no import-linter contract scoped _inside_ `trutina.storage_mongo`
 today — the root workspace's `layers` contract enforcing
 `posting → journal → account` ordering is scoped to `trutina.core`, not to
 this package. In practice, `mongo/journal/` and `mongo/posting/` each

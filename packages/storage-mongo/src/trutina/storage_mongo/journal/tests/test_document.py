@@ -1,6 +1,6 @@
 import pytest
 from pymongo import IndexModel
-from trutina.infrastructure.mongo.journal import (
+from trutina.storage_mongo.journal import (
     JournalDocument,
     JournalLineSubDocument,
 )

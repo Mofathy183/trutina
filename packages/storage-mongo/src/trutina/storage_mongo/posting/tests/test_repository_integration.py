@@ -37,7 +37,7 @@ from decimal import Decimal
 import pytest
 from trutina.core.posting.repo import PostingRepo
 from trutina.core.posting.schemas.ledger_posting import LedgerPosting
-from trutina.infrastructure.mongo.posting import PostingDocument
+from trutina.storage_mongo.posting import PostingDocument
 
 from tests.factories import make_credit_posting, make_debit_posting
 

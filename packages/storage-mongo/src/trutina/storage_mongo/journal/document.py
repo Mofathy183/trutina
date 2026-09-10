@@ -78,7 +78,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 from pymongo import ASCENDING, IndexModel
-from trutina.infrastructure.mongo.shared import TimestampedDocument
+from trutina.storage_mongo.shared import TimestampedDocument
 
 
 class JournalLineSubDocument(BaseModel):

@@ -1,10 +1,10 @@
-# trutina-infrastructure
+# trutina-storage-mongo
 
 Concrete MongoDB/Beanie storage adapters for Trutina's accounting domain.
 
 ## What Is This
 
-`trutina-infrastructure` (import path `trutina.infrastructure`) implements
+`trutina-storage-mongo` (import path `trutina.storage_mongo`) implements
 the repository contracts defined in `trutina-core` (`AccountRepo`,
 `JournalRepo`, `PostingRepo`) against MongoDB, and provides the connection
 lifecycle and error-translation utilities every adapter relies on. This is
@@ -45,7 +45,7 @@ packages/infrastructure/src/trutina/infrastructure/
 From the workspace root:
 
 ```bash
-uv sync --package trutina-infrastructure
+uv sync --package trutina-storage-mongo
 ```
 
 or `uv sync` to install the whole workspace.
@@ -54,23 +54,23 @@ or `uv sync` to install the whole workspace.
 
 | Symbol                                             | Module                                 | Purpose                                                                  |
 | -------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------ |
-| `MongoConnection`                                  | `trutina.infrastructure.mongo`         | Immutable bundle of a verified MongoDB client and the selected database. |
-| `connect(mongo: MongoSettings) -> MongoConnection` | `trutina.infrastructure.mongo`         | Opens a MongoDB client and verifies it with a ping before returning.     |
-| `disconnect(connection: MongoConnection) -> None`  | `trutina.infrastructure.mongo`         | Closes the client held by a `MongoConnection`.                           |
-| `TimestampedDocument`                              | `trutina.infrastructure.mongo.shared`  | Base Beanie document; sets `created_at`/`updated_at` via an insert hook. |
-| `MongoExecutor`                                    | `trutina.infrastructure.mongo.shared`  | Runs a Beanie coroutine through `translate_mongo_errors()`.              |
-| `AccountDocument`                                  | `trutina.infrastructure.mongo.account` | Beanie document for the `accounts` collection.                           |
-| `MongoAccountRepo`                                 | `trutina.infrastructure.mongo.account` | Concrete `AccountRepo` implementation.                                   |
-| `JournalDocument`                                  | `trutina.infrastructure.mongo.journal` | Beanie document for the `journal_entries` collection.                    |
-| `JournalLineSubDocument`                           | `trutina.infrastructure.mongo.journal` | Embedded subdocument for a single journal line.                          |
-| `MongoJournalRepo`                                 | `trutina.infrastructure.mongo.journal` | Concrete `JournalRepo` implementation.                                   |
-| `PostingDocument`                                  | `trutina.infrastructure.mongo.posting` | Beanie document for the `postings` collection.                           |
-| `MongoPostingRepo`                                 | `trutina.infrastructure.mongo.posting` | Concrete `PostingRepo` implementation.                                   |
+| `MongoConnection`                                  | `trutina.storage_mongo`         | Immutable bundle of a verified MongoDB client and the selected database. |
+| `connect(mongo: MongoSettings) -> MongoConnection` | `trutina.storage_mongo`         | Opens a MongoDB client and verifies it with a ping before returning.     |
+| `disconnect(connection: MongoConnection) -> None`  | `trutina.storage_mongo`         | Closes the client held by a `MongoConnection`.                           |
+| `TimestampedDocument`                              | `trutina.storage_mongo.shared`  | Base Beanie document; sets `created_at`/`updated_at` via an insert hook. |
+| `MongoExecutor`                                    | `trutina.storage_mongo.shared`  | Runs a Beanie coroutine through `translate_mongo_errors()`.              |
+| `AccountDocument`                                  | `trutina.storage_mongo.account` | Beanie document for the `accounts` collection.                           |
+| `MongoAccountRepo`                                 | `trutina.storage_mongo.account` | Concrete `AccountRepo` implementation.                                   |
+| `JournalDocument`                                  | `trutina.storage_mongo.journal` | Beanie document for the `journal_entries` collection.                    |
+| `JournalLineSubDocument`                           | `trutina.storage_mongo.journal` | Embedded subdocument for a single journal line.                          |
+| `MongoJournalRepo`                                 | `trutina.storage_mongo.journal` | Concrete `JournalRepo` implementation.                                   |
+| `PostingDocument`                                  | `trutina.storage_mongo.posting` | Beanie document for the `postings` collection.                           |
+| `MongoPostingRepo`                                 | `trutina.storage_mongo.posting` | Concrete `PostingRepo` implementation.                                   |
 
 `error_translation.py` (`translate_mongo_errors`, `violated_index`) is used
 internally by every repository and by `MongoExecutor`. It is not
 re-exported from any package `__init__.py` — import it directly from
-`trutina.infrastructure.mongo.error_translation` if you need it.
+`trutina.storage_mongo.error_translation` if you need it.
 
 ## Usage
 
@@ -78,7 +78,7 @@ re-exported from any package `__init__.py` — import it directly from
 
 ```python
 from trutina.config import get_settings
-from trutina.infrastructure.mongo import connect, disconnect
+from trutina.storage_mongo import connect, disconnect
 
 settings = get_settings()
 connection = await connect(settings.mongo)  # verifies connectivity with a ping
@@ -95,11 +95,11 @@ registered.
 
 ```python
 from beanie import init_beanie
-from trutina.infrastructure.mongo import connect
-from trutina.infrastructure.mongo.account import AccountDocument, MongoAccountRepo
-from trutina.infrastructure.mongo.journal import JournalDocument
-from trutina.infrastructure.mongo.posting import PostingDocument
-from trutina.infrastructure.mongo.shared import MongoExecutor
+from trutina.storage_mongo import connect
+from trutina.storage_mongo.account import AccountDocument, MongoAccountRepo
+from trutina.storage_mongo.journal import JournalDocument
+from trutina.storage_mongo.posting import PostingDocument
+from trutina.storage_mongo.shared import MongoExecutor
 
 connection = await connect(settings.mongo)
 await init_beanie(
@@ -128,7 +128,7 @@ account = await account_repo.get_by_code("1001")
   then hand them to `trutina-core` services.
 - **Never a consumer of:** `apps/cli` or `apps/api` — enforced by the root
   workspace's `layers` import-linter contract
-  (`trutina.cli | trutina.api → trutina.infrastructure → trutina.core →
+  (`trutina.cli | trutina.api → trutina.storage_mongo → trutina.core →
 trutina.shared | trutina.config`).
 - **Depends on** (per `packages/infrastructure/pyproject.toml`):
   `trutina-shared`, `trutina-core`, `trutina-config`, `beanie`, `pymongo`.

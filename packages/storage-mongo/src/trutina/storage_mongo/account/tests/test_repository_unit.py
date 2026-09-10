@@ -4,10 +4,10 @@ import pytest
 from pydantic import ValidationError
 from pymongo.errors import DuplicateKeyError
 from trutina.core.account.schemas.account import Account, AccountCategory
-from trutina.infrastructure.mongo.account import AccountDocument, MongoAccountRepo
-from trutina.infrastructure.mongo.shared import MongoExecutor
 from trutina.shared.errors import ErrorCode
 from trutina.shared.rule import account_lookup_key
+from trutina.storage_mongo.account import AccountDocument, MongoAccountRepo
+from trutina.storage_mongo.shared import MongoExecutor
 
 from tests.factories import make_account
 

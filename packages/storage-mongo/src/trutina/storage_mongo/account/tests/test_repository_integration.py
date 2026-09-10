@@ -20,25 +20,25 @@ tests would silently pass when they should fail.
 Coverage
 --------
 - create: persist, category, duplicate code, duplicate name,
-  case-insensitive name collision, multiple accounts same category.
+    case-insensitive name collision, multiple accounts same category.
 - exists_by_code: True, False, False-after-delete.
 - exists_by_name: True, False, case-insensitive True.
 - get_by_code: found, not-found, Account instance, normal_balance derived.
 - get_by_name: found, not-found, case-insensitive, original display name.
 - list_all: empty, single, multiple, ascending-code sort, Account instances.
 - update: name, name_key atomicity, category, not-found, duplicate name on
-  rename, same-name allowed, code immutability.
+    rename, same-name allowed, code immutability.
 - delete_by_code: deletes, not-found, exists_by_code False after, name
-  slot freed.
+    slot freed.
 - Enum round-trip: every AccountCategory survives write → read.
 - BSON exclusion: normal_balance absent from raw document.
 - Index integrity: unique indexes survive clean_db.
 - list_all sort: ascending by code regardless of insert order.
 - Timestamps: created_at set once at insert and preserved across N
-  updates, updated_at changes on every update, and the actual (naive)
-  tz behavior after a real MongoDB round trip — see
-  TestMongoAccountRepoTimestamps for why these live here and not in
-  unit tests.
+    updates, updated_at changes on every update, and the actual (naive)
+    tz behavior after a real MongoDB round trip — see
+    TestMongoAccountRepoTimestamps for why these live here and not in
+    unit tests.
 """
 
 import asyncio
@@ -47,8 +47,8 @@ from datetime import UTC, datetime
 import pytest
 from trutina.core.account.repo import AccountRepo
 from trutina.core.account.schemas.account import Account, AccountCategory
-from trutina.infrastructure.mongo.account import AccountDocument
 from trutina.shared.errors import AppError, ErrorCode
+from trutina.storage_mongo.account import AccountDocument
 
 from tests.factories import make_account
 
