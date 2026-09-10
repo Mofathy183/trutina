@@ -27,7 +27,7 @@ Enforced mechanically by `import-linter` at the workspace root
 ```text
 apps.cli | apps.api
         ▼
-trutina.infrastructure
+trutina.storage_mongo
         ▼
 trutina.core            ← this package
         ▼
@@ -63,7 +63,7 @@ change legible from the import statements alone.
 
 `AccountRepo`, `JournalRepo`, and `PostingRepo` are abstract (`abc.ABC`) classes
 defined here. Concrete adapters (`MongoAccountRepo`, etc.) live in
-`trutina-infrastructure`, a separate, lower-level-of-abstraction-but-higher-in-the-
+`trutina-storage-mongo`, a separate, lower-level-of-abstraction-but-higher-in-the-
 dependency-graph package. This is the Dependency Inversion Principle applied
 literally: the domain defines the contract; storage conforms to it, not the other
 way around.
@@ -202,7 +202,7 @@ rule drift the domain-validation design decision above exists to prevent.
   to `AppError`, treat `save_many` as atomic) are promises, not enforced by core.
   Core cannot verify a `PostingRepo` implementation actually treats `save_many`
   atomically — that has to be proven by that adapter's own tests in
-  `trutina-infrastructure`. Treat every repository contract docstring in `repo.py`
+  `trutina-storage-mongo`. Treat every repository contract docstring in `repo.py`
   as a spec an adapter must satisfy, and check that any new adapter's tests actually
   assert the documented behavior, not just typical-path success.
 
