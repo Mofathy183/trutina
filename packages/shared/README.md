@@ -115,7 +115,7 @@ key = account_lookup_key(name)  # "accounts receivable"
 
 ## Integration
 
-Direct workspace dependents, per each package's own `pyproject.toml`: `trutina-core` and `trutina-infrastructure`. Every other consumer (`apps/cli`, `apps/api`) reaches `trutina-shared` only transitively through one of those two. `trutina-config` currently declares **no** dependency on `trutina-shared`.
+Direct workspace dependents, per each package's own `pyproject.toml`: `trutina-core` and `trutina-storage-mongo`. Every other consumer (`apps/cli`, `apps/api`) reaches `trutina-shared` only transitively through one of those two. `trutina-config` currently declares **no** dependency on `trutina-shared`.
 
 - Domain schemas import `shared.rule` for normalization and `shared.errors.pydantic_error` to raise `ErrorCode`-backed validation failures.
 - Services import `shared.errors` (`AppError`, `ValidationAppError`) — the only exception types permitted to cross a service boundary.
