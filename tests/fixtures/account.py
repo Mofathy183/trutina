@@ -6,8 +6,8 @@ from anyio.from_thread import start_blocking_portal
 from trutina.cli.composition.state import CliState
 from trutina.core.account import AccountRepo
 from trutina.core.account.schemas import Account, AccountCategory, ChartOfAccounts
-from trutina.infrastructure.mongo.account import AccountDocument, MongoAccountRepo
-from trutina.infrastructure.mongo.shared import MongoExecutor
+from trutina.storage_mongo.account import AccountDocument, MongoAccountRepo
+from trutina.storage_mongo.shared import MongoExecutor
 
 from tests.factories import (
     make_account,

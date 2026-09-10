@@ -4,8 +4,8 @@ from typing import Any
 import pytest
 from trutina.core.posting.repo import PostingRepo
 from trutina.core.posting.schemas.ledger_posting import LedgerPosting
-from trutina.infrastructure.mongo.posting import MongoPostingRepo, PostingDocument
-from trutina.infrastructure.mongo.shared import MongoExecutor
+from trutina.storage_mongo.posting import MongoPostingRepo, PostingDocument
+from trutina.storage_mongo.shared import MongoExecutor
 
 from tests.factories import make_credit_posting, make_debit_posting
 
