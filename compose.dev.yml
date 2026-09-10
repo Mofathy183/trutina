@@ -42,8 +42,8 @@ services:
           path: ./packages/config/src
           target: /app/packages/config/src
         - action: sync
-          path: ./packages/infrastructure/src
-          target: /app/packages/infrastructure/src
+          path: ./packages/storage-mongo/src
+          target: /app/packages/storage-mongo/src
         - action: sync
           path: ./packages/shared/src
           target: /app/packages/shared/src
@@ -59,6 +59,6 @@ services:
         - action: rebuild
           path: ./packages/config/pyproject.toml
         - action: rebuild
-          path: ./packages/infrastructure/pyproject.toml
+          path: ./packages/storage-mongo/pyproject.toml
         - action: rebuild
           path: ./packages/shared/pyproject.toml
