@@ -7,12 +7,12 @@ from trutina.config import Settings, get_settings
 from trutina.core.account import AccountRepo, AccountService
 from trutina.core.journal import JournalRepo, JournalService
 from trutina.core.posting import PostingRepo, PostingService
-from trutina.infrastructure.mongo import MongoConnection, connect, disconnect
-from trutina.infrastructure.mongo.account import AccountDocument, MongoAccountRepo
-from trutina.infrastructure.mongo.journal import JournalDocument, MongoJournalRepo
-from trutina.infrastructure.mongo.posting import MongoPostingRepo, PostingDocument
-from trutina.infrastructure.mongo.shared import MongoExecutor
 from trutina.shared.errors import AppError
+from trutina.storage_mongo import MongoConnection, connect, disconnect
+from trutina.storage_mongo.account import AccountDocument, MongoAccountRepo
+from trutina.storage_mongo.journal import JournalDocument, MongoJournalRepo
+from trutina.storage_mongo.posting import MongoPostingRepo, PostingDocument
+from trutina.storage_mongo.shared import MongoExecutor
 
 _DOCUMENT_MODELS = [AccountDocument, JournalDocument, PostingDocument]
 

@@ -249,7 +249,7 @@ adding safety.
 ## Allowed and Forbidden Dependencies
 
 **Allowed** (per `apps/cli/pyproject.toml`): `trutina-core`,
-`trutina-infrastructure`, `trutina-config`, `typer`, `rich`, `anyio`,
+`trutina-storage-mongo`, `trutina-config`, `typer`, `rich`, `anyio`,
 `prompt-toolkit`.
 
 **Forbidden:** `trutina-api`, or any other `apps/*` package — the CLI must
@@ -257,7 +257,7 @@ never depend on a sibling application.
 
 **Direction:** enforced by the workspace's root `pyproject.toml`
 import-linter `layers` contract:
-`trutina.cli | trutina.api → trutina.infrastructure → trutina.core →
+`trutina.cli | trutina.api → trutina.storage_mongo → trutina.core →
 trutina.shared | trutina.config`. This package sits at the top; nothing
 downstream may import from it.
 
@@ -317,7 +317,7 @@ User types a command (argv or shell line)
   -> Handler resolves the relevant service from CliContext
   -> Service (trutina-core) orchestrates domain construction, validation,
      repository calls
-  -> Repository (trutina-core contract -> trutina-infrastructure adapter)
+  -> Repository (trutina-core contract -> trutina-storage-mongo adapter)
      persists/reads data
   -> Service returns a ViewModel, or raises AppError / ValidationAppError
       - success -> formatter.py builds a renderable, command calls
