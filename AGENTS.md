@@ -10,7 +10,7 @@ only — package/app internals are documented in that package's own README.md/CO
 - Pydantic v2, Pydantic Settings
 - Typer, Rich, AnyIO, prompt-toolkit (CLI)
 - FastAPI, Uvicorn (API)
-- Beanie, PyMongo (async) — isolated to `trutina-infrastructure`
+- Beanie, PyMongo (async) — isolated to `trutina-storage-mongo`
 - Pytest (`asyncio_mode = auto`), Ruff, `ty`, `import-linter`
 
 ## Workspace Packages/Apps
@@ -20,16 +20,16 @@ only — package/app internals are documented in that package's own README.md/CO
 | `trutina-shared`         | `trutina.shared`         | none                                                 | pydantic                             |
 | `trutina-config`         | `trutina.config`         | none                                                 | pydantic, pydantic-settings          |
 | `trutina-core`           | `trutina.core`           | trutina-shared                                       | pydantic                             |
-| `trutina-infrastructure` | `trutina.infrastructure` | trutina-shared, trutina-core, trutina-config         | beanie, pymongo                      |
-| `trutina-cli`            | `trutina.cli`            | trutina-core, trutina-infrastructure, trutina-config | typer, rich, anyio, prompt-toolkit   |
-| `trutina-api`            | `trutina.api`            | trutina-core, trutina-infrastructure, trutina-config | fastapi[standard], uvicorn[standard] |
+| `trutina-storage-mongo` | `trutina.storage_mongo` | trutina-shared, trutina-core, trutina-config         | beanie, pymongo                      |
+| `trutina-cli`            | `trutina.cli`            | trutina-core, trutina-storage-mongo, trutina-config | typer, rich, anyio, prompt-toolkit   |
+| `trutina-api`            | `trutina.api`            | trutina-core, trutina-storage-mongo, trutina-config | fastapi[standard], uvicorn[standard] |
 
 `trutina-cli` never depends on `trutina-api`, or vice versa. `trutina-core` never
 depends on `trutina-config`.
 
 ## Import-Linter Contracts (root `pyproject.toml`, enforced in CI)
 
-- `layers`: `trutina.cli | trutina.api → trutina.infrastructure → trutina.core → trutina.shared | trutina.config`
+- `layers`: `trutina.cli | trutina.api → trutina.storage_mongo → trutina.core → trutina.shared | trutina.config`
 - `forbidden`: `trutina.core` must never import `beanie` or `pymongo`
 - `layers` (internal to core): `trutina.core.posting → trutina.core.journal → trutina.core.account`
 
@@ -136,11 +136,11 @@ uv run lint-imports
 - `modules/journal/rule.py` / `modules/posting/rule.py` scaffold status not
   re-confirmed against current `trutina-core` source in this pass.
 - `MongoPostingRepo.save_many()` has no multi-document transaction (accepted,
-  documented risk in `trutina-infrastructure`'s own CONTEXT.md).
+  documented risk in `trutina-storage-mongo`'s own CONTEXT.md).
 
 ## Development Rules
 
-- Keep business logic out of `trutina.cli`/`trutina.api`/`trutina.infrastructure`
+- Keep business logic out of `trutina.cli`/`trutina.api`/`trutina.storage_mongo`
   — it belongs in `trutina.core` services and domain schemas only.
 - Never let `trutina.core` import `beanie`, `pymongo`, `typer`, `rich`, or `fastapi`.
 - Never let `trutina.cli` and `trutina.api` import each other.

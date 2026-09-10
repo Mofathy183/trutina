@@ -11,7 +11,7 @@ sit on top of the same domain code.
   `AccountService`/`JournalService`/`PostingService`, and the abstract
   `AccountRepo`/`JournalRepo`/`PostingRepo` contracts. Zero knowledge of storage,
   HTTP, or terminals. See `packages/core/README.md` / `CONTEXT.md`.
-- **`packages/infrastructure`** (`trutina-infrastructure`) — concrete MongoDB/Beanie
+- **`packages/infrastructure`** (`trutina-storage-mongo`) — concrete MongoDB/Beanie
   implementations of the three repository contracts, plus connection lifecycle and
   error-translation helpers. See `packages/infrastructure/README.md` / `CONTEXT.md`.
 - **`packages/config`** (`trutina-config`) — typed, environment-driven settings
@@ -61,7 +61,7 @@ internal detail.
 │   ├── core/                 # trutina-core
 │   │   └── src/trutina/core/{account,journal,posting}/
 │   │       └── dtos.py, repo.py, service.py, schemas/, tests/
-│   ├── infrastructure/       # trutina-infrastructure
+│   ├── infrastructure/       # trutina-storage-mongo
 │   │   └── src/trutina/infrastructure/mongo/
 │   │       ├── {account,journal,posting}/  # document.py, repository.py, tests/
 │   │       ├── shared/                     # document.py, repository.py (MongoExecutor)
@@ -86,7 +86,7 @@ internal detail.
 apps.cli | apps.api
         │
         ▼
-trutina.infrastructure
+trutina.storage_mongo
         │
         ▼
 trutina.core
@@ -97,7 +97,7 @@ trutina.shared | trutina.config
 
 Enforced mechanically by import-linter contracts in the root `pyproject.toml`:
 
-- Layered: `trutina.cli | trutina.api → trutina.infrastructure → trutina.core → trutina.shared | trutina.config`.
+- Layered: `trutina.cli | trutina.api → trutina.storage_mongo → trutina.core → trutina.shared | trutina.config`.
 - Forbidden: `trutina.core` must never import `beanie` or `pymongo`.
 - Internal to core: `trutina.core.posting → trutina.core.journal → trutina.core.account` (one-directional).
 
@@ -110,7 +110,7 @@ Enforced mechanically by import-linter contracts in the root `pyproject.toml`:
 - Pydantic v2 — domain and DTO validation everywhere.
 - Typer + Rich + AnyIO + prompt-toolkit — the CLI and its interactive shell.
 - FastAPI + Uvicorn — the HTTP API.
-- Beanie + PyMongo (async) — MongoDB persistence, isolated to `trutina-infrastructure`.
+- Beanie + PyMongo (async) — MongoDB persistence, isolated to `trutina-storage-mongo`.
 - Pytest (`asyncio_mode = auto`), Ruff, `ty`, `import-linter` — testing and static checks.
 
 ## Development Setup

@@ -4,7 +4,7 @@
 
 Trutina is a Python double-entry bookkeeping engine. The repository is a `uv`
 workspace, not a single application: `trutina-core` owns the accounting domain,
-`trutina-infrastructure` implements MongoDB persistence for it,
+`trutina-storage-mongo` implements MongoDB persistence for it,
 `trutina-config`/`trutina-shared` provide cross-cutting settings and error/validation
 primitives, and two independent presentation apps — `trutina-cli` (Typer/Rich
 terminal + interactive shell) and `trutina-api` (FastAPI) — sit on top of the same
@@ -20,7 +20,7 @@ rules. Keeping the domain in a separate, installable package (`trutina-core`) wi
 zero storage/transport awareness — rather than folding it into whichever app was
 written first — means neither app can accidentally depend on the other's
 presentation concerns, and the domain layer never needs to know either exists.
-`trutina-infrastructure` exists as its own package for the same reason: it is the
+`trutina-storage-mongo` exists as its own package for the same reason: it is the
 only place in the workspace allowed to import `beanie`/`pymongo`, so a repository
 contract's storage-agnosticism is provable by import-linter, not just asserted by
 convention. `trutina-shared` and `trutina-config` sit at the bottom because their
@@ -35,7 +35,7 @@ transport-specific shape of their own.
   are confirmed complete in `trutina-core`'s own README/CONTEXT, not partial.
 - **MongoDB persistence** — concrete `MongoAccountRepo`, `MongoJournalRepo`,
   `MongoPostingRepo` implementations, connection lifecycle, and error translation
-  are confirmed implemented and tested in `trutina-infrastructure`.
+  are confirmed implemented and tested in `trutina-storage-mongo`.
 - **The CLI** — `account`, `journal`, `posting` Typer command groups are fully
   wired end to end (command → parser/prompt → handler → service → repository),
   with unit and integration test tiers per feature, plus a working interactive
@@ -58,7 +58,7 @@ transport-specific shape of their own.
   `trutina-core`'s current README/CONTEXT in this pass; treat as unconfirmed, not
   as verified fact, until checked directly against source.
 - `MongoPostingRepo.save_many()` has no multi-document transaction — an accepted,
-  documented gap in `trutina-infrastructure`'s own CONTEXT.md, not an oversight
+  documented gap in `trutina-storage-mongo`'s own CONTEXT.md, not an oversight
   discovered here.
 - `get_field_violations()` (in `trutina-shared`) downgrades every domain-raised
   `ErrorCode` to `UNKNOWN_ERROR` on `FieldViolation.code`; the real code survives
