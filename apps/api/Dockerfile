@@ -4,7 +4,7 @@
 #   docker build -f apps/api/Dockerfile -t trutina-api .
 #
 # This is required because trutina-api depends on trutina-core,
-# trutina-infrastructure, and trutina-config as `workspace = true`
+# trutina-storage-mongo, and trutina-config as `workspace = true`
 # path dependencies (see apps/api/pyproject.toml [tool.uv.sources]).
 # uv can only resolve those against the full workspace, not a
 # single package's subdirectory.
@@ -34,7 +34,7 @@ COPY pyproject.toml uv.lock ./
 COPY packages/shared/pyproject.toml packages/shared/pyproject.toml
 COPY packages/core/pyproject.toml packages/core/pyproject.toml
 COPY packages/config/pyproject.toml packages/config/pyproject.toml
-COPY packages/infrastructure/pyproject.toml packages/infrastructure/pyproject.toml
+COPY packages/storage-mongo/pyproject.toml packages/storage-mongo/pyproject.toml
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -57,7 +57,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 #   members are installed EDITABLE (uv's default for workspace deps), so
 #   the venv only contains .pth files pointing back at each package's
 #   `src/` directory — the actual code never lands in site-packages.
-#   Without this line, every `trutina.{core,config,infrastructure,shared}`
+#   Without this line, every `trutina.{core,config,storage-mongo,shared}`
 #   import fails at runtime with ModuleNotFoundError even though
 #   `uv pip list` shows the package "installed".
 # ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ CMD ["uvicorn", "trutina.api.composition.app:app", "--host", "0.0.0.0", "--port"
 #   Each workspace package that feeds the API needs its own --reload-dir,
 #   since uvicorn's watcher does not recurse into arbitrary sibling paths
 #   by default. `packages/shared` is included because trutina-core and
-#   trutina-infrastructure both depend on it — an edit there must also
+#   trutina-storage-mongo both depend on it — an edit there must also
 #   trigger a reload.
 # ---------------------------------------------------------------------------
 FROM builder AS dev
@@ -108,5 +108,5 @@ CMD ["uv", "run", "--package", "trutina-api", "uvicorn", \
         "--reload-dir", "/app/apps/api/src", \
         "--reload-dir", "/app/packages/core/src", \
         "--reload-dir", "/app/packages/config/src", \
-        "--reload-dir", "/app/packages/infrastructure/src", \
+        "--reload-dir", "/app/packages/storage-mongo/src", \
         "--reload-dir", "/app/packages/shared/src"]

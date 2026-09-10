@@ -4,7 +4,7 @@
 
 ## What Is This
 
-The installed command is `trutina-cli`. It requires Python 3.14+ and depends on the workspace packages `trutina-core`, `trutina-infrastructure`, and `trutina-config`, plus `typer`, `rich`, `anyio`, and `prompt-toolkit`.
+The installed command is `trutina-cli`. It requires Python 3.14+ and depends on the workspace packages `trutina-core`, `trutina-storage-mongo`, and `trutina-config`, plus `typer`, `rich`, `anyio`, and `prompt-toolkit`.
 
 Bare invocation (`trutina-cli`) opens a persistent interactive shell; invocation with a registered top-level command name (`account`, `journal`, `posting`) or a help flag (`-h`/`--help`) dispatches one-shot through Typer instead.
 
@@ -110,7 +110,7 @@ A leading `/` on any line is optional and stripped before dispatch — `/account
 apps/cli            <- you are here (leaf application; nothing depends on it)
    │
    ▼
-trutina-infrastructure     (Mongo* repositories)
+trutina-storage-mongo     (Mongo* repositories)
    │
    ▼
 trutina-core                (AccountService, JournalService, PostingService)
@@ -119,7 +119,7 @@ trutina-core                (AccountService, JournalService, PostingService)
 trutina-shared, trutina-config
 ```
 
-Depends on (per `apps/cli/pyproject.toml`): `trutina-core`, `trutina-infrastructure`, `trutina-config`, `typer`, `rich`, `anyio`, `prompt-toolkit`. Never imports `trutina-api` or any other `apps/*` package — enforced by the workspace's `layers` import-linter contract: `trutina.cli | trutina.api → trutina.infrastructure → trutina.core → trutina.shared | trutina.config`.
+Depends on (per `apps/cli/pyproject.toml`): `trutina-core`, `trutina-storage-mongo`, `trutina-config`, `typer`, `rich`, `anyio`, `prompt-toolkit`. Never imports `trutina-api` or any other `apps/*` package — enforced by the workspace's `layers` import-linter contract: `trutina.cli | trutina.api → trutina.storage_mongo → trutina.core → trutina.shared | trutina.config`.
 
 ## Extending
 

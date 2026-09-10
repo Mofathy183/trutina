@@ -40,11 +40,11 @@ from trutina.config import Settings
 from trutina.core.account.service import AccountService
 from trutina.core.journal.service import JournalService
 from trutina.core.posting.service import PostingService
-from trutina.infrastructure.mongo import connect, disconnect
-from trutina.infrastructure.mongo.account import AccountDocument, MongoAccountRepo
-from trutina.infrastructure.mongo.journal import JournalDocument, MongoJournalRepo
-from trutina.infrastructure.mongo.posting import MongoPostingRepo, PostingDocument
-from trutina.infrastructure.mongo.shared import MongoExecutor
+from trutina.storage_mongo import connect, disconnect
+from trutina.storage_mongo.account import AccountDocument, MongoAccountRepo
+from trutina.storage_mongo.journal import JournalDocument, MongoJournalRepo
+from trutina.storage_mongo.posting import MongoPostingRepo, PostingDocument
+from trutina.storage_mongo.shared import MongoExecutor
 
 from .container import Container
 

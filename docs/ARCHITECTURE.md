@@ -31,7 +31,7 @@ packages/
 │   └── src/trutina/core/{account,journal,posting}/
 │       ├── dtos.py, repo.py, service.py
 │       └── schemas/
-├── infrastructure/ trutina-infrastructure
+├── infrastructure/ trutina-storage-mongo
 │   └── src/trutina/infrastructure/mongo/
 │       ├── {account,journal,posting}/   # document.py, repository.py
 │       ├── shared/                       # MongoExecutor, TimestampedDocument
@@ -59,7 +59,7 @@ are checked in CI (`uv run lint-imports`), not just documented convention:
 trutina.cli | trutina.api
         │
         ▼
-trutina.infrastructure
+trutina.storage_mongo
         │
         ▼
 trutina.core
@@ -84,9 +84,9 @@ cross-checked against its README/CONTEXT):
 | `trutina-shared`         | _(none)_                                                   | `pydantic`                                 |
 | `trutina-config`         | _(none)_                                                   | `pydantic`, `pydantic-settings`            |
 | `trutina-core`           | `trutina-shared`                                           | `pydantic`                                 |
-| `trutina-infrastructure` | `trutina-shared`, `trutina-core`, `trutina-config`         | `beanie`, `pymongo`                        |
-| `trutina-cli`            | `trutina-core`, `trutina-infrastructure`, `trutina-config` | `typer`, `rich`, `anyio`, `prompt-toolkit` |
-| `trutina-api`            | `trutina-core`, `trutina-infrastructure`, `trutina-config` | `fastapi[standard]`, `uvicorn[standard]`   |
+| `trutina-storage-mongo` | `trutina-shared`, `trutina-core`, `trutina-config`         | `beanie`, `pymongo`                        |
+| `trutina-cli`            | `trutina-core`, `trutina-storage-mongo`, `trutina-config` | `typer`, `rich`, `anyio`, `prompt-toolkit` |
+| `trutina-api`            | `trutina-core`, `trutina-storage-mongo`, `trutina-config` | `fastapi[standard]`, `uvicorn[standard]`   |
 
 `trutina-cli` and `trutina-api` never depend on each other. `trutina-core` never
 depends on `trutina-config` (a fact each package's own docs states independently
@@ -118,7 +118,7 @@ transport-agnostic by construction (see the forbidden-imports contract above). S
 `packages/core/README.md` / `CONTEXT.md` for the full API surface, service
 maturity table, and internal `posting→journal→account` ordering rationale.
 
-### `trutina.infrastructure`
+### `trutina.storage_mongo`
 
 The only package permitted to import `beanie`/`pymongo`. Implements the three core
 repository contracts against MongoDB, plus `connect()`/`disconnect()`/
@@ -155,10 +155,10 @@ equivalent of the CLI's `error_boundary()`. See `apps/api/CONTEXT.md` (no
   keyed by `ErrorCode`.
 - `AppError`/`ValidationAppError` are the only exception types permitted to cross
   any service boundary, in both the CLI and API.
-- Repository adapters (`trutina.infrastructure`) never contain business rules;
+- Repository adapters (`trutina.storage_mongo`) never contain business rules;
   uniqueness checks, cross-aggregate validation, and posting derivation all live
   in `trutina.core` services.
-- Domain models (`trutina.core`) never import from `trutina.infrastructure`,
+- Domain models (`trutina.core`) never import from `trutina.storage_mongo`,
   `trutina.cli`, or `trutina.api`.
 - Neither presentation app (`cli`, `api`) may import the other.
 

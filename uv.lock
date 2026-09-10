@@ -8,8 +8,8 @@ members = [
     "trutina-cli",
     "trutina-config",
     "trutina-core",
-    "trutina-infrastructure",
     "trutina-shared",
+    "trutina-storage-mongo",
     "trutina-workspace",
 ]
 
@@ -985,7 +985,7 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "trutina-config" },
     { name = "trutina-core" },
-    { name = "trutina-infrastructure" },
+    { name = "trutina-storage-mongo" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -994,7 +994,7 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.139.0" },
     { name = "trutina-config", editable = "packages/config" },
     { name = "trutina-core", editable = "packages/core" },
-    { name = "trutina-infrastructure", editable = "packages/infrastructure" },
+    { name = "trutina-storage-mongo", editable = "packages/storage-mongo" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0" },
 ]
 
@@ -1008,7 +1008,7 @@ dependencies = [
     { name = "rich" },
     { name = "trutina-config" },
     { name = "trutina-core" },
-    { name = "trutina-infrastructure" },
+    { name = "trutina-storage-mongo" },
     { name = "typer" },
 ]
 
@@ -1019,7 +1019,7 @@ requires-dist = [
     { name = "rich", specifier = ">=15.0.0" },
     { name = "trutina-config", editable = "packages/config" },
     { name = "trutina-core", editable = "packages/core" },
-    { name = "trutina-infrastructure", editable = "packages/infrastructure" },
+    { name = "trutina-storage-mongo", editable = "packages/storage-mongo" },
     { name = "typer", specifier = ">=0.25.1" },
 ]
 
@@ -1054,9 +1054,20 @@ requires-dist = [
 ]
 
 [[package]]
-name = "trutina-infrastructure"
+name = "trutina-shared"
 version = "0.1.0"
-source = { editable = "packages/infrastructure" }
+source = { editable = "packages/shared" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2.13.3" }]
+
+[[package]]
+name = "trutina-storage-mongo"
+version = "0.1.0"
+source = { editable = "packages/storage-mongo" }
 dependencies = [
     { name = "beanie" },
     { name = "pymongo" },
@@ -1073,17 +1084,6 @@ requires-dist = [
     { name = "trutina-core", editable = "packages/core" },
     { name = "trutina-shared", editable = "packages/shared" },
 ]
-
-[[package]]
-name = "trutina-shared"
-version = "0.1.0"
-source = { editable = "packages/shared" }
-dependencies = [
-    { name = "pydantic" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "pydantic", specifier = ">=2.13.3" }]
 
 [[package]]
 name = "trutina-workspace"

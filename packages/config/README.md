@@ -108,7 +108,7 @@ set of currently supported keys.
 
 ## Integration
 
-- `trutina-infrastructure` accepts a `MongoSettings` instance directly
+- `trutina-storage-mongo` accepts a `MongoSettings` instance directly
   (never calls `get_settings()` itself).
 - `trutina-cli` and `trutina-api` each call `get_settings()` at their own
   composition root and pass the nested settings down to whatever needs
@@ -117,7 +117,7 @@ set of currently supported keys.
   confirmed via `pyproject.toml`, which lists only `pydantic` and
   `pydantic-settings` as dependencies.
 - Confirmed dependents, per their own `pyproject.toml`: `trutina-cli`,
-  `trutina-api`, `trutina-infrastructure`. `trutina-core` does not depend
+  `trutina-api`, `trutina-storage-mongo`. `trutina-core` does not depend
   on this package.
 
 ## Extending

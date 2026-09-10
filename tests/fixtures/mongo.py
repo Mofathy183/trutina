@@ -22,10 +22,10 @@ Dropping at teardown is safe because no further tests will run.
 import pytest_asyncio
 from beanie import init_beanie
 from trutina.config import TestSettings
-from trutina.infrastructure.mongo import connect, disconnect
-from trutina.infrastructure.mongo.account import AccountDocument
-from trutina.infrastructure.mongo.journal import JournalDocument
-from trutina.infrastructure.mongo.posting import PostingDocument
+from trutina.storage_mongo import connect, disconnect
+from trutina.storage_mongo.account import AccountDocument
+from trutina.storage_mongo.journal import JournalDocument
+from trutina.storage_mongo.posting import PostingDocument
 
 # ---------------------------------------------------------------------------
 # All Beanie document models registered in this session.

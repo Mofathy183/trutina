@@ -183,7 +183,7 @@ confirming the upstream fix landed.
 
 ## Allowed and Forbidden Dependencies
 
-**Allowed** (per `apps/api/pyproject.toml`): `trutina-core`, `trutina-infrastructure`,
+**Allowed** (per `apps/api/pyproject.toml`): `trutina-core`, `trutina-storage-mongo`,
 `trutina-config`, `fastapi[standard]`, `uvicorn[standard]`.
 
 **Forbidden:** `trutina-cli`, or any other `apps/*` package. Nothing here should
@@ -193,7 +193,7 @@ the one module permitted to see `MongoConnection`/`MongoExecutor`/`Mongo*Repo` t
 attributes.
 
 **Direction:** enforced by the workspace's root `pyproject.toml` import-linter
-`layers` contract: `trutina.cli | trutina.api → trutina.infrastructure →
+`layers` contract: `trutina.cli | trutina.api → trutina.storage_mongo →
 trutina.core → trutina.shared | trutina.config`. This package sits at the top beside
 the CLI; nothing downstream may import from it.
 

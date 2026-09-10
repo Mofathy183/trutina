@@ -12,8 +12,8 @@ from trutina.core.journal import (
     JournalService,
 )
 from trutina.core.journal.schemas import JournalEntry, JournalLine
-from trutina.infrastructure.mongo.journal import MongoJournalRepo
-from trutina.infrastructure.mongo.shared import MongoExecutor
+from trutina.storage_mongo.journal import MongoJournalRepo
+from trutina.storage_mongo.shared import MongoExecutor
 
 from tests.factories import (
     make_credit_line,
@@ -109,7 +109,7 @@ def stub_journal_document_settings(monkeypatch):
 
     Mirrors the pattern of ``stub_account_document_settings``.
     """
-    from trutina.infrastructure.mongo.journal import JournalDocument
+    from trutina.storage_mongo.journal import JournalDocument
 
     monkeypatch.setattr(
         JournalDocument,

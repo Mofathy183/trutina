@@ -9,7 +9,7 @@ workflows, and repository contracts for accounts, journal entries, and ledger po
 what happens when one is posted. It has no database driver, no HTTP framework, and no
 CLI framework — pure business logic plus the repository interfaces storage adapters
 must satisfy. It is consumed by `apps/cli` and `apps/api`; its repository contracts are
-implemented by `trutina-infrastructure`. Core itself never imports any of those three.
+implemented by `trutina-storage-mongo`. Core itself never imports any of those three.
 
 If a change is a rule about debits, credits, account codes, or posting derivation, it
 belongs here. If it's about Mongo documents, Typer commands, or HTTP routes, it doesn't.
@@ -23,7 +23,7 @@ uv sync --package trutina-core
 ```
 
 `trutina-core` depends only on `trutina-shared` (validation helpers, the error model)
-and `pydantic`. It has no dependency on `trutina-infrastructure`, `trutina-config`,
+and `pydantic`. It has no dependency on `trutina-storage-mongo`, `trutina-config`,
 `trutina-cli`, or `trutina-api` — confirmed in `packages/core/pyproject.toml`.
 
 ## Public API
@@ -83,7 +83,7 @@ packages/core/src/trutina/core/
 Each feature is self-contained: its own DTOs, repository contract, service, and
 schemas. Tests live beside the code they cover (`account/tests/`, `journal/tests/`,
 `posting/tests/`), split into `test_*_unit.py` (fake-repo, `@pytest.mark.unit`) and
-`test_*_integration.py` (real MongoDB via `trutina-infrastructure`,
+`test_*_integration.py` (real MongoDB via `trutina-storage-mongo`,
 `@pytest.mark.integration`).
 
 ## Usage
@@ -144,7 +144,7 @@ postings = await posting_service.post_journal_entry(entry.journal_number)
 apps/cli, apps/api
         │  (constructs concrete repos, injects into services)
         ▼
-trutina-infrastructure   (Mongo* repos implementing AccountRepo/JournalRepo/PostingRepo)
+trutina-storage-mongo   (Mongo* repos implementing AccountRepo/JournalRepo/PostingRepo)
         │
         ▼
 trutina-core             ← you are here
@@ -153,7 +153,7 @@ trutina-core             ← you are here
 trutina-shared           (validation helpers, error model)
 ```
 
-Core never imports `trutina-infrastructure`, `trutina-cli`, or `trutina-api`. It is
+Core never imports `trutina-storage-mongo`, `trutina-cli`, or `trutina-api`. It is
 handed a concrete repository at service-construction time by whichever app or
 infrastructure layer wires the graph together — core has no opinion on what that
 repository is backed by.

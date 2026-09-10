@@ -1,29 +1,49 @@
 name: Test Layer (Mongo-backed)
 
-# Reusable workflow for the four Mongo-backed layers in ci.yml (core,
-# infrastructure, cli, api). Each of those jobs was previously a 15-line
-# copy-paste of checkout/setup-uv/setup-python/uv sync/mongo-service/
-# pytest-optional steps, differing only in which marker they filtered on.
-# This file exists so that shape lives once; ci.yml calls it four times
-# with a different `marker` input per layer.
+# Reusable workflow for Mongo-backed layers in ci.yml (core, infra/mongo,
+# cli, api). Previously each of those jobs was a 15-line copy-paste of
+# checkout/setup-uv/setup-python/uv sync/mongo-service/pytest-optional
+# steps, differing only by marker. This file keeps that shape in one
+# place; ci.yml calls it once per layer.
 #
-# NOT used by `foundation` (no Mongo service, no integration tests — a
-# genuinely different shape) or `static_analysis`/`build` (no tests at
-# all). Don't force those into this workflow just to reduce job count —
-# only fold a job in here if its steps are actually identical apart from
-# the marker.
+# Backend axis: conftest.py's pytest_collection_modifyitems() derives a
+# "mongo"/"postgres" backend marker for any test under a storage-backend
+# directory (_BACKEND_DIRS), and REQUIRES it for every infra-layer test.
+# Non-infra tests must carry none. `backend` here mirrors that: required
+# when marker == "infra", must stay empty otherwise.
+#
+# NOT used by `foundation` (no Mongo service, no integration tests) or
+# `static_analysis`/`build` (no tests at all).
+#
+# Postgres note: once trutina-storage-postgres exists, its integration
+# tests need a postgres:16 service container, not mongo:8. GitHub
+# Actions `services:` blocks don't support `if:`, so that backend gets
+# its own reusable workflow (_test-layer-postgres.yml), called with
+# marker: infra, backend: postgres — mirroring this file's shape, not
+# branching inside it. Don't add postgres here.
 
 on:
   workflow_call:
     inputs:
       marker:
         description: >-
-          The layer marker to filter tests by (e.g. "core", "infra",
-          "cli", "api"). Combined with "unit"/"integration" as
-          "<speed> and <marker>", matching the two-axis marker
-          discipline enforced in the root conftest.py.
+          The layer marker to filter tests by ("core", "infra", "cli",
+          "api"). Combined with "unit"/"integration" and, for "infra",
+          the required `backend` input, as
+          "<speed> and <marker>[ and <backend>]".
         required: true
         type: string
+      backend:
+        description: >-
+          Storage-backend marker for infra-layer runs ("mongo" today;
+          "postgres" once trutina-storage-postgres exists). Required
+          when marker == "infra". Must stay empty for every other layer
+          — conftest.py rejects a backend marker on a non-infra test, so
+          setting this here for e.g. "cli" would just silently match
+          zero tests instead of failing loudly.
+        required: false
+        type: string
+        default: ""
 
 env:
   TRUTINA_TEST_MONGO__URI: mongodb://localhost:27017
@@ -31,7 +51,7 @@ env:
 
 jobs:
   test:
-    name: "${{ inputs.marker }} (unit + integration)"
+    name: "${{ inputs.marker }}${{ inputs.backend != '' && format('/{0}', inputs.backend) || '' }} (unit + integration)"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -54,10 +74,19 @@ jobs:
 
       - run: chmod +x tools/ci/pytest-optional.sh
 
+      - name: Compute pytest marker expression
+        id: markers
+        run: |
+          expr="${{ inputs.marker }}"
+          if [ -n "${{ inputs.backend }}" ]; then
+            expr="$expr and ${{ inputs.backend }}"
+          fi
+          echo "expr=$expr" >> "$GITHUB_OUTPUT"
+
       - name: Unit tests
         run: >
-          tools/ci/pytest-optional.sh "unit and ${{ inputs.marker }}"
+          tools/ci/pytest-optional.sh "unit and ${{ steps.markers.outputs.expr }}"
           --cov=trutina --cov-report=term-missing
 
       - name: Integration tests
-        run: tools/ci/pytest-optional.sh "integration and ${{ inputs.marker }}"
+        run: tools/ci/pytest-optional.sh "integration and ${{ steps.markers.outputs.expr }}"

@@ -6,7 +6,7 @@ usage, see `README.md`.
 ## Why this architecture was chosen
 
 Trutina has multiple applications (`trutina-cli`, `trutina-api`) and a
-storage adapter (`trutina-infrastructure`) that all need the same
+storage adapter (`trutina-storage-mongo`) that all need the same
 categories of configuration — a Mongo connection, API bind settings —
 sourced the same way. The alternative (`os.environ` reads scattered
 across each app) would mean re-deriving env-var naming, dotenv loading,
@@ -29,7 +29,7 @@ with that.
   flat model becomes an undifferentiated field list with no way to tell
   which fields belong to which subsystem at a glance. Nesting
   (`settings.mongo.uri`, `settings.api.port`) keeps each group's fields
-  visibly grouped and independently reusable — `trutina-infrastructure`
+  visibly grouped and independently reusable — `trutina-storage-mongo`
   only ever needs `MongoSettings`, not the whole `Settings` object.
 - **Passing raw environment variables into each consumer.** Rejected:
   this is precisely the "N independently drifting copies of the same
@@ -88,7 +88,7 @@ with that.
   `pyproject.toml`: dependencies are exactly `pydantic` and
   `pydantic-settings`. This package sits at the root of the workspace
   dependency graph. If this package ever needs to import from
-  `trutina.core` or `trutina.infrastructure`, that is a sign the code
+  `trutina.core` or `trutina.storage_mongo`, that is a sign the code
   doesn't belong here.
 - **No I/O beyond dotenv-file reads performed by `pydantic-settings`
   itself.** This package must never open a network connection, read a
@@ -109,7 +109,7 @@ with that.
 ## Forbidden dependencies
 
 - Any other `trutina-*` workspace package (`trutina-core`,
-  `trutina-infrastructure`, `trutina-cli`, `trutina-api`). This package
+  `trutina-storage-mongo`, `trutina-cli`, `trutina-api`). This package
   is a dependency root; nothing here may depend on anything downstream
   of it.
 - Any driver or client library for a specific backend (`pymongo`,
@@ -196,5 +196,5 @@ persists settings, or mutates its own output after construction.
   `BaseSettings` will silently ignore the parent's prefix rules.
 - **Assuming this package validates connectivity.** `MongoSettings`
   describes a URI/DB name; it does not verify a MongoDB instance is
-  reachable at that URI — that check belongs to `trutina-infrastructure`'s
+  reachable at that URI — that check belongs to `trutina-storage-mongo`'s
   `connect()`.

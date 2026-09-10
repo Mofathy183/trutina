@@ -36,7 +36,7 @@ package's own README/CONTEXT.
 ## Remaining Domain / Reporting Work
 
 - Add storage-level uniqueness enforcement where still needed beyond what
-  `trutina-infrastructure`'s Mongo unique indexes already provide.
+  `trutina-storage-mongo`'s Mongo unique indexes already provide.
 - Add trial balance calculation, account balance summaries, and historical
   report views — no reporting pipeline exists in `trutina-core` today.
 - Add future financial statement support once trial balance exists.
@@ -47,7 +47,7 @@ package's own README/CONTEXT.
   current single `insert_many()` call has no `ClientSession`, so a mid-batch
   failure can partially persist a journal's postings, and concurrent posting
   attempts can race past `PostingService`'s existence pre-check. Documented as
-  an accepted, not yet closed, gap in `trutina-infrastructure`'s own CONTEXT.md.
+  an accepted, not yet closed, gap in `trutina-storage-mongo`'s own CONTEXT.md.
 
 ## Remaining Presentation Work
 

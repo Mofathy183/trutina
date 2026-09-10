@@ -74,11 +74,14 @@ jobs:
           tools/ci/pytest-optional.sh "unit and shared"
           --cov=trutina --cov-report=term-missing
 
-  # ── Quality Gates 3–5: Mongo-backed layers ───────────────────────
+  # ── Quality Gates 3–5: Storage-backed layers ─────────────────────
   # Each of these calls the shared _test-layer.yml reusable workflow
-  # rather than repeating the checkout/setup/sync/mongo-service/test
-  # steps per job. The `needs:` chain below is still what enforces
-  # ordering — reusable workflows don't change dependency semantics.
+  # rather than repeating checkout/setup/sync/service/test steps per
+  # job. `needs:` still enforces ordering — reusable workflows don't
+  # change dependency semantics. `storage_mongo` is the current sole
+  # backend for the `infra` layer; a `storage_postgres` job joins it
+  # here, not inside it, once trutina-storage-postgres exists
+  # (MongoDB to PSQL Plan.md, Phase 6).
   core:
     name: "QG3 · Core"
     needs: foundation
@@ -86,23 +89,24 @@ jobs:
     with:
       marker: core
 
-  infrastructure:
-    name: "QG4 · Infrastructure"
+  storage_mongo:
+    name: "QG4 · Storage · Mongo"
     needs: core
     uses: ./.github/workflows/_test-layer.yml
     with:
       marker: infra
+      backend: mongo
 
   cli:
     name: "QG5 · CLI App"
-    needs: infrastructure
+    needs: storage_mongo
     uses: ./.github/workflows/_test-layer.yml
     with:
       marker: cli
 
   api:
     name: "QG5 · API App"
-    needs: infrastructure
+    needs: storage_mongo
     uses: ./.github/workflows/_test-layer.yml
     with:
       marker: api

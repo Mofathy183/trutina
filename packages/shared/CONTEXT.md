@@ -21,7 +21,7 @@ domain internals they have no business knowing about.
 
 `trutina-shared` is deliberately the _lowest_ dependency in the workspace.
 Everything can depend on it; it depends on nothing Trutina-specific. In
-practice today only `trutina-core` and `trutina-infrastructure` list it as a
+practice today only `trutina-core` and `trutina-storage-mongo` list it as a
 direct dependency in their own `pyproject.toml` — every other package or app
 reaches it transitively through one of those two, and `trutina-config`
 reaches it not at all, since configuration parsing has no accounting
@@ -150,7 +150,7 @@ back any current default-date behavior in journal or posting creation.
 
 **Forbidden (this package must never depend on):**
 
-- `trutina.core`, `trutina.cli`, `trutina.api`, `trutina.infrastructure`,
+- `trutina.core`, `trutina.cli`, `trutina.api`, `trutina.storage_mongo`,
   `trutina.config`, or any other workspace package. `shared` sits below all
   of them; if a helper here ever needs something from one of those
   packages, the helper is in the wrong package.
