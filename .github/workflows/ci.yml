@@ -75,13 +75,15 @@ jobs:
           --cov=trutina --cov-report=term-missing
 
   # ── Quality Gates 3–5: Storage-backed layers ─────────────────────
-  # Each of these calls the shared _test-layer.yml reusable workflow
-  # rather than repeating checkout/setup/sync/service/test steps per
-  # job. `needs:` still enforces ordering — reusable workflows don't
-  # change dependency semantics. `storage_mongo` is the current sole
-  # backend for the `infra` layer; a `storage_postgres` job joins it
-  # here, not inside it, once trutina-storage-postgres exists
-  # (MongoDB to PSQL Plan.md, Phase 6).
+  # Each of these calls a reusable workflow rather than repeating
+  # checkout/setup/sync/service/test steps per job. `needs:` still
+  # enforces ordering — reusable workflows don't change dependency
+  # semantics. `_test-layer.yml` is the generic reusable workflow
+  # (core, mongo-backed infra, cli, api all use it); Postgres gets its
+  # own file (`_test-layer-postgres.yml`) because GitHub Actions
+  # `services:` blocks don't support `if:`, so a single reusable
+  # workflow can't conditionally bring up mongo:8 vs. postgres:16
+  # depending on an input.
   core:
     name: "QG3 · Core"
     needs: foundation
@@ -97,16 +99,23 @@ jobs:
       marker: infra
       backend: mongo
 
+  storage_postgres:
+    name: "QG4 · Storage · Postgres"
+    needs: core
+    uses: ./.github/workflows/_test-layer-postgres.yml
+    with:
+      marker: infra
+
   cli:
     name: "QG5 · CLI App"
-    needs: storage_mongo
+    needs: storage_postgres
     uses: ./.github/workflows/_test-layer.yml
     with:
       marker: cli
 
   api:
     name: "QG5 · API App"
-    needs: storage_mongo
+    needs: storage_postgres
     uses: ./.github/workflows/_test-layer.yml
     with:
       marker: api
@@ -136,7 +145,7 @@ jobs:
       - name: Build all packages
         run: uv build --all-packages
 
-  # ── Quality Gate 7: Docker Smoke Test ─────────────────────────────────────────
+  # ── Quality Gate 7: Docker Smoke Test ─────────────────────────────
   smoke:
     name: "QG7 · Docker Smoke Test"
     runs-on: ubuntu-latest
