@@ -8,13 +8,13 @@ dependencies = [
     "anyio>=4.14.1",
     "prompt-toolkit>=3.0.53",
     "trutina-core",
-    "trutina-storage-mongo",
+    "trutina-storage-postgres",
     "trutina-config",
 ]
 
 [tool.uv.sources]
 trutina-core = { workspace = true }
-trutina-storage-mongo = { workspace = true }
+trutina-storage-postgres = { workspace = true }
 trutina-config = { workspace = true }
 
 [project.scripts]
