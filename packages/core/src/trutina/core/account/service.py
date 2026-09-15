@@ -18,6 +18,8 @@ DTO contracts defined in dtos.py. They never interact directly with
 Account, ChartOfAccounts, or repository implementations.
 """
 
+from collections.abc import Awaitable, Callable
+
 from pydantic import ValidationError
 from trutina.shared.errors import (
     AppError,
@@ -35,6 +37,18 @@ from .repo import AccountRepo
 from .schemas.account import Account
 from .schemas.chart import ChartOfAccounts
 
+AccountPostingsCheck = Callable[[str], Awaitable[bool]]
+"""A predicate: given an account name, returns True if any posting
+references it.
+
+Defined as a bare callable rather than a Protocol class because it is a
+single-method capability with no state of its own -- AccountService
+depends on this signature, never on what supplies it. This keeps
+AccountService free of any import from the posting feature while still
+letting delete_account() enforce the safeguard when a caller wires one
+in.
+"""
+
 
 class AccountService:
     """Coordinates account-management workflows.
@@ -46,15 +60,32 @@ class AccountService:
 
     Attributes:
         _repo: The persistence boundary for individual accounts.
+        _has_postings: Optional predicate used by delete_account() to
+            enforce the posting-history safeguard. When None, deletion
+            performs no posting check -- the caller has chosen not to
+            wire one in, not a failure of the service.
     """
 
-    def __init__(self, repo: AccountRepo) -> None:
+    def __init__(
+        self,
+        repo: AccountRepo,
+        has_postings: AccountPostingsCheck | None = None,
+    ) -> None:
         """Initialize the service with an injected repository.
 
         Args:
             repo: Repository implementation used for account persistence.
+            has_postings: Optional predicate checking whether an account
+                name has any associated postings. AccountService never
+                imports posting types directly -- callers that want the
+                posting-history delete safeguard enforced must supply
+                this closure themselves, typically bound to a
+                PostingRepo.get_by_account() call at the composition
+                root. Omitting it preserves the existing
+                existence-check-only delete behavior.
         """
         self._repo = repo
+        self._has_postings = has_postings
 
     async def create_account(self, dto: CreateAccountInput) -> AccountViewModel:
         """Validate and persist a new account.
@@ -264,15 +295,19 @@ class AccountService:
     async def delete_account(self, code: str) -> None:
         """Remove an account by its code.
 
-        Verifies the account exists, then removes it from persistence. This
-        workflow does not inspect or prevent deletion based on associated
-        ledger postings.
+        Verifies the account exists, then -- if a has_postings predicate
+        was supplied at construction -- verifies the account has no
+        associated ledger postings before removing it from persistence.
+        Without a supplied predicate, this performs an existence check
+        only, matching the previously documented behavior.
 
         Args:
             code: The account code to delete.
 
         Raises:
             AppError: UNKNOWN_ACCOUNT if no account with that code exists.
+            AppError: ACCOUNT_HAS_POSTINGS if a has_postings predicate is
+                configured and reports postings exist for this account.
         """
         existing = await self._repo.get_by_code(code)
 
@@ -281,6 +316,14 @@ class AccountService:
                 code=ErrorCode.UNKNOWN_ACCOUNT,
                 resource="account",
                 identifier=code,
+            )
+
+        if self._has_postings is not None and await self._has_postings(existing.name):
+            raise AppError.conflict(
+                code=ErrorCode.ACCOUNT_HAS_POSTINGS,
+                resource="account",
+                field_name="code",
+                value=code,
             )
 
         await self._repo.delete_by_code(code)
