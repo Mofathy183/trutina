@@ -163,21 +163,17 @@ def override_service():
 @pytest_asyncio.fixture
 async def real_api_app(
     test_settings: TestSettings,
-    clean_db,
+    clean_pg_db,
 ) -> AsyncGenerator[FastAPI]:
-    """A FastAPI app with the real lifespan entered, backed by clean_db.
+    """A FastAPI app with the real lifespan entered, backed by clean_pg_db.
 
-    Declares `clean_db` as a dependency to guarantee Beanie is
-    initialized and the database is empty before the app's own
-    lifespan runs `init_beanie()` again and opens its own connection —
-    this mirrors `real_cli_state`'s documented second-connection
-    pattern in `tests/fixtures/cli.py`, with the same caveat: entering
-    this lifespan opens a second MongoDB client bound to this
-    fixture's own event loop and re-registers the Document classes
-    globally.
+    Declares `clean_pg_db` as a dependency to guarantee the database
+    schema exists (via Alembic, applied by `schema_init`) and every
+    table is empty before the app's own lifespan opens its own
+    PostgreSQL connection.
 
     `router.lifespan_context(app)` is FastAPI/Starlette's own lifespan
-    context manager — used directly here instead of `asgi-lifespan`'s
+    context manager -- used directly here instead of `asgi-lifespan`'s
     `LifespanManager`, since that package is not currently a declared
     dev dependency (see module docstring).
     """
@@ -191,7 +187,7 @@ async def real_api_app(
 async def real_api_client(real_api_app: FastAPI) -> AsyncGenerator[AsyncClient]:
     """An httpx.AsyncClient over real_api_app, real lifespan already entered.
 
-    The integration-tier client every Mongo-backed route/composition
+    The integration-tier client every PostgreSQL-backed route/composition
     test uses. `real_api_app` has already opened its connection and
     populated `app.state.container` by the time this client is used.
     """

@@ -5,13 +5,11 @@ from collections.abc import AsyncGenerator, Iterator
 import pytest
 import pytest_asyncio
 from anyio.from_thread import start_blocking_portal
-from beanie import init_beanie
 from trutina.cli.composition import CliContext, CliState
 from trutina.config import TestSettings
 from typer.testing import CliRunner
 
 from tests.factories import make_fake_cli_context
-from tests.fixtures.mongo import DOCUMENT_MODELS
 
 
 @pytest.fixture
@@ -41,11 +39,10 @@ def fake_cli_state(fake_cli_context: CliContext) -> Iterator[CliState]:
 
 
 @pytest_asyncio.fixture
-async def real_cli_context(test_settings, clean_db) -> AsyncGenerator[CliContext]:
+async def real_cli_context(test_settings, clean_pg_db) -> AsyncGenerator[CliContext]:
     """Integration-tier context for direct `await`-based CliContext tests
     ONLY (accessor caching, aclose() idempotency, override precedence,
-    ConnectionFailure -> AppError.storage_unavailable()). Do NOT pair
-    this with a portal — see real_cli_state's docstring for why.
+    OperationalError -> AppError.storage_unavailable()).
     """
     context = CliContext(settings=test_settings)
     try:
@@ -57,49 +54,19 @@ async def real_cli_context(test_settings, clean_db) -> AsyncGenerator[CliContext
 @pytest_asyncio.fixture
 async def real_cli_state(
     test_settings: TestSettings,
-    clean_db,
-    mongo_connection,
+    clean_pg_db,
+    postgres_connection,
 ) -> AsyncGenerator[CliState]:
-    """Integration-tier CliState: real MongoDB, entirely portal-owned.
+    """Integration-tier CliState: real PostgreSQL, entirely portal-owned.
 
-    CliContext._get_connection() calls init_beanie() unconditionally on
-    first use, and init_beanie() mutates GLOBAL class-level state on
-    AccountDocument/JournalDocument/PostingDocument — it is not scoped
-    to a connection or a fixture. Because Typer command dispatch is
-    synchronous, the CliContext built here only ever gets used from
-    inside the portal's own thread and event loop (via state.call()),
-    so its lazy bootstrap opens a SECOND MongoDB client, bound to that
-    portal's loop, and re-registers the Document classes against it —
-    globally overwriting the registration the session-scoped
-    mongo_connection/beanie_init fixtures already set up for every
-    other integration test.
-
-    That second connection closes correctly at the end of this fixture
-    (via portal.call(context.aclose)), but nothing else re-points the
-    Document classes back at the original, still-open session
-    connection afterward. Left alone, every subsequent test in the
-    session that touches AccountDocument/JournalDocument/PostingDocument
-    — even tests with no relationship to the CLI — fails with
-    "Cannot use AsyncMongoClient in different event loop", because the
-    class-level registration is left pointing at this fixture's now-
-    closed, foreign-loop client.
-
-    The explicit init_beanie() call after the `with` block exits is not
-    optional cleanup — it is what prevents this fixture from corrupting
-    the rest of the test session. It re-registers the Document classes
-    against mongo_connection.db (the untouched, still-alive, session-
-    loop-bound connection already established by mongo_connection/
-    beanie_init) so later tests see a consistent, working registration
-    again, regardless of test order. DOCUMENT_MODELS is imported from
-    tests/fixtures/mongo.py rather than redeclared, so this can't
-    silently drift if a fourth Document class is ever added there.
-
-    This is a pragmatic test-layer fix, not a structural one. The real
-    gap is that CliContext has no constructor seam for "attach to an
-    already-connected Mongo/Beanie setup" the way it already does for
-    account_repo=/journal_repo=/posting_repo= overrides — that would let
-    integration tests avoid opening a second connection at all. Flagging
-    rather than changing context.py silently.
+    Because Typer command dispatch is synchronous, the CliContext built
+    here only ever gets used from inside the portal's own thread and
+    event loop (via state.call()), so its lazy `_get_connection()` opens
+    its own PostgreSQL engine bound to that portal's loop. That engine
+    is scoped entirely to this fixture's `PostgresConnection` instance
+    -- there is no class-level or module-level registration step for it
+    to corrupt, so no re-initialization step is needed after the portal
+    closes.
     """
     context = CliContext(settings=test_settings)
     with start_blocking_portal(backend="asyncio") as portal:
@@ -108,5 +75,3 @@ async def real_cli_state(
             yield state
         finally:
             portal.call(context.aclose)
-
-    await init_beanie(database=mongo_connection.db, document_models=DOCUMENT_MODELS)
