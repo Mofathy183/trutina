@@ -64,3 +64,9 @@ layers = [
     "trutina.core.journal",
     "trutina.core.account",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Core must have zero Postgres/SQLAlchemy awareness"
+type = "forbidden"
+source_modules = ["trutina.core"]
+forbidden_modules = ["sqlalchemy", "asyncpg"]
