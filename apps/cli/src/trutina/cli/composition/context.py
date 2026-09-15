@@ -1,51 +1,50 @@
+"""Per-command composition root for the CLI dependency graph."""
+
+from collections.abc import Awaitable, Callable
 from types import TracebackType
 from typing import Self
 
-from beanie import init_beanie
-from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 from trutina.config import Settings, get_settings
 from trutina.core.account import AccountRepo, AccountService
 from trutina.core.journal import JournalRepo, JournalService
 from trutina.core.posting import PostingRepo, PostingService
-from trutina.shared.errors import AppError
-from trutina.storage_mongo import MongoConnection, connect, disconnect
-from trutina.storage_mongo.account import AccountDocument, MongoAccountRepo
-from trutina.storage_mongo.journal import JournalDocument, MongoJournalRepo
-from trutina.storage_mongo.posting import MongoPostingRepo, PostingDocument
-from trutina.storage_mongo.shared import MongoExecutor
-
-_DOCUMENT_MODELS = [AccountDocument, JournalDocument, PostingDocument]
+from trutina.storage_postgres.account import PostgresAccountRepo
+from trutina.storage_postgres.journal import PostgresJournalRepo
+from trutina.storage_postgres.posting import PostgresPostingRepo
+from trutina.storage_postgres.shared import PostgresConnection, connect, disconnect
+from trutina.storage_postgres.shared.execution import PostgresExecutor
 
 
 class CliContext:
     """Per-command composition root for the CLI dependency graph.
 
     Lazily constructs and caches repositories, services, and the shared
-    MongoDB connection for a single CLI invocation. No external resources
-    are acquired until a command requests a repository or service.
+    PostgreSQL connection for a single CLI invocation. No external
+    resources are acquired until a command requests a repository or
+    service.
 
     Repositories passed in at construction (``account_repo=``, etc.) are
     treated as caller-owned. This context never opens a connection to
-    create them and never tears them down during ``aclose()``. Repositories
-    created lazily by this context are context-owned and are discarded when
-    the context closes so future lookups rebuild them against a fresh
-    connection.
+    create them and never tears them down during ``aclose()``.
+    Repositories created lazily by this context are context-owned and
+    are discarded when the context closes so future lookups rebuild them
+    against a fresh connection.
 
     Lifecycle ownership: in production, ``main.py`` is the sole owner of
     a ``CliContext``'s lifetime. It constructs exactly one context per
     invocation via ``build_context()`` and wraps Typer's dispatch in
-    ``async with context: ...``, guaranteeing ``aclose()`` runs even if a
-    command raises or Click exits via ``SystemExit``. Callers that
+    ``async with context: ...``, guaranteeing ``aclose()`` runs even if
+    a command raises or Click exits via ``SystemExit``. Callers that
     construct a ``CliContext`` directly outside that flow (tests, in
     particular) are responsible for awaiting ``aclose()`` themselves,
     either explicitly or via ``async with``.
 
-    A single ``MongoExecutor`` instance is created eagerly in
+    A single ``PostgresExecutor`` instance is created eagerly in
     ``__init__`` and shared by every context-owned repository this
-    context builds. ``MongoExecutor`` holds no connection state of its
-    own -- it only wraps Beanie operations with consistent MongoDB error
-    translation -- so eager construction here performs no I/O and simply
-    avoids allocating a redundant instance per repository.
+    context builds. ``PostgresExecutor`` holds no connection state of
+    its own -- it only wraps SQLAlchemy operations with consistent
+    error translation -- so eager construction here performs no I/O and
+    simply avoids allocating a redundant instance per repository.
     """
 
     def __init__(
@@ -58,9 +57,8 @@ class CliContext:
     ) -> None:
         self._settings = settings or get_settings()
 
-        self._connection: MongoConnection | None = None
-        self._beanie_ready = False
-        self._executor = MongoExecutor()
+        self._connection: PostgresConnection | None = None
+        self._executor = PostgresExecutor()
 
         self._account_repo = account_repo
         self._journal_repo = journal_repo
@@ -96,96 +94,92 @@ class CliContext:
         """
         await self.aclose()
 
-    async def _get_connection(self) -> MongoConnection:
-        """Return the shared MongoDB connection for this CLI invocation.
+    async def _get_connection(self) -> PostgresConnection:
+        """Return the shared PostgreSQL connection for this CLI invocation.
 
-        Establishes the connection and initializes Beanie on first access.
-        Subsequent calls reuse the same verified connection and initialized
-        document registry until the context is closed.
+        Establishes and verifies the connection on first access via
+        connect(), which performs its own timeout-vs-unavailable
+        translation and raises AppError directly. Subsequent calls reuse
+        the same connection until the context is closed.
 
         Raises:
-            AppError: STORAGE_TIMEOUT if the server cannot be reached
-                within the configured server-selection timeout.
-                STORAGE_UNAVAILABLE for any other MongoDB connection
-                failure. This mirrors the translation already performed
-                by ``infrastructure/mongo/error_translation.py`` for
-                repository operations, so a connection failure at CLI
-                startup surfaces through the same ``AppError`` contract
-                as any other storage failure raised further down the
-                stack -- callers never see a raw ``pymongo`` exception.
+            AppError: STORAGE_TIMEOUT if the connection attempt exceeds
+                the configured timeout, or STORAGE_UNAVAILABLE for any
+                other connection-time failure. Both are raised by
+                connect() itself and propagate unchanged from here.
         """
         if self._connection is None:
-            try:
-                self._connection = await connect(self._settings.mongo)
-            except ServerSelectionTimeoutError as exc:
-                raise AppError.storage_timeout(cause=exc) from exc
-            except ConnectionFailure as exc:
-                raise AppError.storage_unavailable(cause=exc) from exc
-
-        if not self._beanie_ready:
-            await init_beanie(
-                database=self._connection.db,
-                document_models=_DOCUMENT_MODELS,
-            )
-            self._beanie_ready = True
+            self._connection = await connect(self._settings.postgres)
 
         return self._connection
 
     async def get_account_repo(self) -> AccountRepo:
         """Return the account repository for this CLI invocation.
 
-        Lazily creates and caches the default MongoDB implementation when
-        no repository was supplied at construction, reusing this
-        context's shared ``MongoExecutor``.
+        Lazily creates and caches the default PostgreSQL implementation
+        when no repository was supplied at construction, reusing this
+        context's shared ``PostgresExecutor``.
         """
         if self._account_repo is None:
-            await self._get_connection()
-            self._account_repo = MongoAccountRepo(self._executor)
+            connection = await self._get_connection()
+            self._account_repo = PostgresAccountRepo(
+                connection.session_factory, self._executor
+            )
 
         return self._account_repo
 
     async def get_journal_repo(self) -> JournalRepo:
         """Return the journal repository for this CLI invocation.
 
-        Lazily creates and caches the default MongoDB implementation when
-        no repository was supplied at construction, reusing this
-        context's shared ``MongoExecutor``.
+        Lazily creates and caches the default PostgreSQL implementation
+        when no repository was supplied at construction, reusing this
+        context's shared ``PostgresExecutor``.
         """
         if self._journal_repo is None:
-            await self._get_connection()
-            self._journal_repo = MongoJournalRepo(self._executor)
+            connection = await self._get_connection()
+            self._journal_repo = PostgresJournalRepo(
+                connection.session_factory, self._executor
+            )
 
         return self._journal_repo
 
     async def get_posting_repo(self) -> PostingRepo:
         """Return the posting repository for this CLI invocation.
 
-        Lazily creates and caches the default MongoDB implementation when
-        no repository was supplied at construction, reusing this
-        context's shared ``MongoExecutor``.
+        Lazily creates and caches the default PostgreSQL implementation
+        when no repository was supplied at construction, reusing this
+        context's shared ``PostgresExecutor``.
         """
         if self._posting_repo is None:
-            await self._get_connection()
-            self._posting_repo = MongoPostingRepo(self._executor)
+            connection = await self._get_connection()
+            self._posting_repo = PostgresPostingRepo(
+                connection.session_factory, self._executor
+            )
 
         return self._posting_repo
 
     async def get_account_service(self) -> AccountService:
         """Return the account service for this CLI invocation.
 
-        The service is constructed once from the active account repository
-        and reused until the context is closed.
+        The service is constructed once from the active account
+        repository, plus a posting-history check bound to the active
+        posting repository, and reused until the context is closed.
         """
         if self._account_service is None:
-            self._account_service = AccountService(await self.get_account_repo())
+            posting_repo = await self.get_posting_repo()
+            self._account_service = AccountService(
+                await self.get_account_repo(),
+                has_postings=self._make_has_postings_check(posting_repo),
+            )
 
         return self._account_service
 
     async def get_journal_service(self) -> JournalService:
         """Return the journal service for this CLI invocation.
 
-        The service is constructed once from the active journal repository
-        and account service, then reused until the context is closed.
+        The service is constructed once from the active journal
+        repository and account service, then reused until the context
+        is closed.
         """
         if self._journal_service is None:
             self._journal_service = JournalService(
@@ -198,8 +192,9 @@ class CliContext:
     async def get_posting_service(self) -> PostingService:
         """Return the posting service for this CLI invocation.
 
-        The service is constructed once from the active posting repository
-        and journal service, then reused until the context is closed.
+        The service is constructed once from the active posting
+        repository and journal service, then reused until the context
+        is closed.
         """
         if self._posting_service is None:
             self._posting_service = PostingService(
@@ -209,30 +204,49 @@ class CliContext:
 
         return self._posting_service
 
+    @staticmethod
+    def _make_has_postings_check(
+        posting_repo: PostingRepo,
+    ) -> Callable[[str], Awaitable[bool]]:
+        """Bind a posting-existence predicate to a specific PostingRepo.
+
+        Kept as a closure rather than a bound method on PostingRepo
+        itself, since the predicate's only consumer is
+        AccountService's has_postings constructor parameter -- it
+        belongs to this composition boundary, not to the repository
+        contract itself.
+        """
+
+        async def _has_postings(account_name: str) -> bool:
+            postings = await posting_repo.get_by_account(account_name)
+            return len(postings) > 0
+
+        return _has_postings
+
     async def aclose(self) -> None:
-        """Close the MongoDB connection and reset context-owned cached state.
+        """Close the PostgreSQL connection and reset context-owned cached state.
 
-        Idempotent -- safe to call when no connection was opened and safe
-        to call multiple times. In production this is always invoked by
-        ``main.py``'s ``async with build_context() as context: ...``
-        block; direct callers (tests constructing ``CliContext``
-        themselves) must call it explicitly, ideally via ``async with``.
+        Idempotent -- safe to call when no connection was opened and
+        safe to call multiple times. In production this is always
+        invoked by ``main.py``'s ``async with build_context() as
+        context: ...`` block; direct callers (tests constructing
+        ``CliContext`` themselves) must call it explicitly, ideally via
+        ``async with``.
 
-        Repositories lazily created by this context are discarded so future
-        repository lookups reconnect and rebuild them against a fresh
-        MongoDB connection. Cached services are always cleared because they
-        depend on whichever repository instances were active before the
-        context closed.
+        Repositories lazily created by this context are discarded so
+        future repository lookups reconnect and rebuild them against a
+        fresh connection. Cached services are always cleared because
+        they depend on whichever repository instances were active
+        before the context closed.
 
-        Repositories supplied by the caller remain untouched because their
-        lifecycle is owned outside this context.
+        Repositories supplied by the caller remain untouched because
+        their lifecycle is owned outside this context.
         """
         try:
             if self._connection is not None:
                 await disconnect(self._connection)
         finally:
             self._connection = None
-            self._beanie_ready = False
 
             if not self._account_repo_injected:
                 self._account_repo = None
