@@ -24,6 +24,7 @@ pytest_plugins = [
     "tests.fixtures.posting",
     "tests.fixtures.journal",
     "tests.fixtures.mongo",
+    "tests.fixtures.postgres",
     "tests.fixtures.settings",
     "tests.fixtures.services",
     "tests.fixtures.cli",
