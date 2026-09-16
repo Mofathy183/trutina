@@ -1,65 +1,46 @@
-name: Test Layer (Mongo-backed)
+name: Test Layer (Postgres-backed)
 
-# Reusable workflow for Mongo-backed layers in ci.yml (core, infra/mongo,
-# cli, api). Previously each of those jobs was a 15-line copy-paste of
-# checkout/setup-uv/setup-python/uv sync/mongo-service/pytest-optional
-# steps, differing only by marker. This file keeps that shape in one
-# place; ci.yml calls it once per layer.
+# Reusable workflow for the app-facing layers in ci.yml: core, cli,
+# api. All three now depend on PostgreSQL for their integration tests
+# (tests/fixtures/services.py wires AccountService/JournalService/
+# PostingService against Postgres*Repo — see the storage-postgres
+# migration). This file has no `backend` input: unlike the infra layer,
+# these three only ever mean Postgres today, so there's nothing to
+# select between.
 #
-# Backend axis: conftest.py's pytest_collection_modifyitems() derives a
-# "mongo"/"postgres" backend marker for any test under a storage-backend
-# directory (_BACKEND_DIRS), and REQUIRES it for every infra-layer test.
-# Non-infra tests must carry none. `backend` here mirrors that: required
-# when marker == "infra", must stay empty otherwise.
-#
-# NOT used by `foundation` (no Mongo service, no integration tests) or
-# `static_analysis`/`build` (no tests at all).
-#
-# Postgres note: once trutina-storage-postgres exists, its integration
-# tests need a postgres:16 service container, not mongo:8. GitHub
-# Actions `services:` blocks don't support `if:`, so that backend gets
-# its own reusable workflow (_test-layer-postgres.yml), called with
-# marker: infra, backend: postgres — mirroring this file's shape, not
-# branching inside it. Don't add postgres here.
+# trutina-storage-mongo's own adapter tests run through
+# _test-layer-mongo.yml instead — that package is retained but no
+# longer load-bearing for any app-facing layer, so it gets its own
+# dedicated file rather than sharing this one.
 
 on:
   workflow_call:
     inputs:
       marker:
         description: >-
-          The layer marker to filter tests by ("core", "infra", "cli",
-          "api"). Combined with "unit"/"integration" and, for "infra",
-          the required `backend` input, as
-          "<speed> and <marker>[ and <backend>]".
+          The layer marker to filter tests by ("core", "cli", "api").
+          Combined with "unit"/"integration" as "<speed> and <marker>".
         required: true
         type: string
-      backend:
-        description: >-
-          Storage-backend marker for infra-layer runs ("mongo" today;
-          "postgres" once trutina-storage-postgres exists). Required
-          when marker == "infra". Must stay empty for every other layer
-          — conftest.py rejects a backend marker on a non-infra test, so
-          setting this here for e.g. "cli" would just silently match
-          zero tests instead of failing loudly.
-        required: false
-        type: string
-        default: ""
 
 env:
-  TRUTINA_TEST_MONGO__URI: mongodb://localhost:27017
-  TRUTINA_TEST_MONGO__DB: trutina_test
+  TRUTINA_TEST_POSTGRES__URI: postgresql+asyncpg://postgres:postgres@localhost:5432/trutina_test
 
 jobs:
   test:
-    name: "${{ inputs.marker }}${{ inputs.backend != '' && format('/{0}', inputs.backend) || '' }} (unit + integration)"
+    name: "${{ inputs.marker }} (unit + integration)"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
-      mongo:
-        image: mongo:8
-        ports: ["27017:27017"]
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trutina_test
+        ports: ["5432:5432"]
         options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-cmd "pg_isready -U postgres"
           --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
@@ -74,19 +55,14 @@ jobs:
 
       - run: chmod +x tools/ci/pytest-optional.sh
 
-      - name: Compute pytest marker expression
-        id: markers
-        run: |
-          expr="${{ inputs.marker }}"
-          if [ -n "${{ inputs.backend }}" ]; then
-            expr="$expr and ${{ inputs.backend }}"
-          fi
-          echo "expr=$expr" >> "$GITHUB_OUTPUT"
+      - name: Alembic upgrade head
+        working-directory: packages/storage-postgres
+        run: uv run alembic -x db=test upgrade head
 
       - name: Unit tests
         run: >
-          tools/ci/pytest-optional.sh "unit and ${{ steps.markers.outputs.expr }}"
+          tools/ci/pytest-optional.sh "unit and ${{ inputs.marker }}"
           --cov=trutina --cov-report=term-missing
 
       - name: Integration tests
-        run: tools/ci/pytest-optional.sh "integration and ${{ steps.markers.outputs.expr }}"
+        run: tools/ci/pytest-optional.sh "integration and ${{ inputs.marker }}"

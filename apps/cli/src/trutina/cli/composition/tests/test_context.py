@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 from trutina.cli.composition.context import CliContext
 from trutina.shared.errors import AppError, ErrorCode
 
@@ -16,18 +15,12 @@ class TestCliContextConnectionCaching:
         call_count = 0
         fake_connection = MagicMock()
 
-        async def fake_connect(mongo_settings):
+        async def fake_connect(postgres_settings):
             nonlocal call_count
             call_count += 1
             return fake_connection
 
-        async def fake_init_beanie(**kwargs):
-            return None
-
         monkeypatch.setattr("trutina.cli.composition.context.connect", fake_connect)
-        monkeypatch.setattr(
-            "trutina.cli.composition.context.init_beanie", fake_init_beanie
-        )
 
         context = CliContext(settings=test_settings)
 
@@ -75,21 +68,15 @@ class TestCliContextRepositoryOwnership:
         call_count = 0
         fake_connection = MagicMock()
 
-        async def fake_connect(mongo_settings):
+        async def fake_connect(postgres_settings):
             nonlocal call_count
             call_count += 1
             return fake_connection
-
-        async def fake_init_beanie(**kwargs):
-            return None
 
         async def fake_disconnect(connection):
             return None
 
         monkeypatch.setattr("trutina.cli.composition.context.connect", fake_connect)
-        monkeypatch.setattr(
-            "trutina.cli.composition.context.init_beanie", fake_init_beanie
-        )
         monkeypatch.setattr(
             "trutina.cli.composition.context.disconnect", fake_disconnect
         )
@@ -105,13 +92,13 @@ class TestCliContextRepositoryOwnership:
 
 
 @pytest.mark.unit
-class TestCliContextConnectionErrorTranslation:
-    async def test_translates_server_selection_timeout(
+class TestCliContextConnectionErrorPropagation:
+    async def test_propagates_storage_timeout_from_connect(
         self, monkeypatch, test_settings
     ):
-        cause = ServerSelectionTimeoutError("timed out")
+        cause = AppError.storage_timeout(cause=Exception("timed out"))
 
-        async def fake_connect(mongo_settings):
+        async def fake_connect(postgres_settings):
             raise cause
 
         monkeypatch.setattr("trutina.cli.composition.context.connect", fake_connect)
@@ -120,13 +107,15 @@ class TestCliContextConnectionErrorTranslation:
         with pytest.raises(AppError) as exc_info:
             await context.get_account_repo()
 
+        assert exc_info.value is cause
         assert exc_info.value.code == ErrorCode.STORAGE_TIMEOUT
-        assert exc_info.value.cause is cause
 
-    async def test_translates_connection_failure(self, monkeypatch, test_settings):
-        cause = ConnectionFailure("connection refused")
+    async def test_propagates_storage_unavailable_from_connect(
+        self, monkeypatch, test_settings
+    ):
+        cause = AppError.storage_unavailable(cause=Exception("refused"))
 
-        async def fake_connect(mongo_settings):
+        async def fake_connect(postgres_settings):
             raise cause
 
         monkeypatch.setattr("trutina.cli.composition.context.connect", fake_connect)
@@ -135,5 +124,5 @@ class TestCliContextConnectionErrorTranslation:
         with pytest.raises(AppError) as exc_info:
             await context.get_account_repo()
 
+        assert exc_info.value is cause
         assert exc_info.value.code == ErrorCode.STORAGE_UNAVAILABLE
-        assert exc_info.value.cause is cause

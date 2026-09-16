@@ -1,0 +1,67 @@
+name: Test Layer (Postgres-backed)
+
+# Reusable workflow for the Postgres-backed infra layer. Mirrors
+# _test-layer.yml's shape for Mongo, kept as a separate file rather than
+# an `if:` branch inside it because GitHub Actions `services:` blocks
+# don't support `if:` — a single reusable workflow can't conditionally
+# bring up mongo:8 vs. postgres:16 depending on an input.
+#
+# Runs `alembic -x db=test upgrade head` before the test steps, since
+# schema_init's pytest fixture expects migration history to already be
+# applied — matching how production is expected to be deployed
+# (migration-gated, no create_all()/init_beanie()-style startup DDL).
+
+on:
+  workflow_call:
+    inputs:
+      marker:
+        description: >-
+          The layer marker to filter tests by. Always "infra" for this
+          workflow today — combined with "unit"/"integration" and the
+          "postgres" backend marker as "<speed> and <marker> and postgres".
+        required: true
+        type: string
+
+env:
+  TRUTINA_TEST_POSTGRES__URI: postgresql+asyncpg://postgres:postgres@localhost:5432/trutina_test
+
+jobs:
+  test:
+    name: "${{ inputs.marker }}/postgres (unit + integration)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trutina_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with: { enable-cache: true }
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.14" }
+
+      - run: uv sync --all-packages --frozen
+
+      - run: chmod +x tools/ci/pytest-optional.sh
+
+      - name: Alembic upgrade head
+        working-directory: packages/storage-postgres
+        run: uv run alembic -x db=test upgrade head
+
+      - name: Unit tests
+        run: >
+          tools/ci/pytest-optional.sh "unit and ${{ inputs.marker }} and postgres"
+          --cov=trutina --cov-report=term-missing
+
+      - name: Integration tests
+        run: tools/ci/pytest-optional.sh "integration and ${{ inputs.marker }} and postgres"

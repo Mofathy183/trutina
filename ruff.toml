@@ -1,6 +1,8 @@
 line-length = 88
 target-version = "py314"
 
+extend-exclude = ["packages/storage-postgres/alembic/versions"]
+
 [lint]
 select = ["E", "F", "I", "B", "UP", "C4"]
 ignore = ["E501"]

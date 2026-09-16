@@ -421,3 +421,80 @@ class TestAccountService:
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
         assert exc_info.value.context["identifier"] == "9999"
+
+
+@pytest.mark.unit
+class TestAccountServiceDeleteWithPostingsCheck:
+    async def test_deletes_when_has_postings_check_returns_false(self):
+        account = make_account()
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[account]))
+
+        async def no_postings(name: str) -> bool:
+            return False
+
+        service = AccountService(repo, has_postings=no_postings)
+
+        await service.delete_account(account.code)
+
+        assert repo.deleted_codes == [account.code]
+
+    async def test_raises_account_has_postings_when_check_returns_true(self):
+        account = make_account()
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[account]))
+
+        async def has_postings(name: str) -> bool:
+            return True
+
+        service = AccountService(repo, has_postings=has_postings)
+
+        with pytest.raises(AppError) as exc_info:
+            await service.delete_account(account.code)
+
+        assert exc_info.value.code == ErrorCode.ACCOUNT_HAS_POSTINGS
+        assert exc_info.value.context["value"] == account.code
+
+    async def test_does_not_delete_when_postings_exist(self):
+        account = make_account()
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[account]))
+
+        async def has_postings(name: str) -> bool:
+            return True
+
+        service = AccountService(repo, has_postings=has_postings)
+
+        with pytest.raises(AppError):
+            await service.delete_account(account.code)
+
+        assert repo.deleted_codes == []
+
+    async def test_passes_account_name_not_code_to_the_check(self):
+        account = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[account]))
+        received: list[str] = []
+
+        async def recording_check(name: str) -> bool:
+            received.append(name)
+            return False
+
+        service = AccountService(repo, has_postings=recording_check)
+
+        await service.delete_account(account.code)
+
+        assert received == ["Cash"]
+
+    async def test_still_raises_unknown_account_before_checking_postings(self):
+        repo = make_fake_account_repo()
+        checked = False
+
+        async def has_postings(name: str) -> bool:
+            nonlocal checked
+            checked = True
+            return True
+
+        service = AccountService(repo, has_postings=has_postings)
+
+        with pytest.raises(AppError) as exc_info:
+            await service.delete_account("9999")
+
+        assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
+        assert checked is False

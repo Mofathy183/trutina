@@ -1,32 +1,31 @@
 """Composition root and lifespan management for the Trutina API.
 
-bootstrap.py is the API's equivalent of cli/bootstrap.py + main.py::run()
-combined: it owns the one and only sequence that opens the shared
-MongoDB connection, initializes Beanie, builds the singleton service
-graph, and attaches it to app.state as a Container.
+bootstrap.py owns the one and only sequence that opens the shared
+PostgreSQL connection, builds the singleton service graph, and attaches
+it to app.state as a Container.
+
+Table existence is guaranteed by Alembic migrations applied before this
+process starts. Nothing in this module creates or alters schema, and it
+performs no schema-registration step of its own.
 
 This is the only module in the API layer permitted to import
-AsyncMongoClient-adjacent infrastructure types (MongoConnection,
-MongoExecutor, any concrete Mongo*Repo). Routes, dependency providers,
-and app.py never see these types directly — they only ever see
-Container's service attributes.
+PostgresConnection-adjacent infrastructure types (PostgresConnection,
+PostgresExecutor, any concrete Postgres*Repo). Routes, dependency
+providers, and app.py never see these types directly -- they only ever
+see Container's service attributes.
 
 Startup failure policy
 -----------------------
-If the initial MongoDB ping (performed inside connect()) fails, startup
-fails loudly: the exception propagates out of the lifespan context
-manager, FastAPI/uvicorn abort startup, and the process exits non-zero
-without ever accepting a request. This mirrors connect()'s existing
-behavior for the CLI. An API process that starts "successfully" but
-can't reach its database has no correct way to answer any request, so
-serving traffic in that state would only convert one obvious, fail-fast
-startup error into a confusing wall of per-request 5xx responses.
-Process orchestration (systemd, Kubernetes restart-with-backoff, etc.)
-is expected to own retry policy; this module does not retry.
+If the initial PostgreSQL ping (performed inside connect()) fails,
+startup fails loudly: the exception propagates out of the lifespan
+context manager, FastAPI/uvicorn abort startup, and the process exits
+non-zero without ever accepting a request. Process orchestration
+(systemd, Kubernetes restart-with-backoff, etc.) is expected to own
+retry policy; this module does not retry.
 
-This is distinct from *post-startup* MongoDB failures (e.g. a network
+This is distinct from *post-startup* PostgreSQL failures (e.g. a network
 partition after the process is already serving traffic), which are
-already handled per-request by translate_mongo_errors() ->
+already handled per-request by translate_postgres_errors() ->
 AppError.storage_unavailable()/storage_timeout() and surfaced through
 the API's normal error-handling path, not through this module.
 """
@@ -34,49 +33,56 @@ the API's normal error-handling path, not through this module.
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
-from beanie import init_beanie
 from fastapi import FastAPI
 from trutina.config import Settings
 from trutina.core.account.service import AccountService
 from trutina.core.journal.service import JournalService
 from trutina.core.posting.service import PostingService
-from trutina.storage_mongo import connect, disconnect
-from trutina.storage_mongo.account import AccountDocument, MongoAccountRepo
-from trutina.storage_mongo.journal import JournalDocument, MongoJournalRepo
-from trutina.storage_mongo.posting import MongoPostingRepo, PostingDocument
-from trutina.storage_mongo.shared import MongoExecutor
+from trutina.storage_postgres.account import PostgresAccountRepo
+from trutina.storage_postgres.journal import PostgresJournalRepo
+from trutina.storage_postgres.posting import PostgresPostingRepo
+from trutina.storage_postgres.shared import PostgresConnection, connect, disconnect
+from trutina.storage_postgres.shared.execution import PostgresExecutor
 
 from .container import Container
 
-# Mirrors tests/fixtures/mongo.py::DOCUMENT_MODELS. Kept as a separate
-# list rather than imported from the test fixture, since production code
-# must not depend on the test tree; add new Document classes here *and*
-# in tests/fixtures/mongo.py when a fourth one is introduced.
-DOCUMENT_MODELS = [AccountDocument, JournalDocument, PostingDocument]
 
+def build_container(connection: PostgresConnection) -> Container:
+    """Construct the singleton service graph bound to an open connection.
 
-def build_container() -> Container:
-    """Construct the singleton service graph.
+    JournalService depends on AccountService, PostingService depends on
+    JournalService. All three repositories are built from the same
+    PostgresExecutor instance and the connection's session_factory, so
+    every repository shares one error-translation choke point and one
+    pool of sessions.
 
-    Pure construction — no I/O, no MongoDB connection required. Mirrors
-    CliContext's wiring exactly: JournalService depends on AccountService,
-    PostingService depends on JournalService. MongoExecutor and the
-    Mongo*Repo constructors take no connection/client argument — every
-    Beanie operation resolves its collection through global Document
-    registration set up by init_beanie(), not through anything held here
-    — which is precisely what makes this function safe to call with no
-    MongoDB instance reachable at all (see TestBuildContainer.test_performs_no_io).
+    AccountService is given a posting-history predicate bound to the
+    same posting_repo instance PostingService uses, so that
+    delete_account() enforces the ACCOUNT_HAS_POSTINGS safeguard against
+    the same data PostingService itself would report through
+    get_postings_by_account().
 
     Split out from the lifespan function specifically so it can be unit
-    tested in isolation.
+    tested in isolation, given a connection built by a test fixture.
+
+    Args:
+        connection: An already-verified PostgresConnection, typically
+            obtained from connect(settings.postgres).
+
+    Returns:
+        A Container wired against real PostgreSQL-backed repositories.
     """
-    executor = MongoExecutor()
+    executor = PostgresExecutor()
 
-    account_repo = MongoAccountRepo(executor)
-    journal_repo = MongoJournalRepo(executor)
-    posting_repo = MongoPostingRepo(executor)
+    account_repo = PostgresAccountRepo(connection.session_factory, executor)
+    journal_repo = PostgresJournalRepo(connection.session_factory, executor)
+    posting_repo = PostgresPostingRepo(connection.session_factory, executor)
 
-    account_service = AccountService(account_repo)
+    async def _has_postings(account_name: str) -> bool:
+        postings = await posting_repo.get_by_account(account_name)
+        return len(postings) > 0
+
+    account_service = AccountService(account_repo, has_postings=_has_postings)
     journal_service = JournalService(
         repo=journal_repo,
         account_service=account_service,
@@ -100,21 +106,18 @@ def make_lifespan(
 
     Kept as a factory rather than a single module-level `lifespan`
     object so tests can run the full startup/shutdown sequence against
-    TestSettings (an isolated MongoDB) without touching the
-    environment-sourced get_settings() used in production — mirroring
-    how build_context(settings=...) already works on the CLI side.
-    Nothing at bootstrap.py's module level performs I/O; the sequence
-    below only runs when the returned context manager is actually
-    entered by FastAPI/uvicorn.
+    TestSettings (an isolated PostgreSQL database) without touching the
+    environment-sourced get_settings() used in production. Nothing at
+    bootstrap.py's module level performs I/O; the sequence below only
+    runs when the returned context manager is actually entered by
+    FastAPI/uvicorn.
     """
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-        connection = await connect(settings.mongo)
+        connection = await connect(settings.postgres)
 
-        await init_beanie(database=connection.db, document_models=DOCUMENT_MODELS)
-
-        app.state.container = build_container()
+        app.state.container = build_container(connection)
 
         try:
             yield

@@ -1,19 +1,19 @@
-"""Fixtures wiring real feature services to real MongoDB repositories.
+"""Fixtures wiring real feature services to real PostgreSQL repositories.
 
 These exist solely for service-integration tests under
 ``modules/*/tests/test_service_integration.py``. Unlike the unit-test
 fixtures in ``tests/fixtures/{account,journal,posting}.py`` (which inject
 ``Fake*Repo`` instances), this module wires each service to its concrete
-Mongo adapter, mirroring the production dependency graph:
+PostgreSQL adapter, mirroring the production dependency graph:
 
-    AccountService -> MongoAccountRepo
-    JournalService -> MongoJournalRepo, AccountService
-    PostingService -> MongoPostingRepo, JournalService
+    AccountService -> PostgresAccountRepo
+    JournalService -> PostgresJournalRepo, AccountService
+    PostingService -> PostgresPostingRepo, JournalService
 
-``services`` depends on ``mongo_account_repo``, ``mongo_journal_repo``, and
-``mongo_posting_repo`` — all three depend on ``clean_db``, so requesting all
-three together does not collide: ``clean_db`` truncates every collection
-once per test regardless of how many repo fixtures pull it in.
+``services`` depends on ``postgres_account_repo``, ``postgres_journal_repo``,
+and ``postgres_posting_repo`` — all three depend on ``clean_pg_db``, so
+requesting all three together does not collide: ``clean_pg_db`` truncates
+every table once per test regardless of how many repo fixtures pull it in.
 """
 
 import pytest
@@ -26,20 +26,20 @@ from tests.factories import make_create_account_input
 
 
 @pytest.fixture
-def services(mongo_account_repo, mongo_journal_repo, mongo_posting_repo):
-    """Real services wired to real Mongo repositories.
+def services(postgres_account_repo, postgres_journal_repo, postgres_posting_repo):
+    """Real services wired to real PostgreSQL repositories.
 
     Returns a ``(account_service, journal_service, posting_service)`` tuple
     so tests can compose whichever subset of the workflow they need without
     repeating the wiring inline.
     """
-    account_service = AccountService(mongo_account_repo)
+    account_service = AccountService(postgres_account_repo)
     journal_service = JournalService(
-        repo=mongo_journal_repo,
+        repo=postgres_journal_repo,
         account_service=account_service,
     )
     posting_service = PostingService(
-        repo=mongo_posting_repo,
+        repo=postgres_posting_repo,
         journal_service=journal_service,
     )
     return account_service, journal_service, posting_service

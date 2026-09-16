@@ -1,0 +1,25 @@
+[project]
+name = "trutina-storage-postgres"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "trutina-shared",
+    "trutina-core",
+    "trutina-config",
+    "sqlalchemy>=2.0.52",
+    "asyncpg>=0.31.0",
+    "alembic>=1.20.0",
+]
+
+[tool.uv.sources]
+trutina-shared = { workspace = true }
+trutina-core = { workspace = true }
+trutina-config = { workspace = true }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
