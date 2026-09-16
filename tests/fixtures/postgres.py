@@ -42,16 +42,35 @@ async def postgres_connection(test_settings: TestSettings):
 async def schema_init(postgres_connection, test_settings):
     """Apply the real Alembic migration history once per test session.
 
+    Replaces Base.metadata.create_all(). create_all() builds tables
+    straight from the live ORM models, so it can never catch a migration
+    that doesn't actually reproduce what model.py claims -- running the
+    real history here is what makes that class of drift a test failure
+    instead of a surprise the first time someone runs `alembic upgrade
+    head` against a real environment.
+
+    env.py's get_url() always recomputes the target URL itself and
+    ignores any sqlalchemy.url set directly on the Config object -- it
+    only resolves TestSettings() when it sees the `-x db=test` argument,
+    exactly like the CLI invocation (`alembic -x db=test upgrade head`).
+    Without cmd_opts.x set here, get_url() silently falls through to
+    Settings() (production defaults), which is not what this fixture
+    means to migrate.
+
     command.upgrade() is synchronous alembic machinery calling back into
     an async env.py that itself calls asyncio.run() -- calling it directly
     from this already-running event loop would raise "asyncio.run()
     cannot be called from a running event loop", so it's dispatched to a
     thread executor instead, giving env.py's asyncio.run() a fresh loop.
     """
+    import argparse
+
     package_root = Path(__file__).resolve().parents[2] / "packages" / "storage-postgres"
-    cfg = Config(str(package_root / "alembic.ini"))
+    cfg = Config(
+        str(package_root / "alembic.ini"),
+        cmd_opts=argparse.Namespace(x=["db=test"]),
+    )
     cfg.set_main_option("script_location", str(package_root / "alembic"))
-    cfg.set_main_option("sqlalchemy.url", test_settings.postgres.uri)
 
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, lambda: command.upgrade(cfg, "head"))
