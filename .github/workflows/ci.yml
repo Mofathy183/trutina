@@ -75,15 +75,12 @@ jobs:
           --cov=trutina --cov-report=term-missing
 
   # ── Quality Gates 3–5: Storage-backed layers ─────────────────────
-  # Each of these calls a reusable workflow rather than repeating
-  # checkout/setup/sync/service/test steps per job. `needs:` still
-  # enforces ordering — reusable workflows don't change dependency
-  # semantics. `_test-layer.yml` is the generic reusable workflow
-  # (core, mongo-backed infra, cli, api all use it); Postgres gets its
-  # own file (`_test-layer-postgres.yml`) because GitHub Actions
-  # `services:` blocks don't support `if:`, so a single reusable
-  # workflow can't conditionally bring up mongo:8 vs. postgres:16
-  # depending on an input.
+  # core/cli/api all depend on PostgreSQL today (_test-layer.yml).
+  # trutina-storage-mongo and trutina-storage-postgres each get their
+  # own dedicated file to test their adapter in isolation, since a
+  # single reusable workflow can't conditionally bring up mongo:8 vs.
+  # postgres:16 depending on an input (GitHub Actions `services:`
+  # blocks don't support `if:`).
   core:
     name: "QG3 · Core"
     needs: foundation
@@ -94,10 +91,9 @@ jobs:
   storage_mongo:
     name: "QG4 · Storage · Mongo"
     needs: core
-    uses: ./.github/workflows/_test-layer.yml
+    uses: ./.github/workflows/_test-layer-mongo.yml
     with:
       marker: infra
-      backend: mongo
 
   storage_postgres:
     name: "QG4 · Storage · Postgres"
