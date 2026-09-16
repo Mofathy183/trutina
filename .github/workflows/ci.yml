@@ -54,9 +54,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: static_analysis
-    env:
-      TRUTINA_TEST_MONGO__URI: mongodb://localhost:27017
-      TRUTINA_TEST_MONGO__DB: trutina_test
     steps:
       - uses: actions/checkout@v4
 
@@ -71,7 +68,7 @@ jobs:
       - run: chmod +x tools/ci/pytest-optional.sh
 
       - run: >
-          tools/ci/pytest-optional.sh "unit and shared"
+          tools/ci/pytest-optional.sh "unit and (shared or config)"
           --cov=trutina --cov-report=term-missing
 
   # ── Quality Gates 3–5: Storage-backed layers ─────────────────────
