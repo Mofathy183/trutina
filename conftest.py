@@ -74,7 +74,9 @@ pytest_plugins = [
 # separately rather than folded into _LAYER_DIRS as another peer entry.
 
 _SPEED_MARKERS: frozenset[str] = frozenset({"unit", "integration"})
-_LAYER_MARKERS: frozenset[str] = frozenset({"core", "infra", "cli", "api", "shared"})
+_LAYER_MARKERS: frozenset[str] = frozenset(
+    {"core", "infra", "cli", "api", "shared", "config"}
+)
 
 # Directory name -> layer marker, checked in this order, for layers that
 # map 1:1 onto a single owning directory. Order only matters for the
@@ -91,6 +93,7 @@ _LAYER_DIRS: dict[str, str] = {
     "core": "core",
     "cli": "cli",
     "api": "api",
+    "config": "config",
 }
 
 # Directory names that both map to the single "shared" layer marker.
@@ -98,7 +101,7 @@ _LAYER_DIRS: dict[str, str] = {
 # "shared" is the one layer with more than one owning directory
 # (root shared/ and config/), and because the marker name intentionally
 # does not match either directory name 1:1.
-_SHARED_DIRS: frozenset[str] = frozenset({"shared", "config"})
+_SHARED_DIRS: frozenset[str] = frozenset({"shared"})
 
 # Storage-backend package directory -> backend marker. Every entry here
 # implies BOTH the "infra" layer marker and the named backend marker —
