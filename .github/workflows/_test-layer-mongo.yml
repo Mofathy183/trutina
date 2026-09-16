@@ -1,0 +1,62 @@
+name: Test Layer (Mongo-backed)
+
+# Reusable workflow dedicated to trutina-storage-mongo's own adapter
+# tests. Mirrors _test-layer-postgres.yml's shape for symmetry: kept as
+# its own file rather than folded into _test-layer.yml because that
+# file no longer has any Mongo-dependent caller (core/cli/api are
+# Postgres-only since the storage-postgres migration) — Mongo is now
+# relevant to exactly one job (storage_mongo), so it gets exactly one
+# dedicated file, same reasoning that already justified splitting
+# Postgres out on its own.
+#
+# No Alembic-equivalent step here — trutina-storage-mongo has no
+# migration system; Beanie's init_beanie() (called inside the test
+# fixtures themselves) creates indexes at runtime.
+
+on:
+  workflow_call:
+    inputs:
+      marker:
+        description: >-
+          The layer marker to filter tests by. Always "infra" for this
+          workflow — combined with "unit"/"integration" and the
+          "mongo" backend marker as "<speed> and <marker> and mongo".
+        required: true
+        type: string
+
+env:
+  TRUTINA_TEST_MONGO__URI: mongodb://localhost:27017
+  TRUTINA_TEST_MONGO__DB: trutina_test
+
+jobs:
+  test:
+    name: "${{ inputs.marker }}/mongo (unit + integration)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mongo:
+        image: mongo:8
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with: { enable-cache: true }
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.14" }
+
+      - run: uv sync --all-packages --frozen
+
+      - run: chmod +x tools/ci/pytest-optional.sh
+
+      - name: Unit tests
+        run: >
+          tools/ci/pytest-optional.sh "unit and ${{ inputs.marker }} and mongo"
+          --cov=trutina --cov-report=term-missing
+
+      - name: Integration tests
+        run: tools/ci/pytest-optional.sh "integration and ${{ inputs.marker }} and mongo"
