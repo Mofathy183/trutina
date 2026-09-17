@@ -290,7 +290,7 @@ async def _handle_request_validation_error(
         for error in exc.errors()
     ]
 
-    entry = ERROR_CATALOG[ErrorCode.VALIDATION_ERROR]
+    entry = ERROR_CATALOG.get(ErrorCode.VALIDATION_ERROR, DEFAULT_ERROR_ENTRY)
 
     body = ValidationErrorResponse(
         error_code=ErrorCode.REQUEST_VALIDATION_ERROR.value,
