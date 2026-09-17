@@ -1,14 +1,15 @@
 # trutina-cli — Context
 
-Audience: maintainers, reviewers, and future contributors deciding whether
-a change belongs in this package and whether it preserves the guarantees
-the rest of the monorepo depends on. This document explains _why_ the CLI
-looks the way it does, not how to call it — see `README.md` for usage.
+For usage, see README.md. This document explains why, not how.
+
+Audience: maintainers, reviewers, and future contributors deciding whether a change
+belongs in this package and whether it preserves the guarantees the rest of the
+monorepo depends on.
 
 ## Why This Package Exists Separately
 
 Trutina's accounting domain (`trutina-core`) is deliberately storage- and
-transport-agnostic: fully async, tested against fakes and real MongoDB, and
+transport-agnostic: fully async, tested against fakes and a real database, and
 with zero knowledge of Typer, Rich, or terminal concerns. Something has to
 be the first real user-facing surface onto that domain. `trutina-cli` is
 that surface, kept as its own workspace package rather than folded into
@@ -58,20 +59,18 @@ repository calls) goes through exactly one `BlockingPortal`, exposed as
 **Why:** Click's dispatch machinery (`app(obj=state)`) is itself
 synchronous — there is no supported way to make a Typer command body
 `async def` and have Click await it directly. `trutina-core`'s services
-are async because they perform real I/O (MongoDB via Beanie/PyMongo) and
-the domain layer is designed to be non-blocking and storage-agnostic.
-`anyio`'s `BlockingPortal` is the bridge: one background thread hosts one
-asyncio event loop, and `portal.call(...)` blocks the calling (main) thread
-until the async call resolves and returns a plain result.
+are async because they perform real I/O and the domain layer is designed
+to be non-blocking and storage-agnostic. `anyio`'s `BlockingPortal` is the
+bridge: one background thread hosts one asyncio event loop, and
+`portal.call(...)` blocks the calling (main) thread until the async call
+resolves and returns a plain result.
 
 **Why not `asyncio.run()` per command instead of a shared portal:**
-`asyncio.run()` always creates a brand-new event loop. That would both
-fragment MongoDB client state across event loops (which PyMongo's async
-client does not support) and be unable to reuse a `CliContext`'s
-already-open connection from a previous accessor call in the same
-invocation. `start_blocking_portal()` is therefore called exactly once, in
-`main.py::run()` — no command, service, handler, or repository may create a
-second loop or a second portal.
+`asyncio.run()` always creates a brand-new event loop. That cannot reuse a
+`CliContext`'s already-open connection from a previous accessor call in
+the same invocation. `start_blocking_portal()` is therefore called exactly
+once, in `main.py::run()` — no command, service, handler, or repository
+may create a second loop or a second portal.
 
 ## Why The Shell Reuses The Same Typer App
 
@@ -85,8 +84,9 @@ fork between "typed in the shell" and "typed as argv". Completion
 descriptions are taken from Click's `get_short_help_str()` on that same
 tree for the same reason. Shell-only keywords (`exit`, `help`) are not
 Typer commands; they live in `SHELL_BUILTINS` so the loop and completer
-share one catalog. Only entries with `terminates=True` end the session
-today that is `exit`, not `quit`.
+share one catalog. Only entries with `terminates=True` end the session;
+today that is `exit`, not `quit`. Shell line syntax (`/`, help shorthands)
+is in README.md Usage.
 
 **Why prompt_toolkit is a CLI dependency:** the REPL needs a session with
 live completion, Tab-to-accept, and a prompt style. That library stays in
@@ -95,15 +95,15 @@ this package; `trutina-core` does not import it.
 ## Why `CliContext` Performs No I/O At Construction
 
 **Decision:** `build_context()` and `CliContext.__init__` never open a
-MongoDB connection or construct a repository/service. Every repository and
-service is created lazily, the first time a command actually asks for it
-via a `get_*_repo()`/`get_*_service()` accessor, and cached for the rest
-of the invocation. `__init__` does construct a `MongoExecutor`; that
-object only wraps Beanie operations with storage-error translation and
-does not open a connection.
+PostgreSQL connection or construct a repository/service. Every repository
+and service is created lazily, the first time a command actually asks for
+it via a `get_*_repo()`/`get_*_service()` accessor, and cached for the
+rest of the invocation. `__init__` does construct a `PostgresExecutor`;
+that object only wraps SQLAlchemy operations with storage-error
+translation and does not open a connection.
 
 **Why:** Startup cost must stay flat regardless of which command runs —
-`trutina-cli --help` must never touch MongoDB, because nothing in the
+`trutina-cli --help` must never touch PostgreSQL, because nothing in the
 `--help` path calls one of `CliContext`'s accessors. This also makes
 testability free: a `CliContext` built with injected `Fake*Repo` instances
 can never open a real connection, because the lazy-creation branch in each
@@ -119,14 +119,15 @@ that's obvious to audit — a new repository/service follows the exact same
 pattern, and a reviewer doesn't need to trace unrelated construction
 logic to confirm the laziness invariant holds.
 
-**Current connection path:** `composition/context.py` imports
-`beanie.init_beanie` and PyMongo's `ConnectionFailure` /
-`ServerSelectionTimeoutError` so first repository use can initialize
-Beanie and translate connection failures into `AppError.storage_timeout`
-/ `AppError.storage_unavailable`. That is the only CLI module that
-imports those libraries today. There is no import-linter contract
-forbidding Beanie/PyMongo in `trutina.cli` (the forbidden contract
-applies to `trutina.core` only).
+**Current connection path:** `composition/context.py` is the only CLI
+module that imports `trutina.storage_postgres` types. First repository use
+calls `connect(self._settings.postgres)`, which verifies the connection
+and translates failures into `AppError.storage_timeout` /
+`AppError.storage_unavailable`. There is no import-linter contract
+forbidding SQLAlchemy/asyncpg (or Beanie/PyMongo) in `trutina.cli` (the
+forbidden contract applies to `trutina.core` only). Stale Mongo/Beanie
+wording remains in some CLI module docstrings (`bootstrap.py`, `app.py`);
+live construction is PostgreSQL.
 
 ## Why Caller-Injected Repositories Are Never Torn Down
 
@@ -249,8 +250,9 @@ adding safety.
 ## Allowed and Forbidden Dependencies
 
 **Allowed** (per `apps/cli/pyproject.toml`): `trutina-core`,
-`trutina-storage-mongo`, `trutina-config`, `typer`, `rich`, `anyio`,
-`prompt-toolkit`.
+`trutina-storage-postgres`, `trutina-config`, `typer`, `rich`, `anyio`,
+`prompt-toolkit`. Adjacent-package READMEs are listed in this package's
+README.md See Also.
 
 **Forbidden:** `trutina-api`, or any other `apps/*` package — the CLI must
 never depend on a sibling application.
@@ -259,7 +261,10 @@ never depend on a sibling application.
 import-linter `layers` contract:
 `trutina.cli | trutina.api → trutina.storage_mongo → trutina.core →
 trutina.shared | trutina.config`. This package sits at the top; nothing
-downstream may import from it.
+downstream may import from it. **Flag:** the root contract's middle layer
+is still named `trutina.storage_mongo`, while this package's own
+`pyproject.toml` depends on `trutina-storage-postgres`. Flagged here, not
+resolved — the root contract is outside this package's own docs.
 
 ## Layering Within This Package
 
@@ -305,6 +310,9 @@ the current source, flagged here rather than described as enforced.
 
 ## Control Flow
 
+Command names, flags, and shell syntax are in README.md API at a Glance /
+Usage. The sequence after Typer has a command is:
+
 ```text
 User types a command (argv or shell line)
   -> Typer parses into command + options
@@ -317,7 +325,7 @@ User types a command (argv or shell line)
   -> Handler resolves the relevant service from CliContext
   -> Service (trutina-core) orchestrates domain construction, validation,
      repository calls
-  -> Repository (trutina-core contract -> trutina-storage-mongo adapter)
+  -> Repository (trutina-core contract -> trutina-storage-postgres adapter)
      persists/reads data
   -> Service returns a ViewModel, or raises AppError / ValidationAppError
       - success -> formatter.py builds a renderable, command calls
@@ -340,7 +348,7 @@ hits this), it calls `build_context()` itself and stores a `CliContext`,
 not a `CliState`. A context built this way is _not_ wrapped in
 `main.py`'s `finally`, so nothing calls `aclose()` on it — this fallback
 must only ever pair with a context that can never open a real connection
-(a fake-backed one), never with a path that might lazily touch MongoDB.
+(a fake-backed one), never with a path that might lazily touch PostgreSQL.
 Click/Typer resolves eager options such as `--help` before invoking this
 callback, so `trutina-cli --help` never reaches it.
 
@@ -366,11 +374,10 @@ callback, so `trutina-cli --help` never reaches it.
 ## Extension Points
 
 - **A new feature command group:** mirrors
-  `cli/features/{account,journal,posting}/` — see README's
-  "Contributing" section for the mechanical steps. Register the Typer
-  app in `composition/app.py`; `main.py` picks up new top-level group
-  names from `registered_groups`, and the shell completer from the Click
-  tree.
+  `cli/features/{account,journal,posting}/` — command names already listed
+  in README.md API at a Glance. Register the Typer app in
+  `composition/app.py`; `main.py` picks up new top-level group names from
+  `registered_groups`, and the shell completer from the Click tree.
 - **A new `CliContext` accessor:** add a `get_<feature>_repo()`/
   `get_<feature>_service()` pair following the existing None-check-then-
   construct shape; wire any peer-service dependency the same way
@@ -404,10 +411,10 @@ callback, so `trutina-cli --help` never reaches it.
   catalog text rather than failing loudly — this is presentation
   degradation, not a test failure, so it must be checked
   manually when `trutina-shared`'s `ErrorCode` enum changes.
-- **`Fake*Repo` instances behave closely enough to their Mongo counterparts
-  for CLI-level assertions.** E.g. `FakeJournalRepo` issues sequential
-  journal numbers starting at 1 regardless of whether the caller ultimately
-  saves the entry, matching `MongoJournalRepo`'s real allocation contract
+- **`Fake*Repo` instances behave closely enough to their PostgreSQL
+  counterparts for CLI-level assertions.** E.g. `FakeJournalRepo` issues
+  sequential journal numbers starting at 1 regardless of whether the
+  caller ultimately saves the entry, matching the real allocation contract
   closely enough for unit-tier command tests — but it is still a fake, and
   integration tests against `real_cli_state` exist specifically because
   fidelity here is "close enough," not "identical."
@@ -435,8 +442,9 @@ callback, so `trutina-cli --help` never reaches it.
   the generic `UNKNOWN_ERROR` catalog entry.
 - **Opening a second `BlockingPortal`** inside a test fixture or command
   for convenience. This is the single-loop invariant's most common
-  violation and produces intermittent, hard-to-reproduce failures under
-  PyMongo's async client, not an immediate error.
+  violation and produces intermittent, hard-to-reproduce failures when
+  the lazily opened PostgreSQL connection is tied to the original loop,
+  not an immediate error.
 - **Re-introducing top-level forwarding modules** and leaving two public
   homes for the same symbols, or documenting shims that are not in the
   tree.
