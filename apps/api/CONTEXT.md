@@ -1,14 +1,15 @@
 # trutina-api — Context
 
+For usage, see README.md. This document explains why, not how.
+
 Audience: maintainers, reviewers, and future contributors deciding whether a change
 belongs in this package and whether it preserves the guarantees the rest of the
-monorepo depends on. This document explains _why_ the API looks the way it does, not
-how to call it — see `README.md` for usage.
+monorepo depends on.
 
 ## Why This Package Exists Separately
 
 `trutina-core`'s services are deliberately transport-agnostic — fully async, tested
-against fakes and real MongoDB, with zero knowledge of FastAPI, Typer, or any
+against fakes and a real database, with zero knowledge of FastAPI, Typer, or any
 presentation concern. Two presentation layers need to sit on top of that domain: a
 terminal (`trutina-cli`) and an HTTP API (this package). Keeping them as independent
 workspace packages, rather than folding the API into the CLI or vice versa, means
@@ -50,25 +51,31 @@ calls no service, and a presenter that passes a value through unchanged would be
 three files that exist purely to satisfy a template. `system`'s router docstring
 names this explicitly so it is not mistaken for a starting point when a new feature
 is scaffolded; a feature with a request body or a service dependency should follow
-the full four-file shape from the start.
+the full four-file shape from the start. Those two responses also skip the
+`BaseResponse` envelope used everywhere else — see README.md Usage for the wire
+shapes; the envelope decision below applies to domain and error bodies.
 
 ## Why `Container` Is Built Eagerly At Startup, Not Lazily Like `CliContext`
 
-**Decision:** `bootstrap.build_container()` and `make_lifespan()` open the MongoDB
-connection, call `init_beanie()`, and construct every service exactly once, during
-the FastAPI lifespan's startup phase — before the first request is served. This is
-the opposite of `CliContext`'s lazy, per-invocation, per-accessor construction.
+**Decision:** `bootstrap.build_container()` and `make_lifespan()` open the
+PostgreSQL connection and construct every service exactly once, during the FastAPI
+lifespan's startup phase — before the first request is served. This is the opposite
+of `CliContext`'s lazy, per-invocation, per-accessor construction.
 
 **Why:** A CLI invocation is short-lived and rewards laziness — `trutina account
---help` should never pay for a MongoDB connection it doesn't need. A long-running API
-process has the opposite cost model: it will serve many requests, so the connection
-and service graph are needed regardless, and paying that cost once at startup means
-the first real request isn't the one that eats the connection latency.
-`bootstrap.py`'s own module docstring states the accepted consequence: if the initial
-MongoDB ping fails, startup fails loudly and the process never starts serving
-traffic, rather than starting "successfully" and returning confusing per-request
-500s. Process orchestration (systemd, Kubernetes restart-with-backoff) owns retry
-policy — this module does not retry.
+--help` should never pay for a database connection it doesn't need. A long-running
+API process has the opposite cost model: it will serve many requests, so the
+connection and service graph are needed regardless, and paying that cost once at
+startup means the first real request isn't the one that eats the connection latency.
+`bootstrap.py`'s own module docstring states the accepted consequence: if the
+initial PostgreSQL ping (performed inside `connect()`) fails, startup fails loudly
+and the process never starts serving traffic, rather than starting "successfully"
+and returning confusing per-request 500s. Process orchestration (systemd,
+Kubernetes restart-with-backoff) owns retry policy — this module does not retry.
+Table existence itself is not this module's concern either: schema is guaranteed by
+Alembic migrations applied before the process starts (see
+`trutina-storage-postgres`'s own `CONTEXT.md`), so `bootstrap.py` performs no
+schema-registration step of its own.
 
 ## Why A Frozen `Container` Dataclass Rather Than App-Level Globals
 
@@ -81,14 +88,14 @@ same service concurrently is safe only because no service holds mutable,
 request-specific state. Freezing the container makes that invariant structural
 rather than a convention someone could accidentally violate by reassigning
 `app.state.container.account_service` mid-process. Exposing only service attributes
-— never `AsyncMongoClient`, `MongoExecutor`, or a `Mongo*Repo` — keeps every route
-and dependency provider ignorant of the storage layer, mirroring `CliContext`'s own
-refusal to leak Mongo-specific types past its accessors.
+— never a `PostgresConnection`, `PostgresExecutor`, or a `Postgres*Repo` — keeps
+every route and dependency provider ignorant of the storage layer, mirroring
+`CliContext`'s own refusal to leak storage-specific types past its accessors.
 
 **Note for future contributors:** the day a service needs request-specific state (a
-`ClientSession` for a transaction, an authenticated user's identity), this
-frozen-singleton invariant has to be deliberately broken, not silently worked around
-with a mutable attribute bolted onto `Container`.
+transactional session, an authenticated user's identity), this frozen-singleton
+invariant has to be deliberately broken, not silently worked around with a mutable
+attribute bolted onto `Container`.
 
 ## Why Per-Service Dependency Providers Instead Of Injecting The Whole Container
 
@@ -106,18 +113,23 @@ providers make narrow overrides possible.
 
 ## Why Response Envelope (`BaseResponse`/`SuccessResponse`/`ErrorResponse`) Wraps Every Body
 
-**Decision:** Every response model — success or error — inherits from `BaseResponse`
-(`success: bool`, `timestamp: datetime`). `SuccessResponse` fixes `success:
-Literal[True]`; `ErrorResponse` fixes `success: Literal[False]`.
+**Decision:** Every domain success model and every error model inherits from
+`BaseResponse` (`success: bool`, `timestamp: datetime`). `SuccessResponse` fixes
+`success: Literal[True]`; `ErrorResponse` fixes `success: Literal[False]`. Example
+bodies and field names are in README.md Usage.
 
 **Why:** A client should never need to infer outcome from the HTTP status code alone
 (which conflates transport-level and domain-level failure) nor from response shape
 alone (which would require knowing, per endpoint, which fields indicate success). A
-fixed `success` boolean, present in every response this API returns, is a single,
-universal branch point. `ValidationErrorResponse` extends `ErrorResponse` with a
-`details` array rather than putting an always-nullable `details` field on the base —
-a plain not-found or conflict has nothing field-level to report, and should not carry
-a field that is always `None`.
+fixed `success` boolean, present in every domain and error response this API
+returns, is a single, universal branch point. `ValidationErrorResponse` extends
+`ErrorResponse` with a `details` array rather than putting an always-nullable
+`details` field on the base — a plain not-found or conflict has nothing field-level
+to report, and should not carry a field that is always `None`.
+
+`system`'s identity and liveness bodies are the documented exception (see the
+`system` section above): they are not domain outcomes, so they do not pretend to
+carry the same branch point.
 
 ## Why The Error Catalog Lives In `api/shared/errors/`, Not `trutina-shared`
 
@@ -183,19 +195,25 @@ confirming the upstream fix landed.
 
 ## Allowed and Forbidden Dependencies
 
-**Allowed** (per `apps/api/pyproject.toml`): `trutina-core`, `trutina-storage-mongo`,
-`trutina-config`, `fastapi[standard]`, `uvicorn[standard]`.
+**Allowed** (per `apps/api/pyproject.toml`): `trutina-core`, `trutina-storage-postgres`,
+`trutina-config`, `fastapi[standard]`, `uvicorn[standard]`. Adjacent-package READMEs
+are listed in this package's README.md See Also.
 
 **Forbidden:** `trutina-cli`, or any other `apps/*` package. Nothing here should
-import `beanie`/`pymongo` directly outside of `composition/bootstrap.py`, which is
-the one module permitted to see `MongoConnection`/`MongoExecutor`/`Mongo*Repo` types
-— routes, dependency providers, and `app.py` see only `Container`'s service
-attributes.
+import `sqlalchemy`/`asyncpg` directly outside of `composition/bootstrap.py`, which is
+the one module permitted to see `PostgresConnection`/`PostgresExecutor`/
+`Postgres*Repo` types — routes, dependency providers, and `app.py` see only
+`Container`'s service attributes.
 
 **Direction:** enforced by the workspace's root `pyproject.toml` import-linter
-`layers` contract: `trutina.cli | trutina.api → trutina.storage_mongo →
-trutina.core → trutina.shared | trutina.config`. This package sits at the top beside
-the CLI; nothing downstream may import from it.
+`layers` contract (`trutina.cli | trutina.api → trutina.storage_mongo →
+trutina.core → trutina.shared | trutina.config`). This package sits at the top beside
+the CLI; nothing downstream may import from it. **Flag:** the root contract's middle
+layer is still named `trutina.storage_mongo`, even though this package's own
+`pyproject.toml` now declares `trutina-storage-postgres` as its storage dependency,
+not `trutina-storage-mongo`. Whether that's a stale layer name in the root contract
+or an intentional generic role-name is outside this package's own docs to resolve —
+flagged for the root-level contract to confirm, not silently corrected here.
 
 ## Layering Within This Package
 
@@ -233,9 +251,8 @@ Process starts
       -> four routers included (system, account, journal, posting)
       -> lifespan = make_lifespan(settings), not yet entered
   -> uvicorn enters the lifespan
-      -> connect(settings.mongo)  -- verified via ping; failure aborts startup
-      -> init_beanie(...)
-      -> app.state.container = build_container()
+      -> connect(settings.postgres)  -- verified via ping; failure aborts startup
+      -> app.state.container = build_container(connection)
       -> (yield -- app now serves requests)
   -> per request:
       -> router resolves Depends(get_*_service) -> Container attribute
@@ -247,26 +264,30 @@ Process starts
       -> lifespan's finally: disconnect(connection)
 ```
 
+Entry points, bind address, and HTTP paths are in README.md Quick Start / API at a
+Glance. Table/schema existence is a precondition of this flow, not a step in it —
+Alembic migrations are applied out-of-band before the process starts (see
+`trutina-storage-postgres`'s own `CONTEXT.md`); `bootstrap.py` never creates or alters
+schema itself.
+
 ## Data Flow
 
-- **Into a router:** a `Request` plus a FastAPI-validated Request Schema instance (or
-  nothing, for `system`).
-- **Into a mapper:** a Request Schema instance. **Out of a mapper:** an Input DTO —
-  pure construction, no I/O, no business validation.
-- **Into a handler:** a resolved service instance plus an Input DTO or plain scalar.
-  **Out of a handler:** a ViewModel (or list of ViewModels), or a propagated
-  `AppError`/`ValidationAppError`.
-- **Into a presenter:** a ViewModel. **Out of a presenter:** a Response Schema
-  instance — pure construction, no I/O.
-- **Into an exception handler:** whatever exception propagated out of a route. **Out
-  of an exception handler:** a `JSONResponse` built from `.model_dump(mode="json")`
-  (never the bare `.model_dump()`, since `BaseResponse.timestamp` is a `datetime`
-  with no default JSON encoder in Starlette's `JSONResponse`).
+See README.md's "API at a Glance" and "Usage" for routes, request bodies, and
+envelope fields. At the layer level: a router receives a `Request` plus a
+FastAPI-validated Request Schema instance (or nothing, for `system`); a mapper turns
+that into an Input DTO (pure, no I/O); a handler calls exactly one service method and
+returns a ViewModel or propagates `AppError`/`ValidationAppError`; a presenter turns a
+ViewModel into a Response Schema (pure, no I/O); an exception handler turns whatever
+propagated out of a route into a `JSONResponse` built from
+`.model_dump(mode="json")` — never the bare `.model_dump()`, since
+`BaseResponse.timestamp` is a `datetime` with no default JSON encoder in Starlette's
+`JSONResponse`.
 
 ## Extension Points
 
 - **A new feature router** — mirrors `account`/`journal`/`posting` exactly; see
-  `README.md`'s "Extending" section.
+  README.md's API at a Glance and the `Trutina API Feature & Testing Prompt` for
+  the full step-by-step.
 - **A new `Container` service** — add the attribute to `Container`, wire it in
   `build_container()` exactly the way `PostingService` is wired to `JournalService`,
   and add a matching provider in `dependencies.py`.
@@ -287,12 +308,12 @@ Process starts
 - **`Container`'s services are safe under concurrent request handling** because they
   are stateless. This assumption breaks the day a service gains request-scoped
   mutable state (see the `Container` section above).
-- **`DOCUMENT_MODELS` in `bootstrap.py` stays in sync with
-  `tests/fixtures/mongo.py::DOCUMENT_MODELS`.** They are deliberately separate lists
-  (production code must not depend on the test tree), so adding a fourth `Document`
-  class requires updating both by hand — forgetting one surfaces as
-  `CollectionWasNotInitialized` only the first time the new repository is actually
-  used, not at review time.
+- **The database schema already matches what `Postgres*Repo` expects when
+  `bootstrap.py` runs.** Alembic migration history is applied before this process
+  starts (mirrored in tests by `tests/fixtures/postgres.py`'s `schema_init`, which
+  runs the real migration history once per test session) — `bootstrap.py` performs
+  no schema creation and will surface a mismatch only as a query-time failure, not a
+  startup-time one.
 - **Every `ErrorCode` the domain can raise has a matching `ERROR_CATALOG` entry.** A
   new code added upstream without a matching entry degrades to a generic `500` via
   `DEFAULT_ERROR_ENTRY` rather than crashing the handler — presentation degradation,
@@ -303,19 +324,24 @@ Process starts
 
 - **`_fill()` in `shared/errors/handlers.py` uses `except KeyError, IndexError:`**,
   which is not valid Python 3 exception-handling syntax (`except (KeyError,
-IndexError):` is required). This was present in the source reviewed for this pass.
-  Whether this is a live bug in the actual file or an artifact of how the source was
-  captured for review could not be confirmed here — check the real file before
-  relying on this function's documented "missing placeholder degrades gracefully"
-  behavior.
+IndexError):` is required). **Confirmed against live source in this pass** — this is
+  a live syntax defect, not an artifact of how the source was previously captured,
+  and would raise `SyntaxError` at import time as written. This resolves the prior
+  version of this document's open flag on the same question; it is no longer
+  "unconfirmed."
+- **The root workspace's import-linter `layers` contract still names its storage
+  layer `trutina.storage_mongo`**, while this package's own `pyproject.toml` depends
+  on `trutina-storage-postgres`. See the "Allowed and Forbidden Dependencies"
+  section above — flagged here, not resolved, since the root contract is outside
+  this package's own docs.
 
 ## Common Mistakes to Avoid
 
 - Adding business logic, exception handling, or a domain-model construction call
   inside a router function. A router's only job is wiring mapper -> handler ->
   presenter behind `Depends(...)`.
-- Reaching for a real MongoDB type (`AsyncMongoClient`, `MongoExecutor`, a
-  `Mongo*Repo`) anywhere outside `composition/bootstrap.py`.
+- Reaching for a real PostgreSQL type (`PostgresConnection`, `PostgresExecutor`, a
+  `Postgres*Repo`) anywhere outside `composition/bootstrap.py`.
 - Constructing `Container` or calling `build_container()` inside a route or a
   dependency provider "to save a round trip."
 - Copying `system`'s flat router shape for a feature that has a request body or a
@@ -323,8 +349,9 @@ IndexError):` is required). This was present in the source reviewed for this pas
 - Bypassing `register_exception_handlers()` with a local `try`/`except AppError`
   inside a route. If a route needs different error handling than the shared catalog
   provides, that's a sign the catalog needs a new entry, not a local workaround.
-- Forgetting to update both `bootstrap.py::DOCUMENT_MODELS` and
-  `tests/fixtures/mongo.py::DOCUMENT_MODELS` when adding a new bounded context's
-  `Document` class.
+- Assuming a schema change is picked up automatically. `bootstrap.py` creates no
+  tables and applies no migrations itself — a new column or table needs a real
+  Alembic migration in `trutina-storage-postgres`, applied before the process starts,
+  or the failure surfaces only the first time the affected query runs.
 - Assuming `trutina-shared`'s `ErrorCode` message belongs in this package's catalog
   by inheritance — every `ErrorCode` needs its own `ERROR_CATALOG` entry here.
