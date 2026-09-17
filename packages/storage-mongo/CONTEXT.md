@@ -1,8 +1,6 @@
 # trutina-storage-mongo — Architectural Context
 
-This document explains why `trutina-storage-mongo` is shaped the way it
-is. For how to use it, see `README.md`. Nothing here should be duplicated
-there.
+For usage, see README.md. This document explains why, not how.
 
 ## Why this architecture
 
@@ -126,7 +124,7 @@ crosses this boundary" rule — not a downgrade to `AppError.unknown()`.
 
 ## Allowed and forbidden dependencies
 
-**Allowed** (per `packages/infrastructure/pyproject.toml`): `trutina-shared`,
+**Allowed** (per `packages/storage-mongo/pyproject.toml`): `trutina-shared`,
 `trutina-core`, `trutina-config`, `beanie`, `pymongo`.
 
 **Forbidden:** `trutina-cli`, `trutina-api`, or any other `apps/*` package;
@@ -174,7 +172,7 @@ name (`violated_index()`) to decide which domain conflict to raise.
   genuinely storage-agnostic rather than MongoDB-shaped in disguise. No
   such package exists yet.
 - **A new bounded-context adapter.** Mirrors the `account`/`journal`/
-  `posting` shape exactly — see the README's "Extending" section.
+  `posting` shape exactly.
 - **Cross-cutting execution concerns.** `MongoExecutor` is the intended
   seam for adding logging, metrics, retries, or (eventually)
   transaction/session support to every repository at once, without
