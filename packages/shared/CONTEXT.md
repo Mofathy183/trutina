@@ -1,13 +1,11 @@
 # trutina-shared — Context
 
-Architectural rationale for `trutina-shared`. This document explains why the
-package is shaped the way it is, not how to call it — see `README.md` for
-usage.
+For usage, see README.md. This document explains why, not how.
 
 ## Why This Package Exists
 
 Trutina is organized as a workspace of independent packages (`core`, `cli`,
-`api`, `infrastructure`, and others), each of which needs two things that
+`api`, `storage-mongo`, `storage-postgres`, and others), each of which needs two things that
 must behave identically everywhere they're used: a handful of
 accounting-adjacent normalization/validation rules that don't belong to any
 single feature (account name cleaning, lookup-key folding, single-sided line
@@ -21,7 +19,7 @@ domain internals they have no business knowing about.
 
 `trutina-shared` is deliberately the _lowest_ dependency in the workspace.
 Everything can depend on it; it depends on nothing Trutina-specific. In
-practice today only `trutina-core` and `trutina-storage-mongo` list it as a
+practice today only `trutina-core` and `trutina-storage-mongo` and `trutina-storage-postgres` list it as a
 direct dependency in their own `pyproject.toml` — every other package or app
 reaches it transitively through one of those two, and `trutina-config`
 reaches it not at all, since configuration parsing has no accounting
@@ -150,7 +148,7 @@ back any current default-date behavior in journal or posting creation.
 
 **Forbidden (this package must never depend on):**
 
-- `trutina.core`, `trutina.cli`, `trutina.api`, `trutina.storage_mongo`,
+- `trutina.core`, `trutina.cli`, `trutina.api`, `trutina-storage-postgres`, `trutina.storage_mongo`,
   `trutina.config`, or any other workspace package. `shared` sits below all
   of them; if a helper here ever needs something from one of those
   packages, the helper is in the wrong package.
