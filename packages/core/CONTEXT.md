@@ -1,9 +1,10 @@
 # trutina-core — Context
 
+For usage, see README.md. This document explains why, not how.
+
 Audience: maintainers, reviewers, and future contributors deciding whether a change
 belongs in this package and whether it preserves the guarantees the rest of the
-monorepo depends on. This document explains why core looks the way it does, not
-how to call it — see `README.md` for usage.
+monorepo depends on.
 
 ## Why This Package Exists Separately
 
@@ -69,12 +70,11 @@ literally: the domain defines the contract; storage conforms to it, not the othe
 way around.
 
 Trade-off accepted: core cannot express storage-specific concerns (transactions,
-indexes, connection pooling) anywhere in its own types. When
-`MongoPostingRepo.save_many()` needs atomicity a plain contract can't express, that
-constraint has to be documented in the contract's docstring as a promise the adapter
-must keep — core has no mechanism to enforce it beyond documentation and adapter
-tests. This is deliberate: the alternative (leaking a `session` parameter or similar
-into the contract) would violate the zero-Mongo-awareness rule for a marginal gain.
+indexes, connection pooling) anywhere in its own types. `PostingRepo.save_many()`
+does not promise all-or-nothing persistence, so any stronger adapter guarantee must
+be documented and tested by that adapter. This is deliberate: the alternative
+(leaking a `session` parameter or similar into the contract) would violate the
+zero-Mongo-awareness rule for a marginal gain.
 
 ### DTOs and ViewModels, not raw domain models, at the service boundary
 
@@ -173,7 +173,7 @@ PostingService.post_journal_entry(journal_number)
     │
     ├─▶ [derive one LedgerPosting per JournalLine]            (pure, in-process)
     │
-    └─▶ PostingRepo.save_many(postings)                      (single atomic batch)
+    └─▶ PostingRepo.save_many(postings)                      (one repository batch)
 ```
 
 Services call other services (`PostingService` holds a `JournalService`;
@@ -198,13 +198,11 @@ rule drift the domain-validation design decision above exists to prevent.
   calls are not guaranteed to observe the same data. This is a real race window under
   concurrent writes; it is accepted because closing it fully would require
   transactional snapshot reads the current repository contract doesn't provide.
-- Repository method contracts (return `None` on a miss, translate storage failures
-  to `AppError`, treat `save_many` as atomic) are promises, not enforced by core.
-  Core cannot verify a `PostingRepo` implementation actually treats `save_many`
-  atomically — that has to be proven by that adapter's own tests in
-  `trutina-storage-mongo`. Treat every repository contract docstring in `repo.py`
-  as a spec an adapter must satisfy, and check that any new adapter's tests actually
-  assert the documented behavior, not just typical-path success.
+- Repository method contracts (return `None` on a miss and translate storage
+  failures to `AppError`) are promises, not enforced by core. Treat every repository
+  contract docstring in `repo.py` as a spec an adapter must satisfy, and check that
+  any new adapter's tests actually assert the documented behavior, not just
+  typical-path success.
 
 ## Known Gaps
 
@@ -217,10 +215,10 @@ rule drift the domain-validation design decision above exists to prevent.
   conflict into `AppError.conflict()`. This is a deliberately accepted TOCTOU
   window, not an oversight — closing it would require pushing transaction/session
   semantics into a contract that is supposed to stay storage-agnostic.
-- `AccountService.delete_account()` performs an existence check only. There is no
-  posting-history safeguard (e.g. refusing to delete an account with existing
-  ledger postings) anywhere in the current source — do not document or assume one
-  exists.
+- `AccountService.delete_account()` enforces a posting-history safeguard only when
+  its optional `has_postings` callback is supplied at composition time. Without that
+  callback it performs an existence check and deletes the account, so compositions
+  that omit the callback do not protect posting history.
 
 ## Common Mistakes to Avoid
 
