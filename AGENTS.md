@@ -1,8 +1,9 @@
 # Trutina
 
 Python double-entry bookkeeping engine. `uv` workspace: `apps/{cli,api}` +
-`packages/{core,infrastructure,config,shared}`. Root docs cover cross-cutting facts
-only — package/app internals are documented in that package's own README.md/CONTEXT.md.
+`packages/{core,storage-mongo,storage-postgres,config,shared}`. Root docs cover
+cross-cutting facts only — package/app internals are documented in that package's
+own README.md/CONTEXT.md.
 
 ## Tech Stack
 
@@ -10,27 +11,32 @@ only — package/app internals are documented in that package's own README.md/CO
 - Pydantic v2, Pydantic Settings
 - Typer, Rich, AnyIO, prompt-toolkit (CLI)
 - FastAPI, Uvicorn (API)
+- SQLAlchemy 2.0 async, `asyncpg`, Alembic — isolated to `trutina-storage-postgres`
 - Beanie, PyMongo (async) — isolated to `trutina-storage-mongo`
 - Pytest (`asyncio_mode = auto`), Ruff, `ty`, `import-linter`
 
 ## Workspace Packages/Apps
 
-| Package                  | Import path              | Depends on (workspace)                               | Depends on (external)                |
-| ------------------------ | ------------------------ | ---------------------------------------------------- | ------------------------------------ |
-| `trutina-shared`         | `trutina.shared`         | none                                                 | pydantic                             |
-| `trutina-config`         | `trutina.config`         | none                                                 | pydantic, pydantic-settings          |
-| `trutina-core`           | `trutina.core`           | trutina-shared                                       | pydantic                             |
-| `trutina-storage-mongo` | `trutina.storage_mongo` | trutina-shared, trutina-core, trutina-config         | beanie, pymongo                      |
-| `trutina-cli`            | `trutina.cli`            | trutina-core, trutina-storage-mongo, trutina-config | typer, rich, anyio, prompt-toolkit   |
-| `trutina-api`            | `trutina.api`            | trutina-core, trutina-storage-mongo, trutina-config | fastapi[standard], uvicorn[standard] |
+| Package                    | Import path                | Depends on (workspace)                                 | Depends on (external)                |
+| -------------------------- | -------------------------- | ------------------------------------------------------ | ------------------------------------ |
+| `trutina-shared`           | `trutina.shared`           | none                                                   | pydantic                             |
+| `trutina-config`           | `trutina.config`           | none                                                   | pydantic, pydantic-settings          |
+| `trutina-core`             | `trutina.core`             | trutina-shared                                         | pydantic                             |
+| `trutina-storage-mongo`    | `trutina.storage_mongo`    | trutina-shared, trutina-core, trutina-config           | beanie, pymongo                      |
+| `trutina-storage-postgres` | `trutina.storage_postgres` | trutina-shared, trutina-core, trutina-config           | sqlalchemy, asyncpg, alembic         |
+| `trutina-cli`              | `trutina.cli`              | trutina-core, trutina-storage-postgres, trutina-config | typer, rich, anyio, prompt-toolkit   |
+| `trutina-api`              | `trutina.api`              | trutina-core, trutina-storage-postgres, trutina-config | fastapi[standard], uvicorn[standard] |
 
-`trutina-cli` never depends on `trutina-api`, or vice versa. `trutina-core` never
-depends on `trutina-config`.
+`trutina-storage-mongo` is a workspace member with its own CI lane but is not
+declared as a dependency of either `trutina-cli` or `trutina-api` today. `trutina-cli`
+never depends on `trutina-api`, or vice versa. `trutina-core` never depends on
+`trutina-config`.
 
 ## Import-Linter Contracts (root `pyproject.toml`, enforced in CI)
 
-- `layers`: `trutina.cli | trutina.api → trutina.storage_mongo → trutina.core → trutina.shared | trutina.config`
+- `layers`: `trutina.cli | trutina.api → trutina.storage_mongo | trutina.storage_postgres → trutina.core → trutina.shared | trutina.config`
 - `forbidden`: `trutina.core` must never import `beanie` or `pymongo`
+- `forbidden`: `trutina.core` must never import `sqlalchemy` or `asyncpg`
 - `layers` (internal to core): `trutina.core.posting → trutina.core.journal → trutina.core.account`
 
 ## Repository Layout (real, current)
@@ -48,9 +54,12 @@ apps/api/src/trutina/api/
   shared/{response.py, errors/{catalog,handlers,schemas}.py}
 
 packages/core/src/trutina/core/{account,journal,posting}/{dtos,repo,service}.py, schemas/
-packages/infrastructure/src/trutina/infrastructure/mongo/
+packages/storage-mongo/src/trutina/storage_mongo/
   {account,journal,posting}/{document,repository}.py, shared/, connection.py, error_translation.py
-packages/config/src/trutina/config/{base,mongo,api}.py
+packages/storage-postgres/src/trutina/storage_postgres/
+  {account,journal,posting}/repository.py, shared/{connect,disconnect,execution.py}, models.py
+packages/storage-postgres/alembic.ini, alembic/
+packages/config/src/trutina/config/{base,mongo,postgres,api}.py
 packages/shared/src/trutina/shared/{rule,util}.py, errors/{codes,errors,translators}.py
 
 tests/{fixtures,factories,fakes}/     # shared test infra only, no test cases
@@ -93,8 +102,10 @@ Package/app own tests live beside their own code (e.g.
 ```bash
 uv sync --all-packages
 uv run pytest -m unit
-uv run pytest -m integration          # requires MongoDB
+uv run alembic -c packages/storage-postgres/alembic.ini upgrade head
+uv run pytest -m integration          # requires PostgreSQL
 uv run pytest -m "unit and cli"       # single layer, either axis
+uv run pytest -m "integration and infra and mongo"    # single backend, infra layer only
 uv run ruff check
 uv run ruff format
 uv run ty check
@@ -103,25 +114,28 @@ uv run lint-imports
 
 `tools/bootstrap.sh` — sync workspace. `tools/fix.sh` — auto-fix format/lint.
 `tools/pre-push.sh` — fast local gate (format check, lint, `ty check`, unit tests).
-`tools/docker-build.sh` / `tools/docker-smoke.sh` — build/smoke-test the API image.
+`tools/docker-build.sh` / `tools/docker-smoke.sh` — build/smoke-test the API image
+against a real PostgreSQL container.
 
 ## Testing Layout
 
 - Root `pytest.ini`: `testpaths = tests apps packages`, `asyncio_mode = auto`,
-  markers `unit`/`integration` (speed, hand-written) and
-  `core`/`infra`/`cli`/`api`/`shared` (layer, auto-derived from file path by root
-  `conftest.py`; collection fails if a test hand-writes a conflicting layer marker).
+  markers `unit`/`integration` (speed, hand-written); `core`/`infra`/`cli`/`api`/
+  `shared`/`config` (layer, auto-derived from file path by root `conftest.py`); and
+  `mongo`/`postgres` (backend, auto-derived, only meaningful for `infra`-layer
+  tests). Collection fails loudly if a test hand-writes a conflicting layer or
+  backend marker.
 - Root `tests/{fixtures,factories,fakes}/` — shared test infrastructure only.
 - Root `conftest.py` registers per-package fixture plugins (account, posting,
-  journal, mongo, settings, services, cli, api).
+  journal, mongo, postgres, settings, services, cli, api).
 
 ## Configuration
 
 - `trutina.config`: `Settings` (prod, `TRUTINA_` prefix, `.env`), `TestSettings`
-  (`TRUTINA_TEST_` prefix, `.env.test`), `MongoSettings`, `ApiSettings`,
-  cached `get_settings()`.
-- Nested env vars use double underscore: `TRUTINA_MONGO__URI`,
-  `TRUTINA_TEST_MONGO__URI`.
+  (`TRUTINA_TEST_` prefix, `.env.test`), `MongoSettings`, `PostgresSettings`,
+  `ApiSettings`, cached `get_settings()`.
+- Nested env vars use double underscore: `TRUTINA_MONGO__URI`, `TRUTINA_POSTGRES__URI`,
+  and their `TRUTINA_TEST_` equivalents.
 - `get_settings()` is `lru_cache`d — tests must clear the cache before/after
   mutating environment variables (root `tests/fixtures/settings.py` does this
   automatically via an autouse fixture).
@@ -130,19 +144,23 @@ uv run lint-imports
 
 - `trutina-shared` says `util.default_posting_date()` is unused; `apps/cli`'s
   journal parser visibly imports and calls it. Unresolved conflict.
-- No `apps/api/README.md` exists; API facts here come from `apps/api/CONTEXT.md` only.
-- `apps/api/CONTEXT.md` flags a possibly-invalid `except KeyError, IndexError:` in
-  `api/shared/errors/handlers.py` — unconfirmed against live source.
+- `apps/api/CONTEXT.md` confirms (against live source) that `_fill()` in
+  `api/shared/errors/handlers.py` uses invalid `except KeyError, IndexError:`
+  syntax — a real defect, not yet fixed.
 - `modules/journal/rule.py` / `modules/posting/rule.py` scaffold status not
   re-confirmed against current `trutina-core` source in this pass.
 - `MongoPostingRepo.save_many()` has no multi-document transaction (accepted,
-  documented risk in `trutina-storage-mongo`'s own CONTEXT.md).
+  documented risk in `trutina-storage-mongo`'s own CONTEXT.md; no longer
+  app-facing since neither app depends on that package).
+- Root `compose.yml`/`compose.dev.yml` provision only MongoDB, despite
+  `apps/api`/`apps/cli` depending on `trutina-storage-postgres`.
 
 ## Development Rules
 
-- Keep business logic out of `trutina.cli`/`trutina.api`/`trutina.storage_mongo`
-  — it belongs in `trutina.core` services and domain schemas only.
-- Never let `trutina.core` import `beanie`, `pymongo`, `typer`, `rich`, or `fastapi`.
+- Keep business logic out of `trutina.cli`/`trutina.api`/either storage package —
+  it belongs in `trutina.core` services and domain schemas only.
+- Never let `trutina.core` import `beanie`, `pymongo`, `sqlalchemy`, `asyncpg`,
+  `typer`, `rich`, or `fastapi`.
 - Never let `trutina.cli` and `trutina.api` import each other.
 - Update a package's own README.md/CONTEXT.md when its structure or maturity
   changes; do not let root docs re-describe package internals.
