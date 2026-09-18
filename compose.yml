@@ -11,6 +11,41 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: trutina
+      POSTGRES_PASSWORD: trutina
+      POSTGRES_DB: trutina
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "trutina"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # One-shot migration runner. Applies the real Alembic history against
+  # `postgres` before `api` ever accepts a request — apps/api/CONTEXT.md
+  # documents bootstrap.py as performing no schema creation itself and
+  # assuming migrations already ran. Exits after upgrade; api's
+  # `service_completed_successfully` dependency below waits for that.
+  # Requires Compose 2.20+ (already implied by compose.dev.yml's 2.22+
+  # requirement for `develop.watch`).
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    command: ["alembic", "-c", "packages/storage-postgres/alembic.ini", "upgrade", "head"]
+    environment:
+      TRUTINA_POSTGRES__URI: postgresql+asyncpg://trutina:trutina@postgres:5432/trutina
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: .
@@ -19,11 +54,13 @@ services:
     ports:
       - "8000:8000"
     environment:
-      TRUTINA_MONGO__URI: mongodb://mongo:27017
-      TRUTINA_MONGO__DB: trutina
+      TRUTINA_POSTGRES__URI: postgresql+asyncpg://trutina:trutina@postgres:5432/trutina
     depends_on:
-      mongo:
+      postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   mongo_data:
+  postgres_data:

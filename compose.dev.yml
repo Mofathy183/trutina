@@ -6,7 +6,7 @@
 #   docker compose -f compose.yml -f compose.dev.yml watch
 #   (or: tools/docker-dev.sh)
 #
-# This is a zero-setup onboarding path (no local Python/uv/Mongo install
+# This is a zero-setup onboarding path (no local Python/uv/Postgres install
 # required) and a way to test against the same image shape that ships to
 # prod. It is not a required part of the day-to-day dev loop — running
 # `uv run --package trutina-api uvicorn trutina.api.main:app --reload`
@@ -42,8 +42,8 @@ services:
           path: ./packages/config/src
           target: /app/packages/config/src
         - action: sync
-          path: ./packages/storage-mongo/src
-          target: /app/packages/storage-mongo/src
+          path: ./packages/storage-postgres/src
+          target: /app/packages/storage-postgres/src
         - action: sync
           path: ./packages/shared/src
           target: /app/packages/shared/src
@@ -59,6 +59,6 @@ services:
         - action: rebuild
           path: ./packages/config/pyproject.toml
         - action: rebuild
-          path: ./packages/storage-mongo/pyproject.toml
+          path: ./packages/storage-postgres/pyproject.toml
         - action: rebuild
           path: ./packages/shared/pyproject.toml
