@@ -2,6 +2,8 @@
 <title id="title">Trutina</title>
 <desc id="desc">A minimalist line-art balance scale with a triangular stand, symmetric beam, and two hanging pans, with the wordmark Trutina and the tagline "double-entry, in balance" below.</desc>
 
+<rect width="100%" height="100%" fill="#ffffff" />
+
 <g fill="none" stroke="#111111" stroke-linecap="round" stroke-linejoin="round">
   <line x1="190" y1="60" x2="190" y2="82" stroke-width="2"/>
   <line x1="110" y1="82" x2="270" y2="82" stroke-width="2"/>
