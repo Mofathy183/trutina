@@ -223,6 +223,27 @@ functionality beyond what's needed" development rule warns against. Two
 scalars are simple enough that a wrapper type adds indirection without
 adding safety.
 
+## Why Trial Balance Is A Flat Command With No Prompt
+
+**Decision:** `trial-balance` is registered with `app.command("trial-balance")` on the
+root Typer app, not as a `typer.Typer()` group added via `add_typer`. Its feature folder
+has `command.py`, `parser.py`, `handler.py`, and `formatter.py`, and no `prompt.py`.
+
+**Why:** the feature has one action, producing a report, so a one-command group would
+add a level of nesting without adding a choice for the user. The only input, `--as-of`,
+is optional and defaults to "all time", so there is nothing to interactively collect.
+Converting to a group later means moving the command function into a small
+`typer.Typer()` and mounting it with `add_typer`; the command body would not change.
+
+**Input handling:** `parse_as_of_date()` turns a `YYYY-MM-DD` string into a `datetime`
+at midnight and raises `typer.BadParameter` otherwise. No date-range rule is applied in
+the CLI or downstream; any valid date is accepted. Because the cutoff is midnight,
+postings stamped later on that same calendar day are excluded.
+
+**Output:** `formatter.py` renders a panel (empty-state panel when nothing is in scope),
+a per-account table, and a summary line that reads `total_debits`, `total_credits`, and
+`is_balanced` off the view model instead of recomputing them.
+
 ## Architectural Invariants That Must Never Be Broken
 
 - **Commands never call a repository or service directly.** Only
@@ -382,7 +403,14 @@ callback, so `trutina-cli --help` never reaches it.
   `get_<feature>_service()` pair following the existing None-check-then-
   construct shape; wire any peer-service dependency the same way
   `JournalService` is wired to `AccountService` (and `PostingService` to
-  `JournalService`).
+  `JournalService`). The trial balance feature's pair is
+  `get_trial_balance_repo()`/`get_trial_balance_service()`;
+  `TrialBalanceService` takes only its repository, so no peer service is
+  wired for it.
+- **A single-action command:** register it on the root app with
+  `app.command("<name>")(<function>)` in `composition/app.py`, as
+  `trial-balance` is. A feature with several verbs should be a Typer group
+  added via `add_typer` instead.
 - **New CLI-facing error wording:** add entries to
   `cli/shared/errors/errors.py`/`hint.py` keyed by `ErrorCode` — never add
   presentation text to `trutina-shared`.
@@ -451,3 +479,21 @@ callback, so `trutina-cli --help` never reaches it.
 - **Adding `quit` as a terminator in comments or tests without adding it
   to `SHELL_BUILTINS`.** The loop only terminates on keywords returned by
   `terminating_keywords()`.
+
+## Known Gaps
+
+- **One-shot dispatch of `trial-balance` has not been confirmed.** `main.py`
+  recognizes top-level command _groups_ to decide between one-shot dispatch and
+  the interactive shell. `trial-balance` is a flat command, not a group. The
+  command's own tests invoke `app` directly and do not go through `main.py`, so
+  whether `trutina-cli trial-balance` dispatches one-shot has not been verified
+  against `main.py`.
+- **`--as-of` resolves to midnight.** `parse_as_of_date()` turns `YYYY-MM-DD`
+  into a `datetime` at 00:00:00, and the report includes postings with
+  `posting_date <= as_of_date`. A posting stamped later on the same calendar
+  day is therefore excluded.
+- **No date-range validation exists on `--as-of`.** Any valid `YYYY-MM-DD` is
+  accepted. A future date includes every posting; a date before the earliest
+  posting produces the empty-state `No postings found.` panel. The module
+  docstring of `features/trial_balance/parser.py` says date-range rules are
+  enforced downstream; that statement is inaccurate and should be corrected.
