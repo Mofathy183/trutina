@@ -18,18 +18,18 @@ apps/
 │   └── src/trutina/cli/
 │       ├── main.py
 │       ├── composition/      # app.py, bootstrap.py, context.py, state.py
-│       ├── features/{account,journal,posting}/
+│       ├── features/{account,journal,posting,trial_balance}/
 │       ├── shared/{boundary,errors,formatters,interaction,ui}/
 │       └── shell/            # loop.py, dispatch.py, completion.py, keybindings.py, builtins.py
 └── api/                 trutina-api
     └── src/trutina/api/
         ├── composition/      # container.py, bootstrap.py, app.py, dependencies.py
-        ├── features/{system,account,journal,posting}/
+        ├── features/{system,account,journal,posting,trial_balance}/
         └── shared/           # response.py, errors/{catalog,handlers,schemas}.py
 
 packages/
 ├── core/                trutina-core
-│   └── src/trutina/core/{account,journal,posting}/
+│   └── src/trutina/core/{account,journal,posting,trial_balance}/
 │       ├── dtos.py, repo.py, service.py
 │       └── schemas/
 ├── storage-mongo/       trutina-storage-mongo
@@ -39,7 +39,7 @@ packages/
 │       └── connection.py, error_translation.py
 ├── storage-postgres/    trutina-storage-postgres
 │   └── src/trutina/storage_postgres/
-│       ├── {account,journal,posting}/   # repository.py
+│       ├── {account,journal,posting,trial_balance}/   # repository.py
 │       ├── shared/                       # PostgresExecutor, connect()/disconnect()
 │       ├── models.py
 │       └── alembic.ini, alembic/
@@ -84,6 +84,10 @@ trutina.shared | trutina.config
   zero awareness that either backend exists.
 - **`type = "layers"`**, scoped inside core: `trutina.core.posting → trutina.core.journal
 → trutina.core.account`, one-directional.
+- `trutina.core.trial_balance` imports only from `trutina.shared`. It does not import
+  `posting`, `journal`, or `account`, and no import-linter contract names it, so
+  nothing mechanically prevents a future import from either direction. This is
+  recorded here rather than described as enforced.
 
 Confirmed per-package dependency facts (from each package's own `pyproject.toml`,
 cross-checked against its README/CONTEXT):
@@ -125,9 +129,11 @@ produces. See `packages/config/README.md` / `CONTEXT.md`.
 ### `trutina.core` — the accounting domain
 
 Validated domain schemas (`Account`, `JournalEntry`, `JournalLine`,
-`LedgerPosting`, `ChartOfAccounts`), DTOs/ViewModels, three complete end-to-end
-services (`AccountService`, `JournalService`, `PostingService`), and the abstract
-`AccountRepo`/`JournalRepo`/`PostingRepo` contracts. Storage- and
+`LedgerPosting`, `ChartOfAccounts`, `AccountBalanceEntry`), DTOs/ViewModels, four
+services (`AccountService`, `JournalService`, `PostingService`,
+`TrialBalanceService`), and the abstract `AccountRepo`/`JournalRepo`/`PostingRepo`
+contracts plus the read-only `TrialBalanceRepo`. `trial_balance` is a read model: it
+aggregates already-posted ledger data and writes nothing. Storage- and
 transport-agnostic by construction (see the forbidden-imports contracts above). See
 `packages/core/README.md` / `CONTEXT.md` for the full API surface, service
 maturity table, and internal `posting→journal→account` ordering rationale.
@@ -135,28 +141,32 @@ maturity table, and internal `posting→journal→account` ordering rationale.
 ### `trutina.storage_mongo`
 
 One of two packages permitted to implement the core repository contracts against a real
-backend; the only one permitted to import `beanie`/`pymongo`. Implements the three core
-repository contracts against MongoDB, plus `connect()`/`disconnect()`/
-`MongoConnection` and `MongoExecutor` (routes every Beanie call through
-`translate_mongo_errors()`). Contains no business rules. Not currently depended on by
-`apps/cli` or `apps/api`. See `packages/storage-mongo/README.md` / `CONTEXT.md`.
+backend; the only one permitted to import `beanie`/`pymongo`. Implements the account,
+journal, and posting repository contracts against MongoDB, plus `connect()`/
+`disconnect()`/`MongoConnection` and `MongoExecutor` (routes every Beanie call through
+`translate_mongo_errors()`). It has no `TrialBalanceRepo` implementation, by decision:
+new features target PostgreSQL only. Contains no business rules. Not currently depended
+on by `apps/cli` or `apps/api`. See `packages/storage-mongo/README.md` / `CONTEXT.md`.
 
 ### `trutina.storage_postgres`
 
 The storage backend `apps/cli` and `apps/api` actually construct today. Implements the
-three core repository contracts with SQLAlchemy async + `asyncpg`, plus a
+four core repository contracts with SQLAlchemy async + `asyncpg`, plus a
 `PostgresConnection`/`connect()`/`disconnect()` lifecycle, `PostgresExecutor` (storage
-error translation), and its own Alembic migration history. Contains no business rules.
-See `packages/storage-postgres/README.md` / `CONTEXT.md`.
+error translation), and its own Alembic migration history. `PostgresTrialBalanceRepo`
+runs one `GROUP BY` aggregation over the existing `postings` table and adds no table or
+migration. Contains no business rules. See `packages/storage-postgres/README.md` /
+`CONTEXT.md`.
 
 ### `trutina.cli`
 
 A synchronous Typer/Click presentation layer bridging to the async domain via
 exactly one `anyio.BlockingPortal` for the life of the process. Feature commands
 (`account`, `journal`, `posting`) each follow `command.py → parser.py/prompt.py →
-handler.py → formatter.py`; a single `error_boundary()` seam renders
-`AppError`/`ValidationAppError`/`pydantic.ValidationError` as Rich panels. Also
-hosts a persistent interactive shell (`cli/shell/`) reusing the same Typer app for
+handler.py → formatter.py`; `trial-balance` is a flat top-level command with the same
+layers minus `prompt.py`, since its one option is optional. A single `error_boundary()`
+seam renders `AppError`/`ValidationAppError`/`pydantic.ValidationError` as Rich panels.
+Also hosts a persistent interactive shell (`cli/shell/`) reusing the same Typer app for
 dispatch and help. `composition/context.py` is the only CLI module that imports
 `trutina.storage_postgres` types. See `apps/cli/README.md` / `CONTEXT.md` for the full
 layer diagram, async execution model, and extension points.
@@ -165,12 +175,13 @@ layer diagram, async execution model, and extension points.
 
 An async FastAPI presentation layer. Each feature follows Router → Request Schema
 → Mapper → Input DTO → Handler → Service → ViewModel → Presenter → Response
-Schema; `system` is a documented flat exception with no body/domain model.
-Composition is eager: `Container` (a frozen dataclass of the three services) is
-built once at lifespan startup against `trutina.storage_postgres`, not lazily per
-request like the CLI's `CliContext`. A single `register_exception_handlers()` seam is
-the API's equivalent of the CLI's `error_boundary()`. See `apps/api/README.md` /
-`CONTEXT.md`.
+Schema; `system` is a documented flat exception with no body/domain model, and
+`trial_balance` (`GET /trial-balance`) has no Request Schema because it takes only an
+optional `as_of` query parameter. Composition is eager: `Container` (a frozen dataclass
+of the four services) is built once at lifespan startup against
+`trutina.storage_postgres`, not lazily per request like the CLI's `CliContext`. A single
+`register_exception_handlers()` seam is the API's equivalent of the CLI's
+`error_boundary()`. See `apps/api/README.md` / `CONTEXT.md`.
 
 ## Boundary Rules That Apply Across the Whole Workspace
 
@@ -217,3 +228,5 @@ the API's equivalent of the CLI's `error_boundary()`. See `apps/api/README.md` /
 - Root `compose.yml`/`compose.dev.yml` provision only MongoDB, even though `apps/api`
   and `apps/cli` both depend on `trutina-storage-postgres` today. See
   `PROJECT_CONTEXT.md`.
+- The trial balance covers only accounts with postings and only PostgreSQL. Full-chart
+  output and a MongoDB implementation are not built. See `ROADMAP.md`.

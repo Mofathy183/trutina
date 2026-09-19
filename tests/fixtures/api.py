@@ -34,6 +34,16 @@ backed by `clean_db` (which in turn depends on `beanie_init` and
 `mongo_connection`), mirroring `real_cli_state` in
 `tests/fixtures/cli.py`.
 
+`fake_container.trial_balance_service` is wired to an empty
+FakeTrialBalanceRepo by default — unlike `posting_service`, this fake
+has no aggregation link back to whatever gets posted through
+`posting_service` in the same test (see
+`tests/fakes/trial_balance_repo.py`'s own docstring). Tests needing
+populated trial-balance output override the service directly via
+`override_service(api_app, get_trial_balance_service, ...)` with a
+`TrialBalanceService` built from a pre-seeded fake, rather than relying
+on `fake_container`'s default empty one.
+
 Known gap: `asgi-lifespan` (the usual `LifespanManager` package) is not
 listed in `pyproject.toml`'s dev dependency group as of this PR. Rather
 than adding an unconfirmed dependency, `real_api_app` drives the
@@ -56,11 +66,13 @@ from trutina.config import TestSettings
 from trutina.core.account.service import AccountService
 from trutina.core.journal.service import JournalService
 from trutina.core.posting.service import PostingService
+from trutina.core.trial_balance.service import TrialBalanceService
 
 from tests.factories import (
     make_fake_account_repo,
     make_fake_journal_repo,
     make_fake_posting_repo,
+    make_fake_trial_balance_repo,
 )
 
 
@@ -72,8 +84,10 @@ def fake_container() -> Container:
     for the API's `Container` shape, and wires services identically to
     `build_container()` in `api/composition/bootstrap.py`:
     JournalService depends on AccountService, PostingService depends on
-    JournalService. No repository here can open a MongoDB connection,
-    so nothing built on top of this fixture can perform I/O.
+    JournalService. TrialBalanceService has no peer-service dependency,
+    so it is wired independently, exactly as `build_container()` does.
+    No repository here can open a MongoDB connection, so nothing built
+    on top of this fixture can perform I/O.
     """
     account_repo = make_fake_account_repo()
     account_service = AccountService(account_repo)
@@ -90,10 +104,14 @@ def fake_container() -> Container:
         journal_service=journal_service,
     )
 
+    trial_balance_repo = make_fake_trial_balance_repo()
+    trial_balance_service = TrialBalanceService(repo=trial_balance_repo)
+
     return Container(
         account_service=account_service,
         journal_service=journal_service,
         posting_service=posting_service,
+        trial_balance_service=trial_balance_service,
     )
 
 

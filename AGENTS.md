@@ -45,24 +45,28 @@ never depends on `trutina-api`, or vice versa. `trutina-core` never depends on
 apps/cli/src/trutina/cli/
   main.py, composition/{app,bootstrap,context,state}.py,
   features/{account,journal,posting}/{command,parser,prompt,handler,formatter}.py,
+  features/trial_balance/{command,parser,handler,formatter}.py   # flat command, no prompt.py
   shared/{boundary/error_boundary.py, errors/, formatters/, interaction/, ui/{theme/,shell_banner.py,logo.py}},
   shell/{loop,dispatch,completion,keybindings,builtins}.py
 
 apps/api/src/trutina/api/
   composition/{container,bootstrap,app,dependencies}.py,
-  features/{system,account,journal,posting}/{router,schemas,mapper,handler,presenter}.py,
+  features/{system,account,journal,posting,trial_balance}/{router,schemas,mapper,handler,presenter}.py,
   shared/{response.py, errors/{catalog,handlers,schemas}.py}
 
 packages/core/src/trutina/core/{account,journal,posting}/{dtos,repo,service}.py, schemas/
+packages/core/src/trutina/core/trial_balance/{dtos,repo,service}.py, schemas/account_balance.py
 packages/storage-mongo/src/trutina/storage_mongo/
   {account,journal,posting}/{document,repository}.py, shared/, connection.py, error_translation.py
 packages/storage-postgres/src/trutina/storage_postgres/
   {account,journal,posting}/repository.py, shared/{connect,disconnect,execution.py}, models.py
+packages/storage-postgres/src/trutina/storage_postgres/trial_balance/repository.py
 packages/storage-postgres/alembic.ini, alembic/
 packages/config/src/trutina/config/{base,mongo,postgres,api}.py
 packages/shared/src/trutina/shared/{rule,util}.py, errors/{codes,errors,translators}.py
 
 tests/{fixtures,factories,fakes}/     # shared test infra only, no test cases
+tests/fakes/trial_balance_repo.py, tests/factories/trial_balance.py
 conftest.py, pytest.ini, ty.toml, ruff.toml, pyproject.toml, compose.yml
 ```
 
@@ -85,6 +89,16 @@ Package/app own tests live beside their own code (e.g.
 - Account aliases and `ChartOfAccounts.resolve()` are **not implemented**.
 - `AppError` (and its `ValidationAppError` subclass) is the only exception type
   permitted to cross a service boundary in either presentation app.
+- A trial balance is derived from persisted `LedgerPosting` records only. An unposted
+  `JournalEntry` never affects it.
+- `AccountBalanceEntry` carries independent, non-negative `debit_total` and
+  `credit_total` per account — never netted, never single-sided.
+- `TrialBalanceViewModel.total_debits`, `total_credits`, and `is_balanced` are
+  computed, never stored. An empty report is balanced.
+- Only accounts with at least one posting in scope appear. Postings are grouped
+  case-insensitively via `account_lookup_key()`.
+- `as_of_date=None` means all time; otherwise only postings with
+  `posting_date <= as_of_date` are included. The value is not validated.
 
 ## Error Model
 
@@ -154,6 +168,13 @@ against a real PostgreSQL container.
   app-facing since neither app depends on that package).
 - Root `compose.yml`/`compose.dev.yml` provision only MongoDB, despite
   `apps/api`/`apps/cli` depending on `trutina-storage-postgres`.
+- `TrialBalanceRepo` is implemented for PostgreSQL only. `trutina-storage-mongo` has
+  no implementation, by decision.
+- The trial balance lists only accounts with postings; full-chart, zero-padded output
+  is not implemented.
+- `trutina-cli`'s `--as-of` resolves to midnight, so postings stamped later that day
+  are excluded. `trutina.core.trial_balance` is not named in any import-linter
+  contract; it imports only `trutina.shared`.
 
 ## Development Rules
 
@@ -165,3 +186,7 @@ against a real PostgreSQL container.
 - Update a package's own README.md/CONTEXT.md when its structure or maturity
   changes; do not let root docs re-describe package internals.
 - Do not document scaffolding, planned features, or unconfirmed facts as implemented.
+- Docstrings and documentation describe Trutina's own design, behavior,
+  responsibilities, invariants, and decisions only. Never state or imply that an
+  implementation mirrors, copies, or matches another one, and never cite another
+  adapter, package, or component as the reason for how something is written.

@@ -23,18 +23,19 @@ curl http://127.0.0.1:8000/health
 
 ## API at a Glance
 
-| Symbol | Purpose |
-|---|---|
-| `GET /`, `GET /health` | Process identity and liveness. These two bodies are not the success/error envelope. |
-| `/accounts` | `POST` (201), `GET` list, `GET`/`PATCH`/`DELETE /{code}`. |
-| `/journal-entries` | `POST` (201), `GET` list, `GET /{journal_number}`. |
-| `/postings` | `POST /{journal_number}` (201); `GET /by-account/{account}`; `GET /by-journal/{journal_number}`. |
-| `create_app(settings=None) -> FastAPI` | Application factory; uses `get_settings()` when `settings` is omitted. |
-| `app` | Module-level `FastAPI` instance from `create_app()` with no arguments. |
-| `main() -> None` | Console-script entry (`trutina-api`); runs uvicorn against `trutina.api.composition.app:app`. |
-| `Container` | Frozen dataclass of `account_service`, `journal_service`, `posting_service` on `app.state`. |
+| Symbol                                 | Purpose                                                                                                              |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `GET /`, `GET /health`                 | Process identity and liveness. These two bodies are not the success/error envelope.                                  |
+| `/accounts`                            | `POST` (201), `GET` list, `GET`/`PATCH`/`DELETE /{code}`.                                                            |
+| `/journal-entries`                     | `POST` (201), `GET` list, `GET /{journal_number}`.                                                                   |
+| `/postings`                            | `POST /{journal_number}` (201); `GET /by-account/{account}`; `GET /by-journal/{journal_number}`.                     |
+| `/trial-balance`                       | `GET` only. Optional `as_of` datetime query parameter; omitted means all time.                                       |
+| `create_app(settings=None) -> FastAPI` | Application factory; uses `get_settings()` when `settings` is omitted.                                               |
+| `app`                                  | Module-level `FastAPI` instance from `create_app()` with no arguments.                                               |
+| `main() -> None`                       | Console-script entry (`trutina-api`); runs uvicorn against `trutina.api.composition.app:app`.                        |
+| `Container`                            | Frozen dataclass of `account_service`, `journal_service`, `posting_service`, `trial_balance_service` on `app.state`. |
 
-`make_lifespan`, `build_container`, `register_exception_handlers`, `ERROR_CATALOG`, and the `get_*_service` providers live under `trutina.api.composition` and `trutina.api.shared.errors`. Route modules are `trutina.api.features.{system,account,journal,posting}`.
+`make_lifespan`, `build_container`, `register_exception_handlers`, `ERROR_CATALOG`, and the `get_*_service` providers live under `trutina.api.composition` and `trutina.api.shared.errors`. Route modules are `trutina.api.features.{system,account,journal,posting,trial_balance}`.
 
 ## Usage
 
@@ -70,12 +71,22 @@ curl -X POST http://127.0.0.1:8000/journal-entries \
 curl -X POST http://127.0.0.1:8000/postings/1
 ```
 
-Account, journal, and posting success bodies, and every error body, carry `success` and `timestamp`. Error bodies also carry `error_code`, `message`, an optional `hint`, and — on validation failures — `details`. `GET /` and `GET /health` do not use that envelope.
+Read the trial balance of everything posted so far, or only postings recorded on or before a cutoff:
+
+```bash
+curl http://127.0.0.1:8000/trial-balance
+curl "http://127.0.0.1:8000/trial-balance?as_of=2025-06-30T00:00:00"
+```
+
+The response carries `entries` (one `{account, debit_total, credit_total}` item per account with postings in scope), `as_of_date` (`null` for all time), `total_debits`, `total_credits`, and `is_balanced`, plus the standard `success` and `timestamp`. `entries` is an empty list, not an error, when nothing is in scope. Only posted journal entries count. An unparseable `as_of` returns a 422 validation error.
+
+Account, journal, posting, and trial balance success bodies, and every error body, carry `success` and `timestamp`. Error bodies also carry `error_code`, `message`, an optional `hint`, and — on validation failures — `details`. `GET /` and `GET /health` do not use that envelope.
 
 ## Testing
 
 ```bash
 uv run pytest -m "unit and api"
+uv run pytest -m "integration and api"   # requires PostgreSQL
 ```
 
 ## See Also

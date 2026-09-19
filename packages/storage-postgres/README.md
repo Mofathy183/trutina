@@ -1,6 +1,6 @@
 # trutina-storage-postgres
 
-> Async PostgreSQL persistence adapters for Trutina's account, journal, and ledger-posting repository contracts.
+> Async PostgreSQL persistence adapters for Trutina's account, journal, ledger-posting, and trial balance repository contracts.
 
 ![CI](https://github.com/Mofathy183/trutina/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.14%2B-blue)
@@ -22,15 +22,16 @@ uv run pytest -m "unit and infra and postgres"
 
 ## API at a Glance
 
-| Symbol                | Purpose                                                   |
-| --------------------- | --------------------------------------------------------- |
-| `connect()`           | Creates a verified PostgreSQL engine and session factory. |
-| `disconnect()`        | Disposes a connection bundle's engine and pool.           |
-| `PostgresConnection`  | Immutable bundle of an async engine and session factory.  |
-| `PostgresExecutor`    | Runs database work with infrastructure-error translation. |
-| `PostgresAccountRepo` | Implements the core account repository contract.          |
-| `PostgresJournalRepo` | Implements the core journal repository contract.          |
-| `PostgresPostingRepo` | Implements the core posting repository contract.          |
+| Symbol                     | Purpose                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| `connect()`                | Creates a verified PostgreSQL engine and session factory.                       |
+| `disconnect()`             | Disposes a connection bundle's engine and pool.                                 |
+| `PostgresConnection`       | Immutable bundle of an async engine and session factory.                        |
+| `PostgresExecutor`         | Runs database work with infrastructure-error translation.                       |
+| `PostgresAccountRepo`      | Implements the core account repository contract.                                |
+| `PostgresJournalRepo`      | Implements the core journal repository contract.                                |
+| `PostgresPostingRepo`      | Implements the core posting repository contract.                                |
+| `PostgresTrialBalanceRepo` | Implements the core trial balance contract by aggregating the `postings` table. |
 
 ## Usage
 
@@ -87,10 +88,37 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+Read per-account debit and credit totals from posted entries. The trial balance repository is read-only and needs no migration, because it aggregates the existing `postings` table:
+
+```python
+import asyncio
+
+from trutina.config import Settings
+from trutina.storage_postgres.shared import connect, disconnect
+from trutina.storage_postgres.shared.execution import PostgresExecutor
+from trutina.storage_postgres.trial_balance import PostgresTrialBalanceRepo
+
+
+async def main() -> None:
+    connection = await connect(Settings().postgres)
+    try:
+        repository = PostgresTrialBalanceRepo(
+            connection.session_factory, PostgresExecutor()
+        )
+        for entry in await repository.get_account_balances():
+            print(entry.account, entry.debit_total, entry.credit_total)
+    finally:
+        await disconnect(connection)
+
+
+asyncio.run(main())
+```
+
 ## Testing
 
 ```bash
 uv run pytest -m "unit and infra and postgres"
+uv run pytest -m "integration and infra and postgres"
 ```
 
 ## See Also

@@ -16,6 +16,7 @@ from trutina.config import ApiSettings, get_settings
 from trutina.core.account.service import AccountService
 from trutina.core.journal.service import JournalService
 from trutina.core.posting.service import PostingService
+from trutina.core.trial_balance.service import TrialBalanceService
 
 
 def get_settings_dep() -> ApiSettings:
@@ -39,3 +40,7 @@ def get_journal_service(request: Request) -> JournalService:
 
 def get_posting_service(request: Request) -> PostingService:
     return request.app.state.container.posting_service
+
+
+def get_trial_balance_service(request: Request) -> TrialBalanceService:
+    return request.app.state.container.trial_balance_service

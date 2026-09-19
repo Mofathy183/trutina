@@ -58,11 +58,18 @@ transport-specific shape of their own.
   gap), but it does not enumerate test-tier coverage per feature the way
   `apps/cli`'s documentation does — whether all three features have all five test
   tiers written remains unconfirmed in this pass.
+- **Trial balance** — `TrialBalanceService`, `TrialBalanceRepo`, `AccountBalanceEntry`,
+  and `TrialBalanceViewModel` in `trutina-core`; `PostgresTrialBalanceRepo` in
+  `trutina-storage-postgres` (a `GROUP BY` over `postings`, no migration); the
+  `trial-balance` CLI command; and `GET /trial-balance`. All four layers have unit and
+  integration tests. All-time or single `as_of_date` cutoff only; accounts without
+  postings do not appear; PostgreSQL only.
 
 ## What Is Partial or Explicitly Out of Scope
 
-- Trial balance, reporting, and historical views — not implemented anywhere in the
-  workspace; no package's docs claim otherwise.
+- Reporting beyond the trial balance — period-range or comparative views, financial
+  statements, full-chart zero-padded trial balance output, and a MongoDB trial balance
+  implementation — are not implemented anywhere in the workspace.
 - Import/export or external integration surfaces — not implemented.
 - `modules/journal/rule.py` / `modules/posting/rule.py` scaffold status — carried
   forward from prior documentation but **not re-confirmed** against
@@ -153,8 +160,8 @@ package/app's real test cases live beside its own code.
   what `apps/api`/`apps/cli` actually depend on.
 - Confirm `apps/api/README.md`'s test-tier coverage feature-by-feature, the way
   `apps/cli/README.md` already does for the CLI.
-- Build trial balance and reporting support on top of the now-stable
-  account/journal/posting domain.
+- Extend reporting beyond the trial balance (full-chart output, period ranges,
+  financial statements).
 - Add import/export and external integration surfaces once reporting exists.
 - Re-confirm `modules/journal/rule.py` / `modules/posting/rule.py` scaffold status
   directly against current `trutina-core` source.

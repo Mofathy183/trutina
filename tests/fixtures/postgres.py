@@ -22,6 +22,7 @@ from trutina.storage_postgres.journal import PostgresJournalRepo
 from trutina.storage_postgres.posting import PostgresPostingRepo
 from trutina.storage_postgres.shared import connect, disconnect
 from trutina.storage_postgres.shared.execution import PostgresExecutor
+from trutina.storage_postgres.trial_balance import PostgresTrialBalanceRepo
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -117,3 +118,12 @@ async def postgres_posting_repo(clean_pg_db, postgres_connection):
     """A PostgresPostingRepo backed by the clean test database."""
 
     return PostgresPostingRepo(postgres_connection.session_factory, PostgresExecutor())
+
+
+@pytest_asyncio.fixture
+async def postgres_trial_balance_repo(clean_pg_db, postgres_connection):
+    """A PostgresTrialBalanceRepo backed by the clean test database."""
+
+    return PostgresTrialBalanceRepo(
+        postgres_connection.session_factory, PostgresExecutor()
+    )

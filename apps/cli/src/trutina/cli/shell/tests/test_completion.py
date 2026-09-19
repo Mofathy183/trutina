@@ -164,7 +164,12 @@ class TestLeadingHelpTargetCompletion:
     def test_offers_real_commands_as_targets(self):
         completer = build_completer()
 
-        assert _complete(completer, "help ") == {"account", "journal", "posting"}
+        assert _complete(completer, "help ") == {
+            "account",
+            "journal",
+            "posting",
+            "trial-balance",
+        }
 
     def test_excludes_builtins_from_targets(self):
         completer = build_completer()

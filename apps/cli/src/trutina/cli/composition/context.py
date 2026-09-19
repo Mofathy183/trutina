@@ -8,11 +8,13 @@ from trutina.config import Settings, get_settings
 from trutina.core.account import AccountRepo, AccountService
 from trutina.core.journal import JournalRepo, JournalService
 from trutina.core.posting import PostingRepo, PostingService
+from trutina.core.trial_balance import TrialBalanceRepo, TrialBalanceService
 from trutina.storage_postgres.account import PostgresAccountRepo
 from trutina.storage_postgres.journal import PostgresJournalRepo
 from trutina.storage_postgres.posting import PostgresPostingRepo
 from trutina.storage_postgres.shared import PostgresConnection, connect, disconnect
 from trutina.storage_postgres.shared.execution import PostgresExecutor
+from trutina.storage_postgres.trial_balance import PostgresTrialBalanceRepo
 
 
 class CliContext:
@@ -54,6 +56,7 @@ class CliContext:
         account_repo: AccountRepo | None = None,
         journal_repo: JournalRepo | None = None,
         posting_repo: PostingRepo | None = None,
+        trial_balance_repo: TrialBalanceRepo | None = None,
     ) -> None:
         self._settings = settings or get_settings()
 
@@ -63,6 +66,7 @@ class CliContext:
         self._account_repo = account_repo
         self._journal_repo = journal_repo
         self._posting_repo = posting_repo
+        self._trial_balance_repo = trial_balance_repo
 
         # Track which repositories were supplied by the caller so only
         # context-owned repositories participate in this context's
@@ -70,10 +74,12 @@ class CliContext:
         self._account_repo_injected = account_repo is not None
         self._journal_repo_injected = journal_repo is not None
         self._posting_repo_injected = posting_repo is not None
+        self._trial_balance_repo_injected = trial_balance_repo is not None
 
         self._account_service: AccountService | None = None
         self._journal_service: JournalService | None = None
         self._posting_service: PostingService | None = None
+        self._trial_balance_service: TrialBalanceService | None = None
 
     async def __aenter__(self) -> Self:
         """Return this context for use with ``async with``."""
@@ -158,6 +164,24 @@ class CliContext:
 
         return self._posting_repo
 
+    async def get_trial_balance_repo(self) -> TrialBalanceRepo:
+        """Return the trial balance repository for this CLI invocation.
+
+        Lazily creates and caches the default PostgreSQL implementation
+        when no repository was supplied at construction, reusing this
+        context's shared ``PostgresExecutor``. Mirrors
+        ``get_posting_repo()``'s None-check-then-construct shape
+        exactly -- see that accessor and the class docstring for the
+        laziness rationale.
+        """
+        if self._trial_balance_repo is None:
+            connection = await self._get_connection()
+            self._trial_balance_repo = PostgresTrialBalanceRepo(
+                connection.session_factory, self._executor
+            )
+
+        return self._trial_balance_repo
+
     async def get_account_service(self) -> AccountService:
         """Return the account service for this CLI invocation.
 
@@ -203,6 +227,25 @@ class CliContext:
             )
 
         return self._posting_service
+
+    async def get_trial_balance_service(self) -> TrialBalanceService:
+        """Return the trial balance service for this CLI invocation.
+
+        The service is constructed once from the active trial balance
+        repository and reused until the context is closed. Unlike
+        ``get_posting_service()``, this has no peer-service dependency
+        to wire -- ``TrialBalanceService`` reads entirely from
+        already-persisted postings and needs nothing from
+        ``JournalService``/``AccountService`` (see
+        ``trutina-core``'s reporting ``CONTEXT.md``/service docstring
+        for why).
+        """
+        if self._trial_balance_service is None:
+            self._trial_balance_service = TrialBalanceService(
+                repo=await self.get_trial_balance_repo()
+            )
+
+        return self._trial_balance_service
 
     @staticmethod
     def _make_has_postings_check(
@@ -254,7 +297,10 @@ class CliContext:
                 self._journal_repo = None
             if not self._posting_repo_injected:
                 self._posting_repo = None
+            if not self._trial_balance_repo_injected:
+                self._trial_balance_repo = None
 
             self._account_service = None
             self._journal_service = None
             self._posting_service = None
+            self._trial_balance_service = None

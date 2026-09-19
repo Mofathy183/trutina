@@ -16,12 +16,21 @@ command body runs. In production, ``main.py`` already constructs the
 ``_run()``) and passes it in via ``app(obj=context)``, so the callback's
 own construction path never runs for a real invocation -- it exists as
 an explicit fallback and test seam, documented on the callback itself.
+
+``trial-balance`` is registered as a single flat command via
+``app.command(...)`` rather than ``app.add_typer(...)``, unlike
+account/journal/posting -- it has exactly one action (producing a
+report), so a one-command Typer sub-app group would add indirection
+with no benefit. See ``cli/features/trial_balance/command.py``'s module
+docstring for the full rationale and the note on converting it to a
+group later if group-consistency is preferred instead.
 """
 
 import typer
 from trutina.cli.features.account import app as account_app
 from trutina.cli.features.journal import app as journal_app
 from trutina.cli.features.posting import app as posting_app
+from trutina.cli.features.trial_balance import trial_balance
 
 from .bootstrap import build_context
 
@@ -35,6 +44,7 @@ app = typer.Typer(
 app.add_typer(journal_app, name="journal")
 app.add_typer(account_app, name="account")
 app.add_typer(posting_app, name="posting")
+app.command("trial-balance")(trial_balance)
 
 
 @app.callback()

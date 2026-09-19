@@ -20,11 +20,11 @@ applies symmetrically here.
 
 ## Why The Fixed Router → Mapper → Handler → Presenter Workflow
 
-**Decision:** Every feature router (`account`, `journal`, `posting`) is split into
-four files with one direction of data flow: a Request Schema is turned into an Input
-DTO by a pure `mapper.py`; a `handler.py` makes exactly one service call; the
-returned ViewModel is turned into a Response Schema by a pure `presenter.py`; the
-router (`router.py`) does nothing but wire those three together plus `Depends(...)`.
+**Decision:** Every feature router (`account`, `journal`, `posting`, `trial_balance`)
+is split into four files with one direction of data flow:
+a Request Schema is turned into an Input DTO by a pure `mapper.py`;
+a `handler.py` makes exactly one service call; the returned ViewModel is turned into a Response Schema by a pure `presenter.py`;
+the router (`router.py`) does nothing but wire those three together plus `Depends(...)`.
 
 **Why:** This is the same motivation as the CLI's `parser.py` → `handler.py` →
 `formatter.py` split, applied to HTTP instead of Typer. Four narrow files with one
@@ -39,6 +39,8 @@ surfacing as "the endpoint returned the wrong JSON."
 same boilerplate-for-auditability trade the CLI already makes with its own
 four-file-per-feature shape — a reviewer never has to trace unrelated logic to
 confirm one layer's responsibility.
+
+**`trial_balance` has no Request Schema.** A trial balance is computed from persisted postings, never submitted, so there is no request body to validate. Its only input is one optional `as_of` query parameter, which FastAPI parses into a `datetime` before the route body runs. `mapper.py` still exists as the single place that normalizes that value before it reaches the handler; it returns the value unchanged today. `TrialBalanceResponse` extends `SuccessResponse`, so the standard `success`/`timestamp` envelope applies.
 
 ## Why `system` Is A Documented Exception To That Workflow
 
@@ -79,9 +81,9 @@ schema-registration step of its own.
 
 ## Why A Frozen `Container` Dataclass Rather Than App-Level Globals
 
-**Decision:** `Container` (`composition/container.py`) is a frozen, `slots=True`
-dataclass holding only `account_service`, `journal_service`, and `posting_service`,
-attached once to `app.state.container`.
+**Decision:** `Container` (`composition/container.py`) is a frozen,
+`slots=True` dataclass holding only `account_service`, `journal_service`, `posting_service`,
+and `trial_balance_service`, attached once to `app.state.container`.
 
 **Why:** Every attribute is stateless by design — concurrent requests calling the
 same service concurrently is safe only because no service holds mutable,
@@ -91,6 +93,9 @@ rather than a convention someone could accidentally violate by reassigning
 — never a `PostgresConnection`, `PostgresExecutor`, or a `Postgres*Repo` — keeps
 every route and dependency provider ignorant of the storage layer, mirroring
 `CliContext`'s own refusal to leak storage-specific types past its accessors.
+`trial_balance_service` depends on no other service.
+It reads persisted postings through its own `TrialBalanceRepo`,
+so `build_container()` constructs it independently of the account → journal → posting chain.
 
 **Note for future contributors:** the day a service needs request-specific state (a
 transactional session, an authenticated user's identity), this frozen-singleton
@@ -100,9 +105,9 @@ attribute bolted onto `Container`.
 ## Why Per-Service Dependency Providers Instead Of Injecting The Whole Container
 
 **Decision:** `composition/dependencies.py` exposes one provider function per service
-(`get_account_service`, `get_journal_service`, `get_posting_service`), each a
-one-line `request.app.state.container.<attr>` pass-through, rather than a single
-`get_container()` provider that routes destructure themselves.
+(`get_account_service`, `get_journal_service`, `get_posting_service`, `get_trial_balance_service`),
+each a one-line `request.app.state.container.<attr>` pass-through,
+rather than a single `get_container()` provider that routes destructure themselves.
 
 **Why:** FastAPI's `app.dependency_overrides` keys on the provider function object. A
 single `get_container()` provider would force every test that wants to fake one
@@ -248,7 +253,7 @@ Process starts
   -> main() / uvicorn -> create_app(settings)
       -> FastAPI(...) constructed
       -> register_exception_handlers(app)
-      -> four routers included (system, account, journal, posting)
+      -> five routers included (system, account, journal, posting, trial_balance)
       -> lifespan = make_lifespan(settings), not yet entered
   -> uvicorn enters the lifespan
       -> connect(settings.postgres)  -- verified via ping; failure aborts startup
@@ -334,6 +339,9 @@ IndexError):` is required). **Confirmed against live source in this pass** — t
   on `trutina-storage-postgres`. See the "Allowed and Forbidden Dependencies"
   section above — flagged here, not resolved, since the root contract is outside
   this package's own docs.
+- **`GET /trial-balance?as_of=` accepts any datetime, while `postings.posting_date` is a naive (timezone-unaware) timestamp.**
+  What happens when a timezone-aware value, such as one ending in `Z`, is supplied has not been tested. It may fail at the database comparison instead of returning a report.
+- **`as_of` is not validated beyond being a parseable datetime.** A future value includes every posting, and a value before the earliest posting yields an empty `entries` list. An unparseable value is rejected with a 422 by FastAPI.
 
 ## Common Mistakes to Avoid
 

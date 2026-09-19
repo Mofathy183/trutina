@@ -26,6 +26,11 @@ from .posting import (
     make_posting_feature_chart,
     make_posting_service,
 )
+from .trial_balance import (
+    make_account_balance_entry,
+    make_fake_trial_balance_repo,
+    make_trial_balance_service,
+)
 
 __all__ = [
     "make_credit_posting",
@@ -51,4 +56,7 @@ __all__ = [
     "make_fake_cli_context",
     "make_headers",
     "build_url",
+    "make_account_balance_entry",
+    "make_fake_trial_balance_repo",
+    "make_trial_balance_service",
 ]

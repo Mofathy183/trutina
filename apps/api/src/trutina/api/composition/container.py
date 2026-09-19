@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from trutina.core.account.service import AccountService
 from trutina.core.journal.service import JournalService
 from trutina.core.posting.service import PostingService
+from trutina.core.trial_balance.service import TrialBalanceService
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,8 +36,15 @@ class Container:
     Constructed exactly once, inside bootstrap.py's lifespan, and
     attached to app.state.container. Never constructed inside a route,
     a dependency provider, or at module import time.
+
+    trial_balance_service has no peer-service dependency, unlike
+    journal_service (depends on account_service) and posting_service
+    (depends on journal_service) — it reads entirely from
+    already-persisted postings, so its inclusion here does not change
+    the wiring order bootstrap.py must follow for the other three.
     """
 
     account_service: AccountService
     journal_service: JournalService
     posting_service: PostingService
+    trial_balance_service: TrialBalanceService

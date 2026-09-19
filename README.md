@@ -29,23 +29,24 @@ flowchart TD
     CORE -.-> CONFIG[trutina-config]
 ```
 
-`trutina-storage-mongo` still implements the same repository contracts and has its own
-CI lane, but neither `apps/cli` nor `apps/api` depends on it today — see Packages & Apps
-below.
+`trutina-storage-mongo` still implements the account, journal, and posting repository
+contracts and has its own CI lane, but neither `apps/cli` nor `apps/api` depends on it
+today — see Packages & Apps below.
 
 ## Packages & Apps
 
-- **`trutina-core`** — the accounting domain: validated schemas, three complete
-  services (`AccountService`, `JournalService`, `PostingService`), and storage-agnostic
-  repository contracts. Zero storage or transport awareness, enforced by import-linter.
-  See `packages/core/README.md` / `CONTEXT.md`.
+- **`trutina-core`** — the accounting domain: validated schemas, four services
+  (`AccountService`, `JournalService`, `PostingService`, `TrialBalanceService`), and
+  storage-agnostic repository contracts. Zero storage or transport awareness, enforced
+  by import-linter. See `packages/core/README.md` / `CONTEXT.md`.
 - **`trutina-storage-postgres`** — the storage backend `apps/cli` and `apps/api`
-  actually depend on today: SQLAlchemy async + `asyncpg` implementations of the three
-  repository contracts, plus Alembic migrations. See `packages/storage-postgres/README.md`
-  / `CONTEXT.md`.
+  actually depend on today: SQLAlchemy async + `asyncpg` implementations of the four
+  repository contracts (including the trial balance aggregation), plus Alembic
+  migrations. See `packages/storage-postgres/README.md` / `CONTEXT.md`.
 - **`trutina-storage-mongo`** — the original MongoDB/Beanie adapter. Still implements the
-  same contracts and is tested independently in its own CI lane, but is no longer a
-  declared dependency of either presentation app since the Postgres cutover. See
+  account, journal, and posting contracts and is tested independently in its own CI
+  lane, but is no longer a declared dependency of either presentation app since the
+  Postgres cutover. It has no trial balance implementation. See
   `packages/storage-mongo/README.md` / `CONTEXT.md`.
 - **`trutina-config`** — typed, environment-driven settings (`Settings`/`TestSettings`,
   `MongoSettings`, `PostgresSettings`, `ApiSettings`). Depends on nothing else in the
@@ -54,10 +55,12 @@ below.
   the shared `ErrorCode`/`AppError`/`ValidationAppError` model. Depends only on
   `pydantic`. See `packages/shared/README.md` / `CONTEXT.md`.
 - **`apps/cli`** — a Typer/Rich terminal app plus a persistent interactive shell, sitting
-  on `trutina-core` through `trutina-storage-postgres`. See `apps/cli/README.md` /
+  on `trutina-core` through `trutina-storage-postgres`. Command groups: `account`,
+  `journal`, `posting`, plus the `trial-balance` command. See `apps/cli/README.md` /
   `CONTEXT.md`.
 - **`apps/api`** — a FastAPI HTTP layer over the same domain services, following a fixed
-  Router → Mapper → Handler → Presenter pipeline per feature. See `apps/api/README.md` /
+  Router → Mapper → Handler → Presenter pipeline per feature. Routes cover accounts,
+  journal entries, postings, and `GET /trial-balance`. See `apps/api/README.md` /
   `CONTEXT.md`.
 
 ## Development
