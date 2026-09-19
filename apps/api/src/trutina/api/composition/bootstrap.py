@@ -38,11 +38,13 @@ from trutina.config import Settings
 from trutina.core.account.service import AccountService
 from trutina.core.journal.service import JournalService
 from trutina.core.posting.service import PostingService
+from trutina.core.trial_balance.service import TrialBalanceService
 from trutina.storage_postgres.account import PostgresAccountRepo
 from trutina.storage_postgres.journal import PostgresJournalRepo
 from trutina.storage_postgres.posting import PostgresPostingRepo
 from trutina.storage_postgres.shared import PostgresConnection, connect, disconnect
 from trutina.storage_postgres.shared.execution import PostgresExecutor
+from trutina.storage_postgres.trial_balance import PostgresTrialBalanceRepo
 
 from .container import Container
 
@@ -51,10 +53,13 @@ def build_container(connection: PostgresConnection) -> Container:
     """Construct the singleton service graph bound to an open connection.
 
     JournalService depends on AccountService, PostingService depends on
-    JournalService. All three repositories are built from the same
-    PostgresExecutor instance and the connection's session_factory, so
-    every repository shares one error-translation choke point and one
-    pool of sessions.
+    JournalService. TrialBalanceService has no peer-service dependency
+    -- it reads entirely from already-persisted postings via its own
+    TrialBalanceRepo, so it is wired independently of the other three
+    and does not participate in their dependency chain. All four
+    repositories are built from the same PostgresExecutor instance and
+    the connection's session_factory, so every repository shares one
+    error-translation choke point and one pool of sessions.
 
     AccountService is given a posting-history predicate bound to the
     same posting_repo instance PostingService uses, so that
@@ -77,6 +82,7 @@ def build_container(connection: PostgresConnection) -> Container:
     account_repo = PostgresAccountRepo(connection.session_factory, executor)
     journal_repo = PostgresJournalRepo(connection.session_factory, executor)
     posting_repo = PostgresPostingRepo(connection.session_factory, executor)
+    trial_balance_repo = PostgresTrialBalanceRepo(connection.session_factory, executor)
 
     async def _has_postings(account_name: str) -> bool:
         postings = await posting_repo.get_by_account(account_name)
@@ -91,11 +97,13 @@ def build_container(connection: PostgresConnection) -> Container:
         repo=posting_repo,
         journal_service=journal_service,
     )
+    trial_balance_service = TrialBalanceService(repo=trial_balance_repo)
 
     return Container(
         account_service=account_service,
         journal_service=journal_service,
         posting_service=posting_service,
+        trial_balance_service=trial_balance_service,
     )
 
 
