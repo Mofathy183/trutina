@@ -57,6 +57,9 @@ The layering rules are what let `AccountService`, `JournalService`, and
 a bug fix in one module could silently change behavior in a module that has no test
 coverage for that interaction. The one-directional rule keeps the blast radius of any
 change legible from the import statements alone.
+`trutina.core.trial_balance` sits outside the `posting → journal → account` contract.
+It imports only from `trutina.shared`, and no import-linter contract names it, so its
+independence from `posting` is a property of the current source, not an enforced rule.
 
 ## Design Decisions and Why They Were Made
 
@@ -125,6 +128,35 @@ determined by other fields on the same model, it is derived, not stored. Note th
 `computed_field`) — both achieve the same "never stored, always derived" guarantee,
 just via different mechanisms at the domain-schema layer versus the DTO layer.
 
+### Trial balance is a read model over postings, with no peer-service dependency
+
+`TrialBalanceService` produces a report from persisted `LedgerPosting` data and writes
+nothing, so `TrialBalanceRepo` has a single read method,
+`get_account_balances(as_of_date=None)`. The repository returns one
+`AccountBalanceEntry` per account with at least one posting in scope, ordered by
+account name, and an empty list when nothing is in scope.
+
+The aggregation (summing debits and credits per account) lives in the repository
+because it is the query. Report-level figures live in the service's output:
+`TrialBalanceViewModel.total_debits`, `total_credits`, and `is_balanced` are computed
+from `entries`, never stored, so they cannot disagree with the rows they summarize.
+`is_balanced` reports whether the books balanced; it does not enforce it. Every
+`JournalEntry` already validated its own balance at creation, so a `False` result would
+mean corrupted or partially migrated data.
+
+The service holds only its repository. Everything it reads was validated when the
+postings were created, so it neither calls `JournalService`/`AccountService` nor
+re-checks amounts or account existence. Only posted entries count: an unposted
+`JournalEntry` has no postings and contributes nothing.
+
+`AccountBalanceEntry` is frozen and, unlike `LedgerPosting`, is not single-sided: an
+account's history legitimately contains both debit and credit postings, so both totals
+are independently non-negative and are not netted. There is no input DTO, because a
+trial balance is computed, never submitted.
+
+`as_of_date` is not validated. Any value is accepted: a future date includes every
+posting, and a date before the earliest posting yields an empty report.
+
 ### Validation lives in the domain schema, not the service
 
 `JournalEntry`'s balance check, `JournalLine`'s debit/credit exclusivity, and
@@ -176,6 +208,14 @@ PostingService.post_journal_entry(journal_number)
     └─▶ PostingRepo.save_many(postings)                      (one repository batch)
 ```
 
+```text
+TrialBalanceService.get_trial_balance(as_of_date=None)
+    │
+    ├─▶ TrialBalanceRepo.get_account_balances(as_of_date)   (one aggregation)
+    │
+    └─▶ TrialBalanceViewModel(entries, as_of_date)           (totals derived, not stored)
+```
+
 Services call other services (`PostingService` holds a `JournalService`;
 `JournalService` holds an `AccountService`), never reaching down to a repository they
 don't own. `PostingService` never touches `AccountRepo` or `JournalRepo` directly —
@@ -219,6 +259,10 @@ rule drift the domain-validation design decision above exists to prevent.
   its optional `has_postings` callback is supplied at composition time. Without that
   callback it performs an existence check and deletes the account, so compositions
   that omit the callback do not protect posting history.
+- `TrialBalanceService` lists only accounts with postings. Listing every chart account
+  as zero rows would be a `TrialBalanceService`-level combination with
+  `AccountService.list_accounts()`, not a `TrialBalanceRepo` change; it is not built.
+- `TrialBalanceRepo` has a PostgreSQL implementation only.
 
 ## Common Mistakes to Avoid
 
