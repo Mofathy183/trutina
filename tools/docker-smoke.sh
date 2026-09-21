@@ -79,8 +79,12 @@ docker run --rm \
     "$IMAGE_TAG" \
     -m alembic -c /app/packages/storage-postgres/alembic.ini upgrade head
 
+# No --rm on the API container: if it exits during startup (for example a
+# failed database ping in the lifespan), --rm would delete it before the
+# failure branch below can read its logs. The EXIT trap's `docker rm -f`
+# still guarantees removal.
 echo "==> Starting API"
-docker run -d --rm \
+docker run -d \
     --name "$API_NAME" \
     --network "$NETWORK" \
     -e TRUTINA_POSTGRES__URI="$PG_URI" \

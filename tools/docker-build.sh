@@ -3,8 +3,9 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 # Builds the production (runtime-stage) API image. Build context is the
-# repo root, not apps/api/ -- required because trutina-api resolves
-# trutina-core, trutina-infrastructure, and trutina-config as
+# repo root, not apps/api/ -- required because trutina-api resolves its
+# workspace dependencies (trutina-core, trutina-storage-postgres,
+# trutina-config, and their own workspace dependencies) as
 # `workspace = true` path dependencies (see apps/api/pyproject.toml
 # [tool.uv.sources]), which uv can only resolve against the full
 # workspace, not a single package's subdirectory.
