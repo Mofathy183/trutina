@@ -1,5 +1,6 @@
 from .api import ApiSettings
 from .base import Settings, TestSettings, get_settings
+from .logging import LoggingSettings
 from .mongo import MongoSettings
 from .postgres import PostgresSettings
 
@@ -9,5 +10,6 @@ __all__ = [
     "TestSettings",
     "MongoSettings",
     "ApiSettings",
+    "LoggingSettings",
     "PostgresSettings",
 ]
