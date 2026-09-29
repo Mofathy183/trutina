@@ -1,6 +1,6 @@
 # trutina-config
 
-> Typed, environment-driven configuration for Trutina's Mongo, PostgreSQL, and API layers.
+> Typed, environment-driven configuration for Trutina's Mongo, PostgreSQL, API, and logging layers.
 
 ![CI](https://github.com/Mofathy183/trutina/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.14%2B-blue)
@@ -24,22 +24,23 @@ print(settings.postgres.uri)
 
 `trutina-config` (import path `trutina.config`) is the strongly typed settings
 surface every Trutina application and storage adapter reads its configuration
-from — a MongoDB connection, a PostgreSQL connection, API bind settings —
-instead of each one reading `os.environ` directly. It sits at the root of the
-workspace dependency graph: every other package may depend on it, and it
-depends on nothing else in the workspace. See [CONTEXT.md](CONTEXT.md) for why
-it's shaped this way.
+from — a MongoDB connection, a PostgreSQL connection, API bind settings, and
+the logging pipeline's own settings — instead of each one reading `os.environ`
+directly. It sits at the root of the workspace dependency graph: every other
+package may depend on it, and it depends on nothing else in the workspace. See
+[CONTEXT.md](CONTEXT.md) for why it's shaped this way.
 
 ## API at a Glance
 
-| Symbol                       | Purpose                                                                                  |
-| ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`. |
-| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.       |
-| `MongoSettings`              | Nested MongoDB connection settings.                                                      |
-| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).               |
-| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                        |
-| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                     |
+| Symbol                       | Purpose                                                                                        |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.       |
+| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.             |
+| `MongoSettings`              | Nested MongoDB connection settings.                                                            |
+| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                     |
+| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                              |
+| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`. |
+| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                           |
 
 ### `MongoSettings` fields
 
@@ -70,6 +71,21 @@ it's shaped this way.
 | `host` / `port` | `127.0.0.1` / `8000` | Interface and port the API server binds to.          |
 | `reload`        | `False`              | Enable uvicorn auto-reload (local development only). |
 
+### `LoggingSettings` fields
+
+| Field               | Default                           | Description                                                                                                                                                                                       |
+| ------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `level`             | `INFO`                            | Root logger's minimum level. Case-insensitive on input; normalized to upper-case.                                                                                                                 |
+| `format`            | `auto`                            | `json`, `console`, or `auto` (resolves per app/tty at configure time — see `trutina-observability`).                                                                                              |
+| `sink`              | `auto`                            | `stdout`, `stderr`, `file`, or `auto` (API defaults to stdout, CLI to a rotating file).                                                                                                           |
+| `file_path`         | `None`                            | Destination path when `sink` resolves to `file`. `None` lets `configure_logging()` pick a platform log directory. Accepts a `pathlib.Path` — coerced to `str` before validation (see CONTEXT.md). |
+| `file_max_bytes`    | `5_000_000`                       | Rotation threshold in bytes. Must be positive.                                                                                                                                                    |
+| `file_backup_count` | `3`                               | Rotated backups retained. `0` is valid (no backups); negative is rejected.                                                                                                                        |
+| `logger_levels`     | third-party defaults (see source) | Per-logger level overrides, keyed by logger name. Overriding from the environment replaces the whole mapping, not a per-key merge.                                                                |
+
+`LoggingSettings` itself performs no logging setup — it only describes shape.
+`trutina-observability`'s `configure_logging()` is its only consumer.
+
 ## Usage
 
 ```python
@@ -79,6 +95,7 @@ settings = get_settings()
 settings.mongo.uri
 settings.postgres.uri
 settings.api.port
+settings.logging.level
 ```
 
 For an isolated instance instead of the cached singleton:
@@ -102,6 +119,14 @@ Nested settings use a double underscore (`__`) as the delimiter:
 TRUTINA_MONGO__URI=mongodb://localhost:27017
 TRUTINA_POSTGRES__URI=postgresql+asyncpg://username:password@localhost:5432/trutina
 TRUTINA_API__PORT=8000
+TRUTINA_LOGGING__LEVEL=INFO
+```
+
+`logger_levels` is overridden as a single JSON object, since the `__` nested
+delimiter would otherwise mangle logger names that themselves contain dots:
+
+```bash
+TRUTINA_LOGGING__LOGGER_LEVELS={"sqlalchemy.engine": "WARNING", "uvicorn.error": "INFO"}
 ```
 
 Test configuration reads the same shape under a `TRUTINA_TEST_` prefix from
@@ -122,8 +147,5 @@ written on the test itself.
 
 - [CONTEXT.md](CONTEXT.md) — design rationale, trade-offs, invariants.
 - Confirmed direct dependents (per their own `pyproject.toml`): `trutina-storage-mongo`,
-  `trutina-cli`, `trutina-api`. `trutina-storage-postgres` almost certainly
-  depends on this package too (`PostgresSettings`' own docstring names it as
-  the consumer of these fields), but its `pyproject.toml` wasn't available to
-  confirm directly in this pass — flag before relying on it.
+  `trutina-storage-postgres`, `trutina-cli`, `trutina-api`, `trutina-observability`.
 - `trutina-config` depends on nothing else in the workspace.
