@@ -29,6 +29,7 @@ pytest_plugins = [
     "tests.fixtures.services",
     "tests.fixtures.cli",
     "tests.fixtures.api",
+    "tests.fixtures.logging",
 ]
 
 # ── Marker taxonomy ──────────────────────────────────────────────────────
@@ -75,7 +76,7 @@ pytest_plugins = [
 
 _SPEED_MARKERS: frozenset[str] = frozenset({"unit", "integration"})
 _LAYER_MARKERS: frozenset[str] = frozenset(
-    {"core", "infra", "cli", "api", "shared", "config"}
+    {"core", "infra", "cli", "api", "shared", "config", "observability"}
 )
 
 # Directory name -> layer marker, checked in this order, for layers that
@@ -94,6 +95,7 @@ _LAYER_DIRS: dict[str, str] = {
     "cli": "cli",
     "api": "api",
     "config": "config",
+    "observability": "observability",
 }
 
 # Directory names that both map to the single "shared" layer marker.
