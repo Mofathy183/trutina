@@ -10,7 +10,9 @@ exists to implement those contracts against a real database, so that the
 accounting domain can be tested, read, and reasoned about without a
 database running, and so a second storage backend could later be added by
 satisfying the same three ABCs with no change to any service or domain
-model.
+model. `trutina-storage-postgres` is exactly that second backend, and is
+the one both presentation apps depend on today — this package remains a
+tested, independently-verified sibling, not app-facing.
 
 Every repository method routes its Beanie call through
 `MongoExecutor.run(coro)`, which wraps the call in
@@ -32,6 +34,41 @@ bypassed `model_construct`-style shortcut, so every invariant the domain
 model enforces is re-checked on every read, not just on write — storage
 corruption or a bad migration surfaces as a validation error at read time
 instead of silently propagating into the accounting workflow.
+
+## Logging
+
+`connect()` and `disconnect()` (`connection.py`) each emit exactly one
+INFO line through `logging.getLogger(__name__)` — `db.connected` and
+`db.disconnected` — via the standard library only. This module imports
+nothing from `trutina.observability` or `structlog`, matching every other
+emitter in the workspace: this package decides _that_ a connection opened
+or closed, never _how_ that fact is formatted or _where_ it's routed.
+
+`db.connected`'s context is deliberately narrow: `backend`, `db`,
+`min_pool_size`, `server_selection_timeout_ms`. `mongo.uri` is never
+logged, because it can embed credentials directly
+(`mongodb://user:pass@host`). This mirrors
+`trutina-storage-postgres`'s identical rule for `postgres.uri`.
+
+`MongoExecutor`/`translate_mongo_errors()` do not log failures themselves;
+`AppError` instances they raise are logged exactly once by whichever seam
+catches them (an API exception handler, the CLI's `error_boundary()`) —
+unchanged by the logging rollout, and consistent with the "log where the
+error is handled, not where it is raised" principle applied across the
+whole workspace.
+
+**This package has no migration step**, unlike `trutina-storage-postgres`.
+Beanie's `init_beanie()` creates indexes at runtime rather than through a
+versioned migration history, and nothing here calls
+`logging.config.fileConfig()`. It was therefore never exposed to the
+Alembic logger-disabling defect documented in
+`trutina-storage-postgres/CONTEXT.md` (a real bug found and fixed during
+that package's own Phase 6 verification, where `fileConfig()`'s default
+`disable_existing_loggers=True` silently disabled every non-Alembic-declared
+logger in the process, including a module-level `logging.getLogger(__name__)`
+instantiated at import time). Recorded here only so a future contributor
+auditing this package for the same class of bug doesn't need to re-derive
+why it doesn't apply.
 
 ## Trade-offs accepted
 
@@ -98,9 +135,9 @@ crosses this boundary" rule — not a downgrade to `AppError.unknown()`.
   failure. This package exists specifically so core never needs either.
 - **Layered dependency direction.** The root import-linter `layers`
   contract fixes the order `trutina.cli | trutina.api` →
-  `trutina.storage_mongo` → `trutina.core` →
-  `trutina.shared | trutina.config`. This package must never import from
-  `trutina.cli` or `trutina.api`.
+  `trutina.storage_mongo | trutina.storage_postgres | trutina.observability` →
+  `trutina.core` → `trutina.shared | trutina.config`. This package must
+  never import from `trutina.cli` or `trutina.api`.
 - **No business rules in a repository.** Uniqueness pre-checks, the
   one-posting-per-journal invariant, chart-of-accounts resolution — none
   of it belongs here. A repository's only job is mapping and persistence.
@@ -121,17 +158,21 @@ crosses this boundary" rule — not a downgrade to `AppError.unknown()`.
   composition-root responsibility (`CliContext`, the API's bootstrap),
   kept out of this package so it stays agnostic to when and how often a
   caller wants to initialize.
+- **Emits through stdlib logging only.** Enforced by the "Emitters use
+  stdlib logging only" import-linter contract — this package must never
+  import `trutina.observability` or `structlog` directly.
 
 ## Allowed and forbidden dependencies
 
 **Allowed** (per `packages/storage-mongo/pyproject.toml`): `trutina-shared`,
 `trutina-core`, `trutina-config`, `beanie`, `pymongo`.
 
-**Forbidden:** `trutina-cli`, `trutina-api`, or any other `apps/*` package;
-any presentation library (`typer`, `rich`, `fastapi`, `strawberry-graphql`).
+**Forbidden:** `trutina-cli`, `trutina-api`, `trutina-storage-postgres`,
+`trutina-observability`, `structlog`, or any other `apps/*` package; any
+presentation library (`typer`, `rich`, `fastapi`, `strawberry-graphql`).
 None of these appear as dependencies today, and none should be added — a
 storage adapter has no legitimate reason to know about a transport or UI
-layer.
+layer, or to format its own log output.
 
 ## Layering within this package
 
@@ -164,21 +205,29 @@ Write paths that can raise `DuplicateKeyError` (`create()`, `update()`,
 per-repository `_on_duplicate()` method, which inspects the violated index
 name (`violated_index()`) to decide which domain conflict to raise.
 
+`connect()`/`disconnect()` sit outside this per-operation flow entirely —
+they run once at composition-root startup/shutdown and log
+`db.connected`/`db.disconnected` directly, with no `MongoExecutor`
+involvement, since there is no domain error to translate at that point
+(a ping failure is already a `pymongo.errors.ConnectionFailure`, re-raised
+unchanged by `connect()` for the caller's own composition-time handling).
+
 ## Extension points
 
-- **A second storage backend.** Any package implementing `AccountRepo`,
-  `JournalRepo`, and `PostingRepo` against a different datastore is a
-  legitimate sibling to this package — it would prove the contracts are
-  genuinely storage-agnostic rather than MongoDB-shaped in disguise. No
-  such package exists yet.
+- **A second storage backend.** Confirmed realized:
+  `trutina-storage-postgres` implements `AccountRepo`, `JournalRepo`, and
+  `PostingRepo` against a different datastore, proving the contracts are
+  genuinely storage-agnostic rather than MongoDB-shaped in disguise. It is
+  also the backend both presentation apps depend on today.
 - **A new bounded-context adapter.** Mirrors the `account`/`journal`/
   `posting` shape exactly.
 - **Cross-cutting execution concerns.** `MongoExecutor` is the intended
-  seam for adding logging, metrics, retries, or (eventually)
-  transaction/session support to every repository at once, without
-  touching individual repository methods. This is stated as
-  forward-looking intent in `MongoExecutor`'s own docstring — no such
-  behavior is implemented today.
+  seam for adding metrics or retries to every repository at once, without
+  touching individual repository methods. Logging at this level was
+  deliberately kept out during the logging rollout — see the Logging
+  section above for why `db.connected`/`db.disconnected` live in
+  `connection.py` instead, and why per-operation failures are logged by
+  the calling seam, not by `MongoExecutor` itself.
 
 ## Assumptions this package relies on
 
@@ -211,3 +260,7 @@ name (`violated_index()`) to decide which domain conflict to raise.
   `tests/fixtures/mongo.py::DOCUMENT_MODELS` when adding a new bounded
   context — the symptom is a `CollectionWasNotInitialized` error that only
   appears the first time the new repository is actually used.
+- Importing `trutina.observability` or `structlog` anywhere in this
+  package "to log more richly" — every log call goes through plain
+  `logging.getLogger(__name__)`; formatting and routing are the
+  composing app's decision, made once, not this package's.
