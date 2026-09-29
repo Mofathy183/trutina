@@ -24,8 +24,8 @@ uv run pytest -m "unit and infra and postgres"
 
 | Symbol                     | Purpose                                                                         |
 | -------------------------- | ------------------------------------------------------------------------------- |
-| `connect()`                | Creates a verified PostgreSQL engine and session factory.                       |
-| `disconnect()`             | Disposes a connection bundle's engine and pool.                                 |
+| `connect()`                | Creates a verified PostgreSQL engine and session factory. Logs `db.connected`.  |
+| `disconnect()`             | Disposes a connection bundle's engine and pool. Logs `db.disconnected`.         |
 | `PostgresConnection`       | Immutable bundle of an async engine and session factory.                        |
 | `PostgresExecutor`         | Runs database work with infrastructure-error translation.                       |
 | `PostgresAccountRepo`      | Implements the core account repository contract.                                |
@@ -114,6 +114,10 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+## Logging
+
+`connect()` and `disconnect()` each emit one `logging.getLogger(__name__)` line — `db.connected` and `db.disconnected` — through Python's standard library only; this package imports nothing from `trutina-observability` or `structlog`. `db.connected`'s context carries `backend`, `pool_size`, `max_overflow`, and `pool_pre_ping` — never `postgres.uri`, since the URI can embed credentials. The engine itself is constructed with `hide_parameters=True`, so any exception SQLAlchemy raises omits bound parameter values (account names, amounts, etc.) from its text, independent of what any caller does with the exception afterward. See [CONTEXT.md](CONTEXT.md) for the full rationale and the Alembic logging caveat below.
+
 ## Testing
 
 ```bash
@@ -121,9 +125,12 @@ uv run pytest -m "unit and infra and postgres"
 uv run pytest -m "integration and infra and postgres"
 ```
 
+Integration tests apply the real Alembic migration history once per session (`tests/fixtures/postgres.py`'s `schema_init`) rather than `Base.metadata.create_all()`, so a migration that doesn't actually reproduce `models.py` fails as a test, not as a surprise the first time someone runs `alembic upgrade head` against a real environment. Alembic's own `env.py` is configured with `disable_existing_loggers=False` — see CONTEXT.md's Known Gaps for why that flag matters here specifically.
+
 ## See Also
 
 - [CONTEXT.md](CONTEXT.md) — design rationale, trade-offs, invariants, and known gaps.
 - [trutina-core](../core/README.md) — repository contracts and domain objects implemented here.
 - [trutina-config](../config/README.md) — typed PostgreSQL connection settings.
 - [trutina-shared](../shared/README.md) — shared error types and account lookup rules.
+- [trutina-observability](../observability/README.md) — this package emits through stdlib `logging` only; observability owns how those records are formatted and routed.
