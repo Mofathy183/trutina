@@ -12,11 +12,17 @@ Responsibilities:
 - Coordinate persistence through JournalRepo.
 - Translate domain validation failures into ValidationAppError.
 - Return stable ViewModels to callers.
+- Log "journal.created" through the standard library's logging module
+    once a new entry is persisted -- never on a read, never on a path
+    that raises AppError/ValidationAppError. This module imports
+    nothing from trutina.observability or structlog.
 
 CLI commands and API routes depend only on this service and the
 DTO contracts defined in dtos.py. They never interact directly with
 JournalLine, JournalEntry, JournalRepo, or AccountService.
 """
+
+import logging
 
 from pydantic import ValidationError
 from trutina.core.account.service import AccountService
@@ -35,6 +41,8 @@ from .dtos import (
 from .repo import JournalRepo
 from .schemas.journal import JournalEntry
 from .schemas.line import JournalLine
+
+logger = logging.getLogger(__name__)
 
 
 class JournalService:
@@ -77,6 +85,7 @@ class JournalService:
         Resolves all account references against a single chart snapshot,
         assigns the next journal number, constructs the domain entry
         (which validates its own accounting invariants), and persists it.
+        Logs "journal.created" only after the repository write succeeds.
 
         Args:
             input: Raw journal entry creation input.
@@ -108,6 +117,16 @@ class JournalService:
 
         await self._repo.save(entry)
 
+        logger.info(
+            "journal.created",
+            extra={
+                "context": {
+                    "journal_number": entry.journal_number,
+                    "line_count": len(entry.lines),
+                }
+            },
+        )
+
         return self._to_entry_view(entry)
 
     async def get_journal_entry(
@@ -115,6 +134,8 @@ class JournalService:
         journal_number: int,
     ) -> JournalViewModel:
         """Fetch a single journal entry by its journal number.
+
+        Read-only -- never logs a state-change event.
 
         Args:
             journal_number: The journal number to look up.
@@ -140,6 +161,7 @@ class JournalService:
         """Fetch all journal entries as a list of view models.
 
         Returns an empty list when no entries have been persisted.
+        Read-only -- never logs a state-change event.
 
         Returns:
             All persisted journal entries ordered ascending by journal

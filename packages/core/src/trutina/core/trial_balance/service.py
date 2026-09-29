@@ -12,6 +12,13 @@ Responsibilities:
 - Wrap the result in a TrialBalanceViewModel, which derives its own
     report-level totals (total_debits, total_credits, is_balanced) as
     computed fields -- this service does not compute them itself.
+- Log "trial_balance.generated" through the standard library's logging
+    module once a report has been produced. Unlike the read-only
+    lookups on the other three services, report generation is
+    deliberately logged -- it is the one output this service exists to
+    produce, not a passive lookup. Only entry count and the requested
+    as_of_date are logged, never any amount. This module imports
+    nothing from trutina.observability or structlog.
 
 TrialBalanceService has no peer-service dependency, unlike
 PostingService (which depends on JournalService) or JournalService
@@ -25,10 +32,13 @@ already validated -- the same reasoning applies here, one layer
 further removed).
 """
 
+import logging
 from datetime import datetime
 
 from .dtos import TrialBalanceViewModel
 from .repo import TrialBalanceRepo
+
+logger = logging.getLogger(__name__)
 
 
 class TrialBalanceService:
@@ -63,7 +73,9 @@ class TrialBalanceService:
         wraps them in a TrialBalanceViewModel. The view model's
         total_debits, total_credits, and is_balanced are derived by
         the view model itself from the returned entries -- this method
-        does not compute or verify them.
+        does not compute or verify them. Logs "trial_balance.generated"
+        with the entry count and the requested as_of_date -- never any
+        debit/credit amount.
 
         Args:
             as_of_date: Optional cutoff. When given, only postings
@@ -76,4 +88,16 @@ class TrialBalanceService:
             as_of_date for the caller's own reference.
         """
         entries = await self._repo.get_account_balances(as_of_date=as_of_date)
-        return TrialBalanceViewModel(entries=entries, as_of_date=as_of_date)
+        view_model = TrialBalanceViewModel(entries=entries, as_of_date=as_of_date)
+
+        logger.info(
+            "trial_balance.generated",
+            extra={
+                "context": {
+                    "entry_count": len(entries),
+                    "as_of_date": as_of_date.isoformat() if as_of_date else None,
+                }
+            },
+        )
+
+        return view_model
