@@ -30,6 +30,7 @@ AppError.storage_unavailable()/storage_timeout() and surfaced through
 the API's normal error-handling path, not through this module.
 """
 
+import logging
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
@@ -47,6 +48,8 @@ from trutina.storage_postgres.shared.execution import PostgresExecutor
 from trutina.storage_postgres.trial_balance import PostgresTrialBalanceRepo
 
 from .container import Container
+
+logger = logging.getLogger(__name__)
 
 
 def build_container(connection: PostgresConnection) -> Container:
@@ -127,9 +130,12 @@ def make_lifespan(
 
         app.state.container = build_container(connection)
 
+        logger.info("app.started", extra={"context": {"app": "api"}})
+
         try:
             yield
         finally:
             await disconnect(connection)
+            logger.info("app.stopped", extra={"context": {"app": "api"}})
 
     return lifespan

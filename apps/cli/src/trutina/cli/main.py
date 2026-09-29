@@ -4,6 +4,19 @@ This is the only place in the application that opens the CLI's single
 event loop, via ``start_blocking_portal()``. No command, service, or
 repository may create a second loop -- there is exactly one, for the
 life of the process.
+
+Logging is configured once here, in ``main()``, next to where the
+portal is later opened in ``run()`` -- mirroring the API's own
+composition-root wiring in ``composition/app.py``. Every one-shot
+invocation is wrapped in its own ``correlation_scope()`` so every log
+line it emits -- including ones logged from service/repository code
+running inside the portal's event loop -- shares one id. The
+interactive shell does the equivalent per dispatched line, in
+``shell/dispatch.py``, rather than once for the whole session, so one
+long-running shell process never has every command sharing a single
+id. Phase 0 confirmed a context variable set on the calling (main)
+thread reaches code run through ``BlockingPortal.call(...)`` without
+needing an explicit re-bind inside ``CliState.call()``.
 """
 
 import sys
@@ -11,6 +24,8 @@ import sys
 from anyio.from_thread import start_blocking_portal
 from trutina.cli.composition import CliContext, CliState, app, build_context
 from trutina.cli.shell import run_shell
+from trutina.config import get_settings
+from trutina.observability import configure_logging, correlation_scope
 
 
 def _known_commands(typer_app) -> set[str]:
@@ -59,19 +74,29 @@ def _should_enter_shell(argv: list[str], typer_app) -> bool:
 
 
 def run(context: CliContext, *, backend: str = "asyncio") -> None:
-    """Dispatch either into the shell or into Typer, and guarantee cleanup."""
+    """Dispatch either into the shell or into Typer, and guarantee cleanup.
+
+    A one-shot dispatch is wrapped in ``correlation_scope()`` here so
+    the whole invocation -- parsing, the service call made through
+    ``state.call(...)``, and ``error_boundary()``'s own failure log --
+    shares one id. The shell path does not wrap here: ``run_shell()``
+    dispatches many commands per process, so each one binds its own
+    scope in ``shell/dispatch.py`` instead of sharing this one.
+    """
     with start_blocking_portal(backend=backend) as portal:
         state = CliState(context=context, portal=portal)
         try:
             if _should_enter_shell(sys.argv[1:], app):
                 run_shell(state)
             else:
-                app(obj=state)
+                with correlation_scope():
+                    app(obj=state)
         finally:
             portal.call(context.aclose)
 
 
 def main() -> None:
+    configure_logging(get_settings().logging, app="cli")
     context = build_context()
     run(context)
 

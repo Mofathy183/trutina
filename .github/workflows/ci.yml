@@ -46,11 +46,14 @@ jobs:
       - name: Marker hygiene
         run: uv run pytest --collect-only -q
 
-  # ── Quality Gate 2: Foundation Packages (shared, config) ─────────
-  # Not folded into _test-layer.yml: no Mongo service, no integration
-  # tier today — a genuinely different shape, not just fewer lines.
+  # ── Quality Gate 2: Foundation Packages (shared, config, observability) ──
+  # Not folded into _test-layer.yml: no Mongo/Postgres service, no
+  # integration tier today — a genuinely different shape, not just
+  # fewer lines. trutina-observability joined this job rather than
+  # getting its own _test-layer*.yml file for the same reason: it has
+  # no storage-backend dependency to bring up as a CI service.
   foundation:
-    name: "QG2 · Shared & Config Unit Tests"
+    name: "QG2 · Shared, Config & Observability Unit Tests"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: static_analysis
@@ -68,7 +71,7 @@ jobs:
       - run: chmod +x tools/ci/pytest-optional.sh
 
       - run: >
-          tools/ci/pytest-optional.sh "unit and (shared or config)"
+          tools/ci/pytest-optional.sh "unit and (shared or config or observability)"
           --cov=trutina --cov-report=term-missing
 
   # ── Quality Gates 3–5: Storage-backed layers ─────────────────────

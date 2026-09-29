@@ -1,0 +1,16 @@
+[project]
+name = "trutina-observability"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = ["trutina-config", "platformdirs>=4.11.12", "structlog>=26.1.0"]
+
+[tool.uv.sources]
+trutina-config = { workspace = true }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true

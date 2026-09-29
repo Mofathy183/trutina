@@ -72,6 +72,36 @@ the same invocation. `start_blocking_portal()` is therefore called exactly
 once, in `main.py::run()` — no command, service, handler, or repository
 may create a second loop or a second portal.
 
+## Why A Correlation Id Reaches The Portal Without A Re-Bind
+
+**Decision:** `correlation_scope()` is entered on the CLI's main thread — once
+per one-shot invocation, in `main.py::run()`, or once per dispatched shell line,
+in `shell/dispatch.py`'s `dispatch()`/`run_help()`. `CliState.call()` itself does
+nothing special to propagate the bound id into the portal's event loop.
+
+**Why this works:** Python's `contextvars.ContextVar` values are captured by
+`contextvars.copy_context()` when a task is scheduled, and `anyio`'s
+`BlockingPortal.call(...)` schedules the target coroutine as a task on the
+portal's loop using the calling thread's current context. A correlation id
+bound on the main thread before `portal.call(...)` is therefore already visible
+to every `logging.getLogger(__name__).info(...)` call made inside the portal's
+event loop, including from service and repository code several layers deep,
+with zero extra propagation code required.
+
+**Confirmed, not assumed:** this was the first of Phase 0's spikes, run
+against `anyio` 4.14.1 (the package's declared minimum) and 4.15.1, before any
+of Phases 3/4's application code was written. Phase 4's own hard acceptance
+test (`shell/tests/test_dispatch_logging.py`) re-confirms the same property at
+the application level: two commands dispatched in the same shell session get
+distinct ids, and neither leaks into the other.
+
+**What would break this:** adopting a different concurrency primitive that
+does not capture the calling context the way `copy_context()`-based task
+scheduling does, or introducing a second `BlockingPortal`/event loop (already
+forbidden by the single-loop invariant below, for unrelated reasons). If
+`anyio`'s task-scheduling contract ever changes in a way that stops
+propagating context, the Phase 4 acceptance test is what would catch it.
+
 ## Why The Shell Reuses The Same Typer App
 
 **Decision:** Bare `trutina-cli` enters `run_shell(state)`. Each non-empty
@@ -87,6 +117,15 @@ Typer commands; they live in `SHELL_BUILTINS` so the loop and completer
 share one catalog. Only entries with `terminates=True` end the session;
 today that is `exit`, not `quit`. Shell line syntax (`/`, help shorthands)
 is in README.md Usage.
+
+**Why each dispatched line gets its own `correlation_scope()`:** `dispatch()`
+and `run_help()` in `shell/dispatch.py` each wrap their own `app(...)` call in
+`correlation_scope()`, rather than the shell session binding one id for its
+whole lifetime. A shell process can run arbitrarily many commands; sharing one
+id across all of them would make every log line from an hour-long session
+indistinguishable by command, defeating the entire point of correlation. This
+mirrors `main.py::run()`'s one-scope-per-one-shot-invocation shape, just
+applied per line instead of per process.
 
 **Why prompt_toolkit is a CLI dependency:** the REPL needs a session with
 live completion, Tab-to-accept, and a prompt style. That library stays in
@@ -113,7 +152,7 @@ repository is the only signal, and it's structural, not conventional.
 
 **Trade-off accepted:** every accessor has to repeat the same
 None-check-then-construct shape (`get_account_repo()`,
-`get_journal_repo()`, `get_posting_repo()`, and the three
+`get_journal_repo()`, `get_posting_repo()`, and the matching
 `get_*_service()` equivalents). This is boilerplate, but it's boilerplate
 that's obvious to audit — a new repository/service follows the exact same
 pattern, and a reviewer doesn't need to trace unrelated construction
@@ -156,12 +195,12 @@ are CLI-owned catalogs, entirely separate from `trutina-shared`'s
 `CONTEXT.md`) is that the shared error layer carries no presentation text.
 `AppError`/`ValidationAppError` identify _what_ went wrong via `ErrorCode`;
 they never carry a user-facing sentence. If message/hint text lived in
-`shared`, a future second presentation layer (the API) would either have to
-reuse CLI wording verbatim (wrong tone for an HTTP error envelope) or the
-shared layer would need two parallel message sets, defeating the point of
-being shared. Keeping wording entirely in `cli/shared/errors/` means the
-API is free to build its own catalog with zero coordination cost or risk of
-CLI-specific phrasing leaking into JSON responses.
+`shared`, the API would either have to reuse CLI wording verbatim (wrong
+tone for an HTTP error envelope) or the shared layer would need two
+parallel message sets, defeating the point of being shared. Keeping wording
+entirely in `cli/shared/errors/` means the API is free to build its own
+catalog with zero coordination cost or risk of CLI-specific phrasing
+leaking into JSON responses.
 
 ## Why `error_boundary()` Is A Single, Narrow Seam
 
@@ -189,6 +228,52 @@ and the handler call in the same block. Nested `error_boundary()` occurs
 when `update` calls `_fetch_account` from inside an outer block. The
 invariant to preserve is "no second catcher of those exception types,"
 not "exactly one `state.call` per command."
+
+## Why `error_boundary()` Is Also The Single Place A Command Failure Is Logged
+
+**Decision:** `error_boundary()` calls a shared `_log_failure(code, cause=...)`
+helper exactly once per caught exception type (`ValidationAppError`,
+`AppError`, raw `pydantic.ValidationError`), emitting exactly one
+`command.failed` line per failure. This mirrors the API's own single-log-
+line-per-handler discipline in `shared/errors/handlers.py`.
+
+**Why here and not somewhere else:** this is the CLI's exact equivalent of
+the API's `register_exception_handlers()` — the one seam every command
+failure already passes through, regardless of which feature raised it. Adding
+logging anywhere else (inside a service, inside a handler, inside a command)
+would either duplicate the log line this seam already produces, or require
+every command author to remember a separate logging call — exactly the kind
+of per-call-site discipline the API's `_log_failure()` design already rejected.
+
+**Level policy:** `STORAGE_UNAVAILABLE`, `STORAGE_TIMEOUT`, and
+`UNKNOWN_ERROR` log at ERROR with a traceback attached (via `AppError.cause`)
+— these are the codes worth paging or counting as an incident. Every other,
+expected domain error (validation, not found, conflict) logs at INFO with no
+traceback — a user mistake is not an incident.
+
+**Why `_ERROR_LEVEL_CODES` is a CLI-local set, not imported from the API or
+extracted into `trutina-observability`:** evaluated explicitly during Phase 4
+and deliberately kept duplicated rather than shared. Which `ErrorCode`s count
+as an incident worth paging on is a per-consumer, presentation-layer decision
+— the CLI's own local log file and the API's production log aggregator have
+different operators and different alerting needs, mirroring
+`trutina-shared`'s own documented refusal to merge CLI/API error-message
+catalogs (see that package's `CONTEXT.md`). It also sits below the workspace's
+own extraction threshold, which calls for a confirmed _third_ real consumer
+with genuinely identical intent before extracting a shared helper — two
+independently-justified, structurally similar sets don't meet that bar. This
+reasoning is recorded as a code comment at `_ERROR_LEVEL_CODES`'s own
+definition, specifically so it is not re-litigated per package later.
+
+**The correlation id is never read or attached inside `_log_failure()`
+directly** — it is picked up automatically by the logging pipeline's own
+context-variable processor (`trutina-observability`'s `_correlation_processor`),
+since (unlike the API's catch-all handler) `error_boundary()` always runs
+_inside_ the `correlation_scope()` bound by `main.py::run()` or
+`shell/dispatch.py`, never outside it. The API needed an explicit
+`request.state` read specifically because its catch-all handler runs outside
+the middleware's scope; nothing in the CLI has an equivalent "runs after the
+scope already closed" case.
 
 ## Why Prompts Always Delegate To Parsers
 
@@ -265,27 +350,30 @@ a per-account table, and a summary line that reads `total_debits`, `total_credit
 - **Exactly one `BlockingPortal`/event loop per process.** No command,
   service, or repository may open a second one.
 - **`error_boundary()` is the only catcher of `AppError`,
-  `ValidationAppError`, and Pydantic `ValidationError`.** Do not add a
-  second `try`/`except` for those types outside that seam.
+  `ValidationAppError`, and Pydantic `ValidationError`, and the only
+  logger of a command failure.** Do not add a second `try`/`except` for
+  those types, or a second `command.failed`-style log call, outside that
+  seam.
+- **A correlation scope is bound once per one-shot invocation, and once
+  per dispatched shell line — never once per whole shell session.**
 
 ## Allowed and Forbidden Dependencies
 
 **Allowed** (per `apps/cli/pyproject.toml`): `trutina-core`,
-`trutina-storage-postgres`, `trutina-config`, `typer`, `rich`, `anyio`,
-`prompt-toolkit`. Adjacent-package READMEs are listed in this package's
-README.md See Also.
+`trutina-storage-postgres`, `trutina-config`, `trutina-observability`,
+`typer`, `rich`, `anyio`, `prompt-toolkit`. Adjacent-package READMEs are
+listed in this package's README.md See Also.
 
 **Forbidden:** `trutina-api`, or any other `apps/*` package — the CLI must
-never depend on a sibling application.
+never depend on a sibling application. `structlog` directly — this package
+imports only `configure_logging`/`correlation_scope` from
+`trutina.observability`'s public surface, never `structlog` itself.
 
 **Direction:** enforced by the workspace's root `pyproject.toml`
 import-linter `layers` contract:
-`trutina.cli | trutina.api → trutina.storage_mongo → trutina.core →
-trutina.shared | trutina.config`. This package sits at the top; nothing
-downstream may import from it. **Flag:** the root contract's middle layer
-is still named `trutina.storage_mongo`, while this package's own
-`pyproject.toml` depends on `trutina-storage-postgres`. Flagged here, not
-resolved — the root contract is outside this package's own docs.
+`trutina.cli | trutina.api → trutina.storage_mongo | trutina.storage_postgres
+| trutina.observability → trutina.core → trutina.shared | trutina.config`.
+This package sits at the top; nothing downstream may import from it.
 
 ## Layering Within This Package
 
@@ -299,9 +387,12 @@ cli.composition.app
     -> cli.features.*.formatter -> cli.shared.ui
     -> cli.shared.boundary.error_boundary
          -> cli.shared.formatters.error + cli.shared.errors + cli.shared.ui
+         -> logging.getLogger(__name__) via _log_failure()
 
 cli.main.run
+  -> configure_logging(settings.logging, app="cli")   [main() only, before run()]
   -> start_blocking_portal + CliState
+  -> correlation_scope() around app(obj=state)   [one-shot only]
   -> cli.shell.run_shell  or  cli.composition.app(obj=state)
   -> finally: portal.call(context.aclose)
 
@@ -310,7 +401,7 @@ cli.shell.loop
   -> prompt_toolkit PromptSession
        (cli.shell.completion, cli.shared.ui.theme.build_shell_style,
         cli.shell.keybindings)
-  -> cli.shell.dispatch.app(...)   [same Typer app]
+  -> cli.shell.dispatch.app(...)   [same Typer app, its own correlation_scope() per line]
 ```
 
 Within `cli/shared/`, `boundary/error_boundary.py` sits above `formatters/error.py`,
@@ -318,11 +409,14 @@ Within `cli/shared/`, `boundary/error_boundary.py` sits above `formatters/error.
 back on it. `ui/` is the lowest sub-layer (generic Rich widgets, logo,
 banner; no error-model awareness); `errors/`/`formatters/` build on
 `trutina-shared`'s `ErrorCode`/`AppError` plus `ui/`'s widgets;
-`error_boundary.py` is the only place all of that, plus `typer.Exit`,
-actually combines.
+`error_boundary.py` is the only place all of that, plus `typer.Exit` and
+the `_log_failure()`/`logging` call, actually combines.
 
 `shell/` depends on `composition` (the app and `CliState`) and `shared/ui`
 (banner, console, prompt_toolkit style). It does not own copy or logo art.
+`shell/dispatch.py` also depends on `trutina.observability`'s
+`correlation_scope()` directly, alongside its existing `composition`/
+`shared/ui` dependencies.
 
 No import-linter contract currently enforces this sub-layering
 mechanically (only the workspace-level `apps → infrastructure → core →
@@ -345,22 +439,26 @@ User types a command (argv or shell line)
   -> state.call(handler_fn, state.context, ...)   [crosses into async world]
   -> Handler resolves the relevant service from CliContext
   -> Service (trutina-core) orchestrates domain construction, validation,
-     repository calls
+     repository calls -- and, on success, logs its own "*.created"/
+     "*.updated"/"*.deleted" event (see trutina-core's own CONTEXT.md);
+     the correlation id bound on the main thread is already visible here.
   -> Repository (trutina-core contract -> trutina-storage-postgres adapter)
      persists/reads data
   -> Service returns a ViewModel, or raises AppError / ValidationAppError
       - success -> formatter.py builds a renderable, command calls
         print_*(), Rich Console renders it
-      - failure -> error_boundary() catches the exception, formats it,
-        prints panel(s), raises typer.Exit(code=1)
+      - failure -> error_boundary() catches the exception, logs one
+        "command.failed" line via _log_failure(), formats it, prints
+        panel(s), raises typer.Exit(code=1)
 ```
 
 Bootstrap sequence (once per process):
 
 ```text
-main() -> build_context() -> start_blocking_portal() -> CliState
-  -> run_shell(state)  or  app(obj=state)
-  -> finally: portal.call(context.aclose)
+main() -> configure_logging(settings.logging, app="cli")
+       -> build_context() -> start_blocking_portal() -> CliState
+       -> run_shell(state)  or  app(obj=state) inside correlation_scope()
+       -> finally: portal.call(context.aclose)
 ```
 
 `composition/app.py`'s `main_callback()` is a defensive fallback only: if
@@ -389,8 +487,9 @@ callback, so `trutina-cli --help` never reaches it.
   `console.print(...)` call. The welcome banner follows the same
   `build_welcome_banner()` / `print_welcome_banner()` split.
 - **Into `error_boundary()`:** whatever exception the wrapped block raised.
-- **Out of `error_boundary()`:** printed panels, plus `typer.Exit(code=1)`
-  chained `from None` so the original traceback is never re-surfaced.
+- **Out of `error_boundary()`:** one `command.failed` log line, printed
+  panels, plus `typer.Exit(code=1)` chained `from None` so the original
+  traceback is never re-surfaced.
 
 ## Extension Points
 
@@ -414,6 +513,9 @@ callback, so `trutina-cli --help` never reaches it.
 - **New CLI-facing error wording:** add entries to
   `cli/shared/errors/errors.py`/`hint.py` keyed by `ErrorCode` — never add
   presentation text to `trutina-shared`.
+- **A new incident-worthy `ErrorCode`:** add it to `_ERROR_LEVEL_CODES` in
+  `error_boundary.py`, next to the comment recording why this set is not
+  shared with the API's own equivalent.
 - **New shared Rich widgets:** add to `cli/shared/ui/widgets.py` following
   `panel()`/`rule()`/`table()`'s shape (accept style-name strings, never
   hardcode colors); feature formatters should build on these three rather
@@ -431,6 +533,11 @@ callback, so `trutina-cli --help` never reaches it.
 - **Exactly one process-wide event loop.** Every accessor, service call,
   and repository call assumes it is running on the single portal-owned loop
   established once in `main.py::run()`.
+- **A correlation id bound on the main thread is visible inside the
+  portal's event loop without a re-bind.** See the dedicated section above
+  — this is a property of `anyio`'s task-scheduling contract, confirmed by
+  spike and re-confirmed by `test_dispatch_logging.py`, not something this
+  package's own code arranges.
 - **`ErrorCode` members referenced in `cli/shared/errors/` stay in sync
   with `trutina.shared`'s `ErrorCode` enum.** `format_app_error()` and
   related formatters use `ERRORS.get(..., ERRORS[ErrorCode.UNKNOWN_ERROR])`
@@ -438,7 +545,9 @@ callback, so `trutina-cli --help` never reaches it.
   without a matching `ERRORS`/`HINTS` entry here degrades to that generic
   catalog text rather than failing loudly — this is presentation
   degradation, not a test failure, so it must be checked
-  manually when `trutina-shared`'s `ErrorCode` enum changes.
+  manually when `trutina-shared`'s `ErrorCode` enum changes. The same is
+  true of `_ERROR_LEVEL_CODES` — a new incident-worthy code that's never
+  added there silently logs at INFO instead of ERROR.
 - **`Fake*Repo` instances behave closely enough to their PostgreSQL
   counterparts for CLI-level assertions.** E.g. `FakeJournalRepo` issues
   sequential journal numbers starting at 1 regardless of whether the
@@ -460,6 +569,10 @@ callback, so `trutina-cli --help` never reaches it.
   `error_boundary()`. If a command needs different error handling, that's
   a sign the boundary itself needs a new capability, not a local
   workaround.
+- **Adding a `logger.info(...)`/`logger.error(...)` call outside
+  `error_boundary()` for a command failure.** `error_boundary()` already
+  owns exactly one `command.failed` line per failure via `_log_failure()`;
+  a second call site duplicates it.
 - **Constructing a DTO directly inside `prompt.py`** instead of collecting
   raw values and delegating to `parser.py`. This is the exact drift
   parser convergence is designed to prevent (see above).
@@ -473,6 +586,10 @@ callback, so `trutina-cli --help` never reaches it.
   violation and produces intermittent, hard-to-reproduce failures when
   the lazily opened PostgreSQL connection is tied to the original loop,
   not an immediate error.
+- **Binding one `correlation_scope()` for an entire shell session**
+  instead of once per dispatched line. This would make every log line
+  from a long-running session share a single id, defeating correlation's
+  purpose.
 - **Re-introducing top-level forwarding modules** and leaving two public
   homes for the same symbols, or documenting shims that are not in the
   tree.
@@ -497,3 +614,11 @@ callback, so `trutina-cli --help` never reaches it.
   posting produces the empty-state `No postings found.` panel. The module
   docstring of `features/trial_balance/parser.py` says date-range rules are
   enforced downstream; that statement is inaccurate and should be corrected.
+- **Windows file rotation for the default log sink is not exercised at real
+  volume.** Two CLI processes holding the same log file open simultaneously
+  can, in principle, fail to rotate on Windows. The 5 MB default threshold
+  makes this rare, and a logging failure never crashes the app, but this has
+  only been confirmed to create the file correctly on first emit, not to
+  rotate correctly under sustained concurrent use. See
+  `trutina-observability`'s own CONTEXT.md for the same risk noted at the
+  package level.

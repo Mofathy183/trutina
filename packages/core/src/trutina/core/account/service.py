@@ -12,12 +12,22 @@ Responsibilities:
 - Coordinate persistence through AccountRepo.
 - Translate domain validation failures into ValidationAppError.
 - Return stable ViewModels to callers.
+- Log successful state changes (account.created / account.updated /
+    account.deleted) through the standard library's logging module.
+    Logging happens only after the underlying repository write
+    succeeds -- a raised AppError/ValidationAppError never produces a
+    log line here, and no read-only method logs anything. This module
+    imports nothing from trutina.observability or structlog; it only
+    ever calls logging.getLogger(__name__), which is formatted by
+    whatever the composing application configured (see
+    trutina-observability's own CONTEXT.md).
 
 CLI commands and API routes depend only on this service and the
 DTO contracts defined in dtos.py. They never interact directly with
 Account, ChartOfAccounts, or repository implementations.
 """
 
+import logging
 from collections.abc import Awaitable, Callable
 
 from pydantic import ValidationError
@@ -36,6 +46,8 @@ from .dtos import (
 from .repo import AccountRepo
 from .schemas.account import Account
 from .schemas.chart import ChartOfAccounts
+
+logger = logging.getLogger(__name__)
 
 AccountPostingsCheck = Callable[[str], Awaitable[bool]]
 """A predicate: given an account name, returns True if any posting
@@ -94,6 +106,7 @@ class AccountService:
         existence queries before constructing the domain object or
         writing anything. If both checks pass, builds the domain Account
         (which validates its own structural invariants) and persists it.
+        Logs "account.created" only after the repository write succeeds.
 
         TOCTOU note: the existence checks and write are not atomic.
         Under concurrent load, two requests can both pass the existence
@@ -144,6 +157,16 @@ class AccountService:
 
         await self._repo.create(account)
 
+        logger.info(
+            "account.created",
+            extra={
+                "context": {
+                    "code": account.code,
+                    "category": account.category.value,
+                }
+            },
+        )
+
         return self._to_view_model(account)
 
     async def update_account(self, dto: UpdateAccountInput) -> AccountViewModel:
@@ -152,7 +175,8 @@ class AccountService:
         Loads the current account and applies only the values explicitly
         provided by the caller.
         then runs a uniqueness pre-check for any changed name
-        before persisting the updated record.
+        before persisting the updated record. Logs "account.updated"
+        only after the repository write succeeds.
 
         Args:
             dto: Partial update input. Only fields explicitly set on
@@ -202,10 +226,17 @@ class AccountService:
 
         await self._repo.update(updated)
 
+        logger.info(
+            "account.updated",
+            extra={"context": {"code": updated.code}},
+        )
+
         return self._to_view_model(updated)
 
     async def get_account(self, code: str) -> AccountViewModel:
         """Fetch a single account by its code.
+
+        Read-only -- never logs a state-change event.
 
         Args:
             code: The account code to look up.
@@ -237,6 +268,7 @@ class AccountService:
         resolve_account() in a loop instead would rebuild the chart from
         a fresh repo.list_all() on every call, and two of those calls are
         not guaranteed to see the same snapshot of the account data.
+        Read-only -- never logs a state-change event.
 
         Returns:
             A ChartOfAccounts built from every persisted account.
@@ -252,6 +284,7 @@ class AccountService:
         logical operation (such as validating all lines of a journal
         entry) should call get_chart() once instead, to guarantee every
         reference resolves against the same snapshot of the chart.
+        Read-only -- never logs a state-change event.
 
         Args:
             reference: The account name as written on a journal line.
@@ -280,7 +313,7 @@ class AccountService:
 
         Unlike get_chart(), which returns the domain ChartOfAccounts for
         internal resolution use, this returns the service output contract view
-        model.
+        model. Read-only -- never logs a state-change event.
 
         Returns:
             A ChartOfAccountsViewModel containing every persisted
@@ -299,7 +332,8 @@ class AccountService:
         was supplied at construction -- verifies the account has no
         associated ledger postings before removing it from persistence.
         Without a supplied predicate, this performs an existence check
-        only, matching the previously documented behavior.
+        only, matching the previously documented behavior. Logs
+        "account.deleted" only after the repository delete succeeds.
 
         Args:
             code: The account code to delete.
@@ -327,6 +361,11 @@ class AccountService:
             )
 
         await self._repo.delete_by_code(code)
+
+        logger.info(
+            "account.deleted",
+            extra={"context": {"code": code}},
+        )
 
     @staticmethod
     def _to_view_model(account: Account) -> AccountViewModel:

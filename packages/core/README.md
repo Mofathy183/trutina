@@ -85,6 +85,10 @@ async def check_books(trial_balance_service):
     return report.total_debits, report.is_balanced, len(scoped.entries)
 ```
 
+## Logging
+
+Each service emits one INFO line through `logging.getLogger(__name__)` on a successful state change, and never on a read or a raised `AppError`/`ValidationAppError`: `account.created`/`account.updated`/`account.deleted` (`AccountService`), `journal.created` (`JournalService`), `posting.created` (`PostingService`, one line per batch, not per line), `trial_balance.generated` (`TrialBalanceService`, entry count and `as_of_date` only). No monetary field (an amount or a balance) is ever included in any event's context. This package imports nothing from `trutina-observability` or `structlog` — only the standard library's `logging` module — so it stays free of any formatting or transport decision, exactly as it stays free of `beanie`/`pymongo`/`sqlalchemy`/`asyncpg`. See [CONTEXT.md](CONTEXT.md) for the full rationale.
+
 ## Testing
 
 ```bash
@@ -97,4 +101,5 @@ uv run pytest -m "unit and core"
 - [`trutina-shared`](../shared/README.md) — validation helpers and the shared error model.
 - [`trutina-storage-mongo`](../storage-mongo/README.md) — repository implementations for account, journal, and posting.
 - [`trutina-storage-postgres`](../storage-postgres/README.md) — repository implementations, including the trial balance aggregation.
+- [`trutina-observability`](../observability/README.md) — this package emits through stdlib `logging` only; observability owns how those records are formatted and routed.
 - [root README](../../README.md) — workspace setup and cross-package information.

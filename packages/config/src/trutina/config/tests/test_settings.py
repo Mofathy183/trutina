@@ -3,6 +3,7 @@ import os
 import pytest
 from trutina.config import (
     ApiSettings,
+    LoggingSettings,
     MongoSettings,
     PostgresSettings,
     Settings,
@@ -47,6 +48,12 @@ class TestSettingsDefaults:
         assert settings.mongo.db == MongoSettings().db
         assert settings.api.port == ApiSettings().port
         assert settings.postgres.uri == PostgresSettings().uri
+
+    def test_nested_logging_field_defaults_match_its_own_defaults(self):
+        settings = Settings(_env_file=None)
+        assert settings.logging.level == LoggingSettings().level
+        assert settings.logging.format == LoggingSettings().format
+        assert settings.logging.logger_levels == LoggingSettings().logger_levels
 
 
 @pytest.mark.unit

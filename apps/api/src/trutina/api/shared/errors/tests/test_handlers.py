@@ -11,6 +11,8 @@ these handlers are actually reached from a raised exception inside a
 route) is covered separately in
 `api/composition/tests/test_app_error_handling.py`, using the real
 `api_app`/`api_client` fixtures rather than a bare FastAPI instance.
+End-to-end correlation-id behavior on real requests is covered in
+`api/composition/tests/test_app_logging.py`.
 """
 
 import json
@@ -33,12 +35,30 @@ from tests.factories import make_account, make_debit_line, make_journal_entry
 
 
 def _make_request() -> Request:
-    """A minimal Request -- every handler ignores it, so an empty HTTP
-    scope is sufficient. Mirrors the SimpleNamespace stand-in pattern
-    used in api/composition/tests/test_dependencies.py, but a real
-    (if minimal) Request works fine here since nothing reads from it.
+    """A minimal Request with no correlation id on it.
+
+    Handlers only read `request.url.path` and `request.state`, so an
+    empty HTTP scope is sufficient. A bare request models the case
+    where CorrelationIdMiddleware is not installed.
     """
     return Request(scope={"type": "http", "method": "GET", "path": "/", "headers": []})
+
+
+def _make_request_with_correlation_id(correlation_id: str) -> Request:
+    """A Request carrying an id exactly where CorrelationIdMiddleware puts it.
+
+    The middleware writes scope["state"]["correlation_id"]; Starlette's
+    Request.state reads that same dict.
+    """
+    return Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+            "state": {"correlation_id": correlation_id},
+        }
+    )
 
 
 def _body(response) -> dict:
@@ -278,3 +298,97 @@ class TestHandleUnexpectedError:
         response = await _handle_unexpected_error(_make_request(), exc)
 
         assert _body(response)["error_code"] == ErrorCode.UNKNOWN_ERROR.value
+
+    async def test_echoes_correlation_id_as_request_id_header(self):
+        """The catch-all runs outside CorrelationIdMiddleware, so its
+        response never passes through the middleware's send wrapper --
+        the handler must attach the header itself."""
+        exc = KeyError("boom")
+        request = _make_request_with_correlation_id("corr-hdr")
+
+        response = await _handle_unexpected_error(request, exc)
+
+        assert response.headers["x-request-id"] == "corr-hdr"
+
+    async def test_no_request_id_header_when_no_correlation_id(self):
+        exc = KeyError("boom")
+
+        response = await _handle_unexpected_error(_make_request(), exc)
+
+        assert "x-request-id" not in response.headers
+
+
+@pytest.mark.unit
+class TestHandlerLogging:
+    async def test_app_error_below_500_logs_at_info(self, caplog):
+        exc = AppError.not_found(
+            code=ErrorCode.UNKNOWN_ACCOUNT, resource="account", identifier="9999"
+        )
+        request = _make_request_with_correlation_id("corr-1")
+
+        with caplog.at_level("INFO"):
+            await _handle_app_error(request, exc)
+
+        records = [r for r in caplog.records if r.message == "request.failed"]
+        assert len(records) == 1
+        assert records[0].levelname == "INFO"
+
+    async def test_unexpected_error_logs_at_error_with_exc_info(self, caplog):
+        exc = KeyError("boom")
+        request = _make_request_with_correlation_id("corr-2")
+
+        with caplog.at_level("INFO"):
+            await _handle_unexpected_error(request, exc)
+
+        records = [r for r in caplog.records if r.message == "request.failed"]
+        assert len(records) == 1
+        assert records[0].levelname == "ERROR"
+        assert records[0].exc_info is not None
+
+    async def test_storage_unavailable_logs_at_error(self, caplog):
+        exc = AppError.storage_unavailable()
+        request = _make_request_with_correlation_id("corr-3")
+
+        with caplog.at_level("INFO"):
+            await _handle_app_error(request, exc)
+
+        records = [r for r in caplog.records if r.message == "request.failed"]
+        assert records[0].levelname == "ERROR"
+
+    async def test_log_line_carries_correlation_id_read_from_request_state(
+        self, caplog
+    ):
+        exc = AppError.unknown()
+        request = _make_request_with_correlation_id("corr-4")
+
+        with caplog.at_level("INFO"):
+            await _handle_app_error(request, exc)
+
+        record = next(r for r in caplog.records if r.message == "request.failed")
+        assert record.correlation_id == "corr-4"
+
+    async def test_correlation_id_is_top_level_not_nested_in_context(self, caplog):
+        """The id must sit beside event/level, not inside `context`, so
+        it is queryable the same way as on every other record."""
+        exc = KeyError("boom")
+        request = _make_request_with_correlation_id("corr-5")
+
+        with caplog.at_level("INFO"):
+            await _handle_unexpected_error(request, exc)
+
+        record = next(r for r in caplog.records if r.message == "request.failed")
+        assert record.correlation_id == "corr-5"
+        assert "correlation_id" not in record.context
+
+    async def test_missing_correlation_id_does_not_raise(self, caplog):
+        """A bare Request with no middleware-populated state must not
+        crash logging -- only unit tests without create_app() hit this
+        path, but it must degrade gracefully."""
+        exc = AppError.unknown()
+        request = _make_request()
+
+        with caplog.at_level("INFO"):
+            await _handle_app_error(request, exc)  # must not raise
+
+        record = next(r for r in caplog.records if r.message == "request.failed")
+        assert not hasattr(record, "correlation_id")

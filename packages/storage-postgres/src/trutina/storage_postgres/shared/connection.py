@@ -5,8 +5,20 @@ functions. This module sits at the infrastructure boundary and is used
 by concrete repository implementations and the Postgres test fixtures
 without introducing database concerns into services, domain models, or
 CLI code.
+
+Logging: connect() logs "db.connected" once the connectivity check
+succeeds, and disconnect() logs "db.disconnected". Neither log line
+carries postgres.uri -- only non-secret pool/connection settings --
+since the URI can embed credentials. The engine itself is created with
+hide_parameters=True, so a future SQLAlchemy exception's text never
+includes bound parameter values (account names, amounts, etc.); this
+is a defense-in-depth measure independent of what any log call does
+with the exception afterward. This module imports nothing from
+trutina.observability or structlog -- only logging.getLogger(__name__),
+consistent with every other emitter in the workspace.
 """
 
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy import text
@@ -19,6 +31,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from trutina.config import PostgresSettings
 from trutina.shared.errors import AppError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +98,16 @@ async def connect(postgres: PostgresSettings) -> PostgresConnection:
     SQLAlchemy ArgumentError, before this function's try block is
     reached, so there is nothing to dispose in that case.
 
+    The engine is created with hide_parameters=True: SQLAlchemy omits
+    bound parameter values from any exception it raises, so a future
+    query failure's text never includes an account name, code, or
+    amount. This holds regardless of what any caller does with the
+    exception afterward -- it is a property of the engine, not of the
+    logging pipeline.
+
+    On success, logs "db.connected" with non-secret pool settings only
+    -- never postgres.uri, which can embed credentials.
+
     Args:
         postgres: PostgreSQL configuration values.
 
@@ -103,6 +127,7 @@ async def connect(postgres: PostgresSettings) -> PostgresConnection:
         max_overflow=postgres.max_overflow,
         pool_pre_ping=postgres.pool_pre_ping,
         connect_args={"timeout": postgres.connect_timeout_s},
+        hide_parameters=True,
     )
 
     try:
@@ -116,6 +141,18 @@ async def connect(postgres: PostgresSettings) -> PostgresConnection:
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
+    logger.info(
+        "db.connected",
+        extra={
+            "context": {
+                "backend": "postgres",
+                "pool_size": postgres.pool_size,
+                "max_overflow": postgres.max_overflow,
+                "pool_pre_ping": postgres.pool_pre_ping,
+            }
+        },
+    )
+
     return PostgresConnection(
         engine=engine,
         session_factory=session_factory,
@@ -126,10 +163,13 @@ async def disconnect(connection: PostgresConnection) -> None:
     """Release PostgreSQL connection resources.
 
     Disposes the underlying SQLAlchemy engine associated with the
-    supplied connection bundle, closing every pooled connection.
+    supplied connection bundle, closing every pooled connection. Logs
+    "db.disconnected" after disposal completes.
 
     Args:
         connection: Connection resources previously created by
             ``connect()``.
     """
     await connection.engine.dispose()
+
+    logger.info("db.disconnected", extra={"context": {"backend": "postgres"}})

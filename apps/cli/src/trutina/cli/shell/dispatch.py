@@ -8,6 +8,13 @@ and trailing `<target> help` shorthands). Split out of loop.py so the
 loop itself reads as a plain read-a-line -> decide-what-it-is ->
 run-it sequence, with no Click/Typer exception handling in view.
 
+Correlation: `dispatch()` and `run_help()` each wrap their own
+`app(...)` call in `correlation_scope()`, so every line typed in the
+shell -- including a bare `help <target>` -- gets its own id, the same
+as a one-shot invocation gets in `main.py::run()`. This is what keeps
+a long-running shell session from having every command share a single
+correlation id.
+
 Confirmed empirically (see diag_milestone2.py, not assumed):
 
 - A command that fails at the domain/validation level (AppError,
@@ -29,6 +36,7 @@ import shlex
 from rich.text import Text
 from trutina.cli.composition import CliState, app
 from trutina.cli.shared.ui import console
+from trutina.observability import correlation_scope
 from typer.exceptions import TyperException
 
 
@@ -46,10 +54,11 @@ def run_help(state: CliState, target: list[str]) -> None:
         target: The command path to show help for, e.g. `[]` for
             top-level help, `["account"]`, or `["journal", "create"]`.
     """
-    try:
-        app([*target, "--help"], obj=state, standalone_mode=False)
-    except TyperException as exc:
-        console.print(Text(str(exc) or type(exc).__name__, style="warning"))
+    with correlation_scope():
+        try:
+            app([*target, "--help"], obj=state, standalone_mode=False)
+        except TyperException as exc:
+            console.print(Text(str(exc) or type(exc).__name__, style="warning"))
 
 
 def parse_line(stripped: str) -> list[str] | None:
@@ -78,13 +87,16 @@ def dispatch(state: CliState, args: list[str]) -> None:
     This is the only place a normal (non-help) line reaches the app --
     every one-shot invocation goes through the same `app(...)` call
     via main.py, so behavior here is identical to running
-    `trutina-cli <args>` directly.
+    `trutina-cli <args>` directly, apart from the correlation id
+    being bound per shell line here rather than once for the whole
+    one-shot invocation.
 
     Args:
         state: The CliState for this session.
         args: The shlex-parsed argument list, e.g. `["account", "list"]`.
     """
-    try:
-        app(args, obj=state, standalone_mode=False)
-    except TyperException as exc:
-        console.print(Text(str(exc) or type(exc).__name__, style="warning"))
+    with correlation_scope():
+        try:
+            app(args, obj=state, standalone_mode=False)
+        except TyperException as exc:
+            console.print(Text(str(exc) or type(exc).__name__, style="warning"))

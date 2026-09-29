@@ -13,6 +13,11 @@ Responsibilities:
 - Derive one LedgerPosting per journal line on the entry.
 - Persist the derived postings through PostingRepo.
 - Return stable PostingViewModels to callers.
+- Log "posting.created" through the standard library's logging module
+    once a batch of postings is persisted -- one line per
+    post_journal_entry() call, never per individual posting, never on
+    a read, and never on a path that raises AppError. This module
+    imports nothing from trutina.observability or structlog.
 
 PostingService does not validate account references (enforced upstream
 by JournalService via AccountService) and does not construct
@@ -20,12 +25,16 @@ JournalEntry instances. It trusts that any entry returned by
 JournalService is fully validated.
 """
 
+import logging
+
 from trutina.core.journal.service import JournalService
 from trutina.shared.errors import AppError, ErrorCode
 
 from .dtos import PostingViewModel
 from .repo import PostingRepo
 from .schemas.ledger_posting import LedgerPosting
+
+logger = logging.getLogger(__name__)
 
 
 class PostingService:
@@ -64,6 +73,8 @@ class PostingService:
         Retrieves the journal entry by number, verifies it has not
         already been posted, builds one LedgerPosting per line, persists
         the batch in a single repository call, and returns PostingViewModels.
+        Logs "posting.created" once, for the whole batch, only after the
+        repository write succeeds.
         The repository's transaction guarantees, if any, are adapter-specific.
 
         Args:
@@ -93,6 +104,16 @@ class PostingService:
 
         await self._repo.save_many(postings)
 
+        logger.info(
+            "posting.created",
+            extra={
+                "context": {
+                    "journal_number": journal_number,
+                    "line_count": len(postings),
+                }
+            },
+        )
+
         return [self._to_view_model(posting) for posting in postings]
 
     async def get_postings_by_account(
@@ -100,6 +121,8 @@ class PostingService:
         account: str,
     ) -> list[PostingViewModel]:
         """Retrieve all postings for a given account.
+
+        Read-only -- never logs a state-change event.
 
         Args:
             account: The account name to look up. Matching is
@@ -117,6 +140,8 @@ class PostingService:
         journal_number: int,
     ) -> list[PostingViewModel]:
         """Retrieve all postings derived from a specific journal entry.
+
+        Read-only -- never logs a state-change event.
 
         Args:
             journal_number: The journal number to look up.

@@ -79,6 +79,10 @@ Alembic migrations applied before the process starts (see
 `trutina-storage-postgres`'s own `CONTEXT.md`), so `bootstrap.py` performs no
 schema-registration step of its own.
 
+`bootstrap.py`'s lifespan also logs `app.started` once the container is attached
+and `app.stopped` once the connection is disposed, mirroring `db.connected`/
+`db.disconnected` at the storage layer one level up.
+
 ## Why A Frozen `Container` Dataclass Rather Than App-Level Globals
 
 **Decision:** `Container` (`composition/container.py`) is a frozen,
@@ -182,6 +186,9 @@ order, but the walk itself, not order, is what guarantees correct dispatch.
 - A final catch-all `Exception` handler, so no response can ever escape this app
   without the standard envelope shape.
 
+**Every handler also logs exactly once**, via a shared `_log_failure()` helper — see
+"Why Every Handler Logs Through `_log_failure()`, Exactly Once" below.
+
 ## Why `FieldViolation.value` Recovery Exists In `handlers.py`
 
 **Context:** `trutina-shared`'s `get_field_violations()` currently downgrades every
@@ -198,33 +205,89 @@ the identical reason. If `get_field_violations()` is ever fixed at the source, t
 function becomes a harmless no-op — it should not be deleted silently without
 confirming the upstream fix landed.
 
+## Why Logging Is Configured In `create_app()`, Not Only `main.py`
+
+**Decision:** `configure_logging(settings.logging, app="api")` and
+`app.add_middleware(CorrelationIdMiddleware)` both run inside `create_app()`,
+before any router is included — not only from `apps/api/main.py::main()`.
+
+**Why:** the production and dev Docker images both start the `uvicorn` CLI directly
+against `trutina.api.composition.app:app` (see the Dockerfile `CMD` lines) and never
+call `main()` at all. Importing `composition/app.py` is the only step guaranteed to
+run before the app serves any traffic, so that is where configuration has to live —
+putting it only in `main()` would mean the container image never configures logging
+at all. `configure_logging()` is idempotent (tracked via a marker attribute on the
+root logger — see `trutina-observability`'s own `CONTEXT.md`), so importing this
+module more than once in the same process, as `main()` also does for the `--reload`
+case described below, never installs a second handler.
+
+**The one case `main()`'s own call is not redundant:** `uvicorn.run(reload=True)`
+spawns a parent reloader-supervisor process that never imports the app module —
+only its spawned child worker does. `create_app()`'s own call to
+`configure_logging()` therefore never runs in that parent process, so
+`main()` calls it directly too, before `uvicorn.run(...)`. This makes the parent
+process's own startup banner correctly formatted under `--reload`, which
+`create_app()` alone cannot guarantee. Confirmed live in Phase 3. The production
+image never passes `--reload`, so this case only matters for local development.
+
+## Why Every Handler Logs Through `_log_failure()`, Exactly Once
+
+**Decision:** every exception handler in `shared/errors/handlers.py` calls a single
+`_log_failure()` helper after building its response body, passing the resolved
+status code and error code. `_log_failure()` logs one `request.failed` line: INFO
+below HTTP 500, ERROR with `exc_info` at or above it.
+
+**Why one shared helper rather than each handler logging independently:** the
+level/traceback policy (INFO vs. ERROR, when to attach a traceback) is a single
+decision that must be applied identically across five different handler functions.
+Duplicating that `if status_code >= 500` check five times invites exactly the kind
+of drift a shared helper exists to prevent — the same reasoning `_fill()`/
+`_fill_hint()` already apply to message-template interpolation.
+
+**Why the correlation id is read from `request.state`, never from the logging
+pipeline's own automatic context-variable lookup, inside these handlers
+specifically:** Starlette runs the catch-all `Exception` handler _outside_
+`CorrelationIdMiddleware` — after the middleware's own `correlation_scope()` has
+already reset the context variable in its `finally` block. A context-variable read
+at that point would silently lose the id on exactly the 500-level failures where it
+matters most for tracing. `CorrelationIdMiddleware` stores the id at
+`scope["state"]["correlation_id"]` specifically so `_log_failure()` can read it from
+`request.state.correlation_id` regardless of which handler is running, and pass it
+as an explicit top-level `extra` key rather than relying on the automatic processor.
+
+**Why the catch-all handler attaches its own `X-Request-ID` response header:**
+because it runs outside the middleware, its response never passes through the
+middleware's `send` wrapper (which is what adds the header for every other handler).
+`_handle_unexpected_error` therefore reads the id from `request.state` and attaches
+the header itself — a client reporting a 500 is exactly the caller who most needs
+that header to correlate their report with server-side logs.
+
 ## Allowed and Forbidden Dependencies
 
 **Allowed** (per `apps/api/pyproject.toml`): `trutina-core`, `trutina-storage-postgres`,
-`trutina-config`, `fastapi[standard]`, `uvicorn[standard]`. Adjacent-package READMEs
-are listed in this package's README.md See Also.
+`trutina-config`, `trutina-observability`, `fastapi[standard]`, `uvicorn[standard]`.
+Adjacent-package READMEs are listed in this package's README.md See Also.
 
 **Forbidden:** `trutina-cli`, or any other `apps/*` package. Nothing here should
 import `sqlalchemy`/`asyncpg` directly outside of `composition/bootstrap.py`, which is
 the one module permitted to see `PostgresConnection`/`PostgresExecutor`/
 `Postgres*Repo` types — routes, dependency providers, and `app.py` see only
-`Container`'s service attributes.
+`Container`'s service attributes and `trutina.observability`'s public surface
+(`configure_logging`, `CorrelationIdMiddleware`).
 
 **Direction:** enforced by the workspace's root `pyproject.toml` import-linter
-`layers` contract (`trutina.cli | trutina.api → trutina.storage_mongo →
-trutina.core → trutina.shared | trutina.config`). This package sits at the top beside
-the CLI; nothing downstream may import from it. **Flag:** the root contract's middle
-layer is still named `trutina.storage_mongo`, even though this package's own
-`pyproject.toml` now declares `trutina-storage-postgres` as its storage dependency,
-not `trutina-storage-mongo`. Whether that's a stale layer name in the root contract
-or an intentional generic role-name is outside this package's own docs to resolve —
-flagged for the root-level contract to confirm, not silently corrected here.
+`layers` contract (`trutina.cli | trutina.api → trutina.storage_mongo |
+trutina.storage_postgres | trutina.observability → trutina.core →
+trutina.shared | trutina.config`). This package sits at the top beside
+the CLI; nothing downstream may import from it.
 
 ## Layering Within This Package
 
 ```text
 api.composition.app.create_app()
+  -> configure_logging(settings.logging, app="api")
   -> api.composition.bootstrap.make_lifespan()   -> Container (once, at startup)
+  -> app.add_middleware(CorrelationIdMiddleware)
   -> api.shared.errors.register_exception_handlers()
   -> api.features.*.router
        -> Request Schema (schemas.py)
@@ -238,35 +301,42 @@ Within `api/shared/`, `response.py` sits below `errors/` — `errors/schemas.py`
 `ErrorResponse` extends `response.py`'s `BaseResponse`, never the reverse.
 `errors/catalog.py` and `errors/schemas.py` have no dependency on each other beyond
 both being read by `errors/handlers.py`, the only module that combines catalog
-lookup, response construction, and FastAPI's `add_exception_handler` registration.
+lookup, response construction, correlation-id-aware logging, and FastAPI's
+`add_exception_handler` registration.
 
 No import-linter contract currently enforces this sub-layering mechanically (only
 the workspace-level `apps → infrastructure → core → shared/config` contract is
 checked in CI) — it is observed convention in the current source, flagged here
-rather than described as enforced, mirroring the same caveat in `trutina-cli`'s own
-`CONTEXT.md`.
+rather than described as enforced.
 
 ## Control Flow
 
 ```text
 Process starts
   -> main() / uvicorn -> create_app(settings)
+      -> configure_logging(settings.logging, app="api")
       -> FastAPI(...) constructed
+      -> app.add_middleware(CorrelationIdMiddleware)
       -> register_exception_handlers(app)
       -> five routers included (system, account, journal, posting, trial_balance)
       -> lifespan = make_lifespan(settings), not yet entered
   -> uvicorn enters the lifespan
       -> connect(settings.postgres)  -- verified via ping; failure aborts startup
       -> app.state.container = build_container(connection)
+      -> logger.info("app.started", ...)
       -> (yield -- app now serves requests)
   -> per request:
+      -> CorrelationIdMiddleware binds/reuses a correlation id
       -> router resolves Depends(get_*_service) -> Container attribute
       -> mapper -> handler -> service -> presenter
       -> success: Response Schema serialized, standard envelope
       -> failure: exception propagates uncaught to the registered handler
-         -> JSON error envelope, correct HTTP status
+         -> _log_failure() logs "request.failed" once (INFO/ERROR by status)
+         -> JSON error envelope, correct HTTP status, X-Request-ID header
+      -> middleware logs "request.completed" (status, duration) in a finally block,
+         even if the handler raised
   -> process shutdown
-      -> lifespan's finally: disconnect(connection)
+      -> lifespan's finally: disconnect(connection); logger.info("app.stopped", ...)
 ```
 
 Entry points, bind address, and HTTP paths are in README.md Quick Start / API at a
@@ -286,7 +356,8 @@ ViewModel into a Response Schema (pure, no I/O); an exception handler turns what
 propagated out of a route into a `JSONResponse` built from
 `.model_dump(mode="json")` — never the bare `.model_dump()`, since
 `BaseResponse.timestamp` is a `datetime` with no default JSON encoder in Starlette's
-`JSONResponse`.
+`JSONResponse` — and logs exactly one `request.failed` line via `_log_failure()`
+before returning it.
 
 ## Extension Points
 
@@ -301,6 +372,9 @@ propagated out of a route into a `JSONResponse` built from
 - **New response envelope shape** — extend `BaseResponse`/`SuccessResponse`/
   `ErrorResponse`, never introduce a parallel, uncoordinated response base for a
   single feature.
+- **A new exception handler** — register it in `register_exception_handlers()` and
+  route its logging through the shared `_log_failure()` helper rather than adding an
+  independent log call; keep the INFO/ERROR-by-status-code policy in one place.
 
 ## Assumptions This Package Relies On
 
@@ -324,42 +398,13 @@ propagated out of a route into a `JSONResponse` built from
   `DEFAULT_ERROR_ENTRY` rather than crashing the handler — presentation degradation,
   not a test failure, and must be checked manually when `trutina-shared`'s
   `ErrorCode` enum changes.
+- **`configure_logging()` has already run by the time any route serves a request.**
+  Both `create_app()` and, in the `--reload` case, `main()` guarantee this; a route
+  or handler must never call `configure_logging()` itself.
 
 ## Known Gaps / Flags
 
-- **`_fill()` in `shared/errors/handlers.py` uses `except KeyError, IndexError:`**,
-  which is not valid Python 3 exception-handling syntax (`except (KeyError,
-IndexError):` is required). **Confirmed against live source in this pass** — this is
-  a live syntax defect, not an artifact of how the source was previously captured,
-  and would raise `SyntaxError` at import time as written. This resolves the prior
-  version of this document's open flag on the same question; it is no longer
-  "unconfirmed."
-- **The root workspace's import-linter `layers` contract still names its storage
-  layer `trutina.storage_mongo`**, while this package's own `pyproject.toml` depends
-  on `trutina-storage-postgres`. See the "Allowed and Forbidden Dependencies"
-  section above — flagged here, not resolved, since the root contract is outside
-  this package's own docs.
 - **`GET /trial-balance?as_of=` accepts any datetime, while `postings.posting_date` is a naive (timezone-unaware) timestamp.**
   What happens when a timezone-aware value, such as one ending in `Z`, is supplied has not been tested. It may fail at the database comparison instead of returning a report.
 - **`as_of` is not validated beyond being a parseable datetime.** A future value includes every posting, and a value before the earliest posting yields an empty `entries` list. An unparseable value is rejected with a 422 by FastAPI.
-
-## Common Mistakes to Avoid
-
-- Adding business logic, exception handling, or a domain-model construction call
-  inside a router function. A router's only job is wiring mapper -> handler ->
-  presenter behind `Depends(...)`.
-- Reaching for a real PostgreSQL type (`PostgresConnection`, `PostgresExecutor`, a
-  `Postgres*Repo`) anywhere outside `composition/bootstrap.py`.
-- Constructing `Container` or calling `build_container()` inside a route or a
-  dependency provider "to save a round trip."
-- Copying `system`'s flat router shape for a feature that has a request body or a
-  domain error to translate.
-- Bypassing `register_exception_handlers()` with a local `try`/`except AppError`
-  inside a route. If a route needs different error handling than the shared catalog
-  provides, that's a sign the catalog needs a new entry, not a local workaround.
-- Assuming a schema change is picked up automatically. `bootstrap.py` creates no
-  tables and applies no migrations itself — a new column or table needs a real
-  Alembic migration in `trutina-storage-postgres`, applied before the process starts,
-  or the failure surfaces only the first time the affected query runs.
-- Assuming `trutina-shared`'s `ErrorCode` message belongs in this package's catalog
-  by inheritance — every `ErrorCode` needs its own `ERROR_CATALOG` entry here.
+- **`tools/docker-smoke.sh` has not yet been run against the current logging wiring.** The script itself already asserts a structured `request.completed` line with a `correlation_id` in the container's stdout; it needs an actual run to confirm the Dockerfile's `--no-access-log`/`--reload-dir` changes and the observability package's presence in the image all work together end to end. Not blocking — the wiring itself is fully covered by `test_app_logging.py` against a real running app — but genuinely unverified in a container.

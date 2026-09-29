@@ -22,6 +22,46 @@ The trial balance is a report, not a stored resource, so `PostgresTrialBalanceRe
 
 Only PostgreSQL implements the trial balance contract. `trutina-storage-mongo` has no `TrialBalanceRepo`, by decision: new features target PostgreSQL only.
 
+## Logging
+
+`connect()` and `disconnect()` (`shared/connection.py`) each emit exactly one INFO line through `logging.getLogger(__name__)` — `db.connected` and `db.disconnected` — via the standard library only. This module imports nothing from `trutina.observability` or `structlog`, consistent with every emitter across the workspace: this package decides _that_ something happened, never _how_ it's formatted or _where_ it's routed.
+
+`db.connected`'s context is deliberately narrow: `backend`, `pool_size`, `max_overflow`, `pool_pre_ping`. `postgres.uri` is never logged, because it can embed credentials directly (`postgresql+asyncpg://user:pass@host/db`). This mirrors `trutina-storage-mongo`'s identical rule for `mongo.uri`.
+
+The engine is constructed with `hide_parameters=True`. SQLAlchemy then omits bound parameter values from the text of any exception it raises, so a future query failure's exception text never includes an account name, code, or amount — a property of the engine itself, independent of whatever a caller later does with that exception (log it, wrap it, discard it).
+
+`PostgresExecutor` does not log failures itself; it continues to attach `cause` to the translated `AppError` and lets the calling seam (an API exception handler, the CLI's `error_boundary()`) log it exactly once. This is unchanged by the logging rollout and matches the "log where the error is handled, not where it is raised" principle stated at the workspace level.
+
+### Known Gap Closed: Alembic's `fileConfig()` Silently Disabled Every Non-Alembic Logger
+
+**Symptom, as originally observed:** `test_connection_logging.py`'s two `db.connected`-assertion tests passed every time the file was run alone, and failed with `RuntimeError: coroutine raised StopIteration` every time the file ran as part of the full `integration and infra and postgres` suite.
+
+**Root cause:** the session-scoped `schema_init` fixture (`tests/fixtures/postgres.py`) runs `alembic upgrade head` once per session, ahead of every other Postgres-backed integration test. Alembic's generated `env.py` contains the standard
+
+```python
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+```
+
+`fileConfig()` defaults to `disable_existing_loggers=True` — this is Python's own `logging.config` behavior, not an Alembic bug. It sets `.disabled = True` on **every** `Logger` object already instantiated in the process that isn't explicitly named in the `[loggers]` section of `alembic.ini`. This package's `alembic.ini` names only `root`, `sqlalchemy`, `alembic`. `trutina.storage_postgres.shared.connection`'s module-level `logger = logging.getLogger(__name__)` object already existed (instantiated at import time, well before the first migration-dependent test ran), so the very first `schema_init` invocation in a session silently and permanently disabled it. Every subsequent `logger.info("db.connected", ...)` call became a silent no-op for the rest of that process — not filtered by level, not dropped by a missing handler, disabled at the `Logger` object itself.
+
+**Fix, in two parts:**
+
+1. **Primary fix, in `alembic/env.py`:**
+
+```python
+   if config.config_file_name is not None:
+       fileConfig(config.config_file_name, disable_existing_loggers=False)
+```
+
+`root`/`sqlalchemy`/`alembic` are still configured exactly as `alembic.ini` specifies; every other already-instantiated logger in the process is simply left alone rather than disabled.
+
+2. **Belt-and-braces insurance, in `tests/fixtures/postgres.py`'s `schema_init`:** immediately after `command.upgrade()` returns, every logger currently known to `logging.Logger.manager.loggerDict` is explicitly re-enabled (`.disabled = False`), as a backstop against the same class of bug from some other tool in the future — not a substitute for the `env.py` fix, since that backstop only runs inside this test fixture, not in any real (non-test) invocation of Alembic.
+
+**Confirmed fixed:** `pytest -m "integration and infra and postgres"` passes 45/45, including all three `test_connection_logging.py` cases, run as part of the full suite rather than standalone.
+
+**Why this matters beyond the test suite:** the underlying behavior — `fileConfig(disable_existing_loggers=True)` disabling arbitrary application loggers — is a property of _any_ process that calls Alembic's `env.py` programmatically, not just pytest. A future operational tool that invokes migrations in-process (rather than via the standalone `alembic` CLI) would have hit the identical silent-logging-loss failure mode in production. The `env.py` fix closes that path, not just the test's symptom.
+
 ## Invariants
 
 Repositories reconstruct validated core domain objects when reading rows instead of returning persistence models. This makes corrupted data surface through domain validation rather than silently travelling to a caller. The trial balance follows the same rule: each aggregated row is rebuilt as an `AccountBalanceEntry`, so a blank or invalid account value fails validation instead of reaching a report.
@@ -36,7 +76,7 @@ The composition root resolves PostgreSQL settings, verifies a connection, and gi
 
 For a trial balance, `PostgresTrialBalanceRepo.get_account_balances()` builds the grouped statement, runs it through the executor in a fresh session, and maps each result row to an `AccountBalanceEntry`. Report-level totals and the balanced flag are derived later by `TrialBalanceService`, not here.
 
-Alembic resolves its migration URL from the same settings types used at runtime. Passing `-x db=test` selects `TestSettings`, allowing migrations to target the test database without duplicating the connection URL in a second Alembic configuration.
+Alembic resolves its migration URL from the same settings types used at runtime. Passing `-x db=test` selects `TestSettings`, allowing migrations to target the test database without duplicating the connection URL in a second Alembic configuration. `env.py`'s `fileConfig()` call configures Python's stdlib `logging` module from `alembic.ini`'s `[loggers]`/`[handlers]`/`[formatters]` sections, with `disable_existing_loggers=False` — see the Known Gap Closed section above.
 
 ## Known Gaps
 
@@ -47,3 +87,11 @@ If a journal-entry write collides with an existing journal number, the repositor
 The trial balance aggregation scans every posting in scope on each call. `postings` is indexed on `account_key` but not on `posting_date`, so the `as_of_date` predicate is not index-assisted. This is acceptable at current ledger sizes and is tracked in `ROADMAP.md`.
 
 `PostgresTrialBalanceRepo._to_domain()` lets a Pydantic `ValidationError` escape if a row fails `AccountBalanceEntry` validation; it is not translated to `AppError`. The same holds for the other repositories' row reconstruction.
+
+No test yet forces a real constraint-violation exception (e.g. a duplicate account code write) and asserts the resulting exception's `str()` contains no leaked account code/name — `hide_parameters=True` is confirmed _set_ on the engine (`test_engine_is_created_with_hide_parameters`), but its actual masking effect on a real exception's text is not yet directly exercised by a test. Tracked as a small Phase 7 addition.
+
+## Allowed and Forbidden Dependencies
+
+**Allowed** (per `pyproject.toml`): `trutina-shared`, `trutina-core`, `trutina-config`, `sqlalchemy`, `asyncpg`, `alembic`.
+
+**Forbidden:** `trutina-cli`, `trutina-api`, `trutina-storage-mongo`, `trutina-observability`, `structlog`, or any presentation library. This package emits through `logging.getLogger(__name__)` only, enforced by the "Emitters use stdlib logging only" import-linter contract — it must never import `trutina.observability` or `structlog` directly.

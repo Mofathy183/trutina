@@ -10,12 +10,14 @@ dependencies = [
     "trutina-core",
     "trutina-storage-postgres",
     "trutina-config",
+    "trutina-observability",
 ]
 
 [tool.uv.sources]
 trutina-core = { workspace = true }
 trutina-storage-postgres = { workspace = true }
 trutina-config = { workspace = true }
+trutina-observability = { workspace = true }
 
 [project.scripts]
 trutina-cli = "trutina.cli.main:main"

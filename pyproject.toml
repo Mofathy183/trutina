@@ -45,9 +45,35 @@ name = "Layered architecture: apps -> storage -> core -> shared/config"
 type = "layers"
 layers = [
     "trutina.cli | trutina.api",
-    "trutina.storage_mongo | trutina.storage_postgres",
+    "trutina.storage_mongo | trutina.storage_postgres | trutina.observability",
     "trutina.core",
     "trutina.shared | trutina.config",
+]
+
+[[tool.importlinter.contracts]]
+name = "Emitters use stdlib logging only"
+type = "forbidden"
+source_modules = [
+    "trutina.core",
+    "trutina.shared",
+    "trutina.config",
+    "trutina.storage_mongo",
+    "trutina.storage_postgres",
+]
+forbidden_modules = ["structlog", "trutina.observability"]
+
+[[tool.importlinter.contracts]]
+name = "Observability stays generic"
+type = "forbidden"
+source_modules = ["trutina.observability"]
+forbidden_modules = [
+    "trutina.core",
+    "trutina.storage_mongo",
+    "trutina.storage_postgres",
+    "fastapi",
+    "starlette",
+    "typer",
+    "rich",
 ]
 
 [[tool.importlinter.contracts]]

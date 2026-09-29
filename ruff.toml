@@ -4,7 +4,7 @@ target-version = "py314"
 extend-exclude = ["packages/storage-postgres/alembic/versions"]
 
 [lint]
-select = ["E", "F", "I", "B", "UP", "C4"]
+select = ["E", "F", "I", "B", "UP", "C4", "LOG", "G"]
 ignore = ["E501"]
 
 [lint.flake8-bugbear]

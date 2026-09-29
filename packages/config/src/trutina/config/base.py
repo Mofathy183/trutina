@@ -12,6 +12,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .api import ApiSettings
+from .logging import LoggingSettings
 from .mongo import MongoSettings
 from .postgres import PostgresSettings
 
@@ -35,6 +36,7 @@ class Settings(BaseSettings):
     mongo: MongoSettings = Field(default_factory=MongoSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
 
 
 class TestSettings(Settings):
