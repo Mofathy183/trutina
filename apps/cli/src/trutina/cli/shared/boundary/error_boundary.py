@@ -11,8 +11,22 @@ functions in cli/shared/formatters/error.py with actual terminal output
 (via cli/shared/ui/console) and the CLI's exit-code contract. It sits
 above shared/errors/, shared/formatters/, and shared/ui/ rather than
 inside any one of them, since it depends on all three.
+
+Logging: this is also the single place a CLI command's failure is
+logged -- the CLI's equivalent of the API's `_log_failure()` in
+`api/shared/errors/handlers.py`. Exactly one "command.failed" line is
+emitted per caught exception, so one failure never produces two log
+entries. STORAGE_UNAVAILABLE, STORAGE_TIMEOUT, and UNKNOWN_ERROR log at
+ERROR with a traceback attached, since those are the codes that should
+page or be counted as incidents; every other, expected domain error
+(validation, not found, conflict) logs at INFO. The correlation id
+itself is never read or attached here directly -- it is picked up
+automatically by the logging pipeline's own context-variable processor,
+bound for the surrounding command by `main.py::run()` or
+`shell/dispatch.py`.
 """
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -25,7 +39,37 @@ from trutina.cli.shared.formatters.error import (
     format_validation_errors,
 )
 from trutina.cli.shared.ui import console
-from trutina.shared.errors import AppError, ValidationAppError
+from trutina.shared.errors import AppError, ErrorCode, ValidationAppError
+
+logger = logging.getLogger(__name__)
+
+# Codes that should page or be counted as incidents -- everything else
+# is an expected domain outcome (bad input, not found, conflict) and
+# logs at INFO instead.
+_ERROR_LEVEL_CODES = {
+    ErrorCode.STORAGE_UNAVAILABLE,
+    ErrorCode.STORAGE_TIMEOUT,
+    ErrorCode.UNKNOWN_ERROR,
+}
+
+
+def _log_failure(code: ErrorCode, *, cause: BaseException | None = None) -> None:
+    """Log exactly one "command.failed" line for a caught command failure.
+
+    Args:
+        code: The ErrorCode identifying what failed.
+        cause: The original exception to attach as a traceback, for
+            codes in `_ERROR_LEVEL_CODES`. Ignored for every other
+            code -- an expected domain error doesn't need a traceback
+            attached to an INFO line.
+    """
+    is_incident = code in _ERROR_LEVEL_CODES
+    logger.log(
+        logging.ERROR if is_incident else logging.INFO,
+        "command.failed",
+        extra={"context": {"error_code": code.value}},
+        exc_info=cause if is_incident else None,
+    )
 
 
 @contextmanager
@@ -53,14 +97,17 @@ def error_boundary() -> Iterator[None]:
     try:
         yield
     except ValidationAppError as exc:
+        _log_failure(exc.code)
         for p in build_error_panels(format_validation_app_error(exc)):
             console.print(p)
         raise typer.Exit(code=1) from None
     except AppError as exc:
+        _log_failure(exc.code, cause=exc.cause)
         for p in build_error_panels([format_app_error(exc)]):
             console.print(p)
         raise typer.Exit(code=1) from None
     except ValidationError as exc:
+        _log_failure(ErrorCode.VALIDATION_ERROR, cause=exc)
         for p in build_error_panels(format_validation_errors(exc)):
             console.print(p)
         raise typer.Exit(code=1) from None
