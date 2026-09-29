@@ -61,10 +61,32 @@ Exception Contract
     response ever escapes this app without the standard envelope shape.
     The real exception is never echoed into the response body.
 
-Logging: not yet wired. Each handler below is the intended insertion
-point (see the `# LOGGING:` comments) -- add it when ready, especially
-on `_handle_app_error` (STORAGE_*/UNKNOWN_ERROR) and the catch-all.
+Logging
+-------
+Every handler below calls `_log_failure()` exactly once, so one raised
+exception produces exactly one log line regardless of which handler
+catches it. Status codes under 500 (validation, not-found, conflict)
+log at INFO -- they're expected outcomes, not incidents. 500 and above
+log at ERROR with `exc_info` attached, so STORAGE_* / UNKNOWN_ERROR
+failures get a full traceback.
+
+Correlation id
+--------------
+CorrelationIdMiddleware stores the id at scope["state"]["correlation_id"],
+which Starlette exposes as `request.state.correlation_id`. Handlers read
+it from there, never from a context variable: Starlette runs the
+catch-all `Exception` handler *outside* user middleware, after the
+middleware's `correlation_scope()` has already reset the context
+variable, so a context-variable read (including the logging pipeline's
+own automatic one) would silently lose the id on exactly the 500s that
+matter most. `_log_failure()` therefore passes the id as an explicit
+top-level `extra` key, and the catch-all handler echoes it back as an
+`X-Request-ID` response header itself, because its response never
+passes through the middleware's send wrapper. Every other handler
+runs inside the middleware, which adds the header for them.
 """
+
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -81,6 +103,8 @@ from trutina.shared.errors import (
 from .catalog import DEFAULT_ERROR_ENTRY, ERROR_CATALOG, ErrorCatalogEntry
 from .schemas import ErrorResponse, FieldErrorDetail, ValidationErrorResponse
 
+logger = logging.getLogger(__name__)
+
 # Location prefixes FastAPI/Starlette use for RequestValidationError
 # entries, depending on where in the request the failing value came
 # from. Stripped so a request-level field path (e.g. "query.page_size")
@@ -93,6 +117,12 @@ _REQUEST_LOCATION_PREFIXES = {"body", "query", "path", "header"}
 # only reading "retry later" in prose.
 _RETRYABLE_CODES = {ErrorCode.STORAGE_UNAVAILABLE, ErrorCode.STORAGE_TIMEOUT}
 _RETRY_AFTER_SECONDS = "5"
+
+# Status at or above which a translated failure is an incident (ERROR
+# with traceback) rather than an expected outcome (INFO).
+_ERROR_LOG_THRESHOLD = 500
+
+_REQUEST_ID_HEADER = "X-Request-ID"
 
 
 def _fill(template: str, context: dict[str, str]) -> str:
@@ -114,6 +144,57 @@ def _fill_hint(template: str | None, context: dict[str, str]) -> str | None:
     if template is None:
         return None
     return _fill(template, context)
+
+
+def _correlation_id(request: Request) -> str | None:
+    """Read the correlation id CorrelationIdMiddleware stored on this request.
+
+    The middleware writes to scope["state"]["correlation_id"], which
+    Starlette's Request.state exposes as an attribute.
+
+    Returns None if the middleware wasn't installed (e.g. a bare
+    Request built in a unit test without going through create_app()).
+    """
+    return getattr(request.state, "correlation_id", None)
+
+
+def _log_failure(
+    request: Request,
+    exc: Exception,
+    *,
+    status_code: int,
+    error_code: str,
+    log_exc_info: bool = False,
+) -> None:
+    """Log exactly one line for a request that ended in a translated error.
+
+    Called once per handler, after the response body is built, so the
+    log line's error_code/status_code always match what the client
+    actually received.
+
+    The correlation id is passed as a top-level `extra` key (not inside
+    `context`) so it lands in the same place as on every other record;
+    see the module docstring for why the logging pipeline's own
+    context-variable lookup cannot be relied on here.
+    """
+    extra: dict[str, object] = {
+        "error_code": error_code,
+        "context": {
+            "http_status": status_code,
+            "route": request.url.path,
+        },
+    }
+    correlation_id = _correlation_id(request)
+    if correlation_id is not None:
+        extra["correlation_id"] = correlation_id
+
+    level = logging.ERROR if status_code >= _ERROR_LOG_THRESHOLD else logging.INFO
+    logger.log(
+        level,
+        "request.failed",
+        extra=extra,
+        exc_info=exc if log_exc_info else None,
+    )
 
 
 def _resolve_violation_entry(violation: FieldViolation) -> ErrorCatalogEntry:
@@ -190,7 +271,6 @@ async def _handle_validation_app_error(
     exception's actual type through its MRO, not by registration order.
     """
     assert isinstance(exc, ValidationAppError)
-    # LOGGING: log exc.code / exc.errors here once logging is wired.
 
     entry = ERROR_CATALOG.get(exc.code, DEFAULT_ERROR_ENTRY)
 
@@ -200,6 +280,9 @@ async def _handle_validation_app_error(
         hint=entry.hint,
         details=_build_field_details(exc.errors),
     )
+
+    _log_failure(request, exc, status_code=entry.status_code, error_code=exc.code.value)
+
     return JSONResponse(
         status_code=entry.status_code, content=body.model_dump(mode="json")
     )
@@ -215,8 +298,6 @@ async def _handle_app_error(request: Request, exc: Exception) -> JSONResponse:
     message and hint templates.
     """
     assert isinstance(exc, AppError)
-    # LOGGING: log exc.code / exc.cause here once logging is wired --
-    # this is the branch that matters most (STORAGE_*, UNKNOWN_ERROR).
 
     entry = ERROR_CATALOG.get(exc.code, DEFAULT_ERROR_ENTRY)
     context = dict(exc.context)
@@ -226,6 +307,15 @@ async def _handle_app_error(request: Request, exc: Exception) -> JSONResponse:
         message=_fill(entry.message, context),
         hint=_fill_hint(entry.hint, context),
     )
+
+    _log_failure(
+        request,
+        exc,
+        status_code=entry.status_code,
+        error_code=exc.code.value,
+        log_exc_info=entry.status_code >= _ERROR_LOG_THRESHOLD,
+    )
+
     return JSONResponse(
         status_code=entry.status_code,
         content=body.model_dump(mode="json"),
@@ -257,6 +347,14 @@ async def _handle_pydantic_validation_error(
         hint=entry.hint,
         details=_build_field_details(violations),
     )
+
+    _log_failure(
+        request,
+        exc,
+        status_code=entry.status_code,
+        error_code=ErrorCode.REQUEST_VALIDATION_ERROR.value,
+    )
+
     return JSONResponse(
         status_code=entry.status_code, content=body.model_dump(mode="json")
     )
@@ -299,6 +397,13 @@ async def _handle_request_validation_error(
         details=details,
     )
 
+    _log_failure(
+        request,
+        exc,
+        status_code=entry.status_code,
+        error_code=ErrorCode.REQUEST_VALIDATION_ERROR.value,
+    )
+
     return JSONResponse(
         status_code=entry.status_code,
         content=body.model_dump(mode="json"),
@@ -314,18 +419,33 @@ async def _handle_unexpected_error(request: Request, exc: Exception) -> JSONResp
     BaseResponse envelope contract exactly when a client most needs a
     stable shape. The raw exception message is never included in the
     response; only DEFAULT_ERROR_ENTRY's generic text is returned.
-    """
-    # LOGGING: this is the most important place to log a full
-    # stack trace once logging is wired -- this branch means something
-    # genuinely unanticipated happened.
 
+    Unlike every other handler, this one runs outside
+    CorrelationIdMiddleware, so its response never passes through the
+    middleware's send wrapper. The X-Request-ID header is therefore
+    attached here, from the id the middleware stored on the request --
+    a client reporting a 500 is exactly the caller who needs it.
+    """
     body = ErrorResponse(
         error_code=ErrorCode.UNKNOWN_ERROR.value,
         message=DEFAULT_ERROR_ENTRY.message,
     )
+
+    _log_failure(
+        request,
+        exc,
+        status_code=DEFAULT_ERROR_ENTRY.status_code,
+        error_code=ErrorCode.UNKNOWN_ERROR.value,
+        log_exc_info=True,
+    )
+
+    correlation_id = _correlation_id(request)
+    headers = {_REQUEST_ID_HEADER: correlation_id} if correlation_id else None
+
     return JSONResponse(
         status_code=DEFAULT_ERROR_ENTRY.status_code,
         content=body.model_dump(mode="json"),
+        headers=headers,
     )
 
 
