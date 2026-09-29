@@ -10,6 +10,7 @@ test, preserving schema and indexes.
 """
 
 import asyncio
+import logging
 from pathlib import Path
 
 import pytest_asyncio
@@ -63,6 +64,18 @@ async def schema_init(postgres_connection, test_settings):
     from this already-running event loop would raise "asyncio.run()
     cannot be called from a running event loop", so it's dispatched to a
     thread executor instead, giving env.py's asyncio.run() a fresh loop.
+
+    Alembic's env.py calls logging.config.fileConfig() against
+    alembic.ini's [loggers] section, which only names root/sqlalchemy/
+    alembic. fileConfig() defaults to disable_existing_loggers=True, so
+    running migrations here silently disables every trutina.* logger
+    already instantiated at import time (including
+    trutina.storage_postgres.shared.connection's module-level logger) --
+    a real bug found and fixed in Phase 6 (see
+    packages/storage-postgres/alembic/env.py, which now passes
+    disable_existing_loggers=False explicitly). The re-enable loop below
+    is belt-and-braces insurance against the same class of bug from some
+    other tool later, not the primary fix.
     """
     import argparse
 
@@ -75,6 +88,15 @@ async def schema_init(postgres_connection, test_settings):
 
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, lambda: command.upgrade(cfg, "head"))
+
+    # Defense-in-depth: force every logger back on in case some tool
+    # (Alembic's fileConfig() included) disabled loggers as a side
+    # effect of this migration run. The real fix is env.py passing
+    # disable_existing_loggers=False; this is a backstop, not a
+    # substitute for it.
+    for name in list(logging.Logger.manager.loggerDict):
+        logging.getLogger(name).disabled = False
+
     yield
 
 
