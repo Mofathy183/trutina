@@ -3,10 +3,10 @@
 ## Purpose
 
 This roadmap lists work that the confirmed package/app passes (`packages/shared`,
-`packages/config`, `packages/core`, `packages/storage-mongo`, `packages/storage-postgres`,
-`apps/api`, `apps/cli`) show is **genuinely still missing or unresolved** — not a
-restatement of any package's internal extension points, which live in that package's
-own README/CONTEXT.
+`packages/config`, `packages/core`, `packages/observability`,
+`packages/storage-mongo`, `packages/storage-postgres`, `apps/api`, `apps/cli`) show is
+**genuinely still missing or unresolved** — not a restatement of any package's
+internal extension points, which live in that package's own README/CONTEXT.
 
 ## Roadmap Principles
 
@@ -24,10 +24,6 @@ own README/CONTEXT.
   `packages/shared/src/trutina/shared/util.py` and
   `apps/cli/src/trutina/cli/features/journal/parser.py` directly and correct
   whichever doc is stale. Not re-confirmed against live source in this pass.
-- **Fix the confirmed `except KeyError, IndexError:` syntax defect** in
-  `api/shared/errors/handlers.py`. `apps/api/CONTEXT.md` confirms this against
-  live source as a real, invalid-Python defect — this is no longer an open question
-  of whether it's a bug, only of when it gets fixed.
 - **Re-confirm `modules/journal/rule.py` / `modules/posting/rule.py` scaffold
   status** against current `trutina-core` source — carried forward from prior
   docs without independent re-verification in this pass.
@@ -39,6 +35,9 @@ own README/CONTEXT.
   `apps/cli/.../features/trial_balance/parser.py`. It says date-range rules are
   enforced downstream by `LedgerPosting`/`AccountBalanceEntry`; no validation of
   `as_of_date` exists anywhere in the trial balance path.
+- **Run `tools/docker-smoke.sh` end to end against the current image** and
+  confirm the structured `request.completed`/`correlation_id` assertion it now
+  contains actually passes in a real container run, not just in review.
 
 ## Remaining Domain / Reporting Work
 
@@ -75,6 +74,10 @@ own README/CONTEXT.
   index, so the `as_of_date` filter is not index-assisted.
 - `trutina-storage-mongo` has no `TrialBalanceRepo` implementation. This is
   deliberate: PostgreSQL is the only backend new features target.
+- Add a test forcing a real Postgres constraint violation and asserting the
+  resulting exception's text contains no leaked account code/name/amount —
+  `hide_parameters=True` is confirmed _set_ on the engine, but its actual
+  masking effect on a real exception's text is not yet directly exercised.
 
 ## Remaining Presentation Work
 
@@ -88,6 +91,10 @@ own README/CONTEXT.
   one-shot invocation (`trutina-cli trial-balance`) is dispatched by `main.py`
   rather than opening the shell. Further CLI work is new command groups and
   shell/interactive enhancements.
+- **Windows file rotation** for the CLI's default log sink is not exercised at
+  real volume — two CLI processes holding the same log file open simultaneously
+  could, in principle, fail to rotate. Low risk at the current default (5 MB
+  threshold), not yet observed as an actual problem.
 
 ## Remaining Integration Surfaces
 
@@ -101,12 +108,13 @@ Trutina should be considered on track when, in addition to what is already true
 today (balanced-entry enforcement, deterministic journal numbering and posting
 derivation, stable repository contracts, storage isolated behind interfaces, a
 shared error-rendering boundary in both presentation apps, a completed
-Postgres cutover for both `apps/cli` and `apps/api`, and a trial balance
-available from posted ledger data through both `trutina-cli` and `trutina-api`):
+Postgres cutover for both `apps/cli` and `apps/api`, a trial balance
+available from posted ledger data through both `trutina-cli` and `trutina-api`,
+and structured, correlated logging shipped across both presentation apps and
+every service/storage layer beneath them):
 
 - the `default_posting_date()` documentation conflict is resolved with a
   source-level check, not a guess;
-- the confirmed `handlers.py` syntax defect is fixed, not just documented;
 - root `compose.yml`/`compose.dev.yml` provision PostgreSQL for local
   development, matching what `apps/api`/`apps/cli` actually depend on;
 - `apps/api/README.md`'s test-tier coverage is confirmed feature-by-feature the
@@ -114,5 +122,8 @@ available from posted ledger data through both `trutina-cli` and `trutina-api`):
 - the trial balance can list every chart account, not only accounts with activity;
 - `MongoPostingRepo.save_many()`'s transaction gap is closed or explicitly
   re-accepted with a documented reason;
-- future features continue to leave `trutina.core` free of `beanie`/`pymongo`
-  and `sqlalchemy`/`asyncpg` imports, and free of CLI/API awareness.
+- `tools/docker-smoke.sh` has actually been run against the current image, not
+  only written;
+- future features continue to leave `trutina.core` free of `beanie`/`pymongo`,
+  `sqlalchemy`/`asyncpg`, `structlog`/`trutina.observability` imports, and free
+  of CLI/API awareness.

@@ -6,13 +6,14 @@ Trutina is a Python double-entry bookkeeping engine. The repository is a `uv`
 workspace, not a single application: `trutina-core` owns the accounting domain,
 `trutina-storage-mongo` and `trutina-storage-postgres` each implement its repository
 contracts against a different backend, `trutina-config`/`trutina-shared` provide
-cross-cutting settings and error/validation primitives, and two independent
-presentation apps — `trutina-cli` (Typer/Rich terminal + interactive shell) and
-`trutina-api` (FastAPI) — sit on top of the same domain services. This document
-explains why the workspace is shaped this way and rolls up what each package's own,
-independently-verified `README.md`/`CONTEXT.md` confirms is actually implemented
-today. For any package's internal reasoning, see that package's own `CONTEXT.md` —
-this file does not restate it.
+cross-cutting settings and error/validation primitives, `trutina-observability`
+provides shared logging configuration and request/command correlation, and two
+independent presentation apps — `trutina-cli` (Typer/Rich terminal + interactive
+shell) and `trutina-api` (FastAPI) — sit on top of the same domain services. This
+document explains why the workspace is shaped this way and rolls up what each
+package's own, independently-verified `README.md`/`CONTEXT.md` confirms is actually
+implemented today. For any package's internal reasoning, see that package's own
+`CONTEXT.md` — this file does not restate it.
 
 ## Why Split Into a Workspace At All
 
@@ -25,10 +26,12 @@ presentation concerns, and the domain layer never needs to know either exists.
 package for the same reason: each is one of only two places in the workspace
 allowed to import its respective driver (`beanie`/`pymongo`, or
 `sqlalchemy`/`asyncpg`), so a repository contract's storage-agnosticism is provable
-by import-linter, not just asserted by convention — and proving both contracts are
-genuinely backend-agnostic, not Mongo-shaped in disguise, was the explicit reason
-`trutina-storage-postgres` was built as a sibling rather than a Mongo-package
-subfolder. `trutina-shared` and `trutina-config` sit at the bottom because their
+by import-linter, not just asserted by convention. `trutina-observability` exists
+as its own package for a parallel reason: both presentation apps need the identical
+formatter chain, redaction, and correlation-id handling, and building that twice
+would have been exactly the "N independently drifting copies of the same rule"
+failure mode the rest of the workspace's architecture already avoids for business
+logic. `trutina-shared` and `trutina-config` sit at the bottom because their
 contents (validation rules, the error model, environment-driven settings) are
 needed identically by every package above them and have no accounting-specific or
 transport-specific shape of their own.
@@ -38,6 +41,8 @@ transport-specific shape of their own.
 - **Account, journal, and posting domains** — validated schemas, DTOs/ViewModels,
   and all three services (`AccountService`, `JournalService`, `PostingService`)
   are confirmed complete in `trutina-core`'s own README/CONTEXT, not partial.
+  Each also logs one success event through stdlib `logging` after a
+  state-changing write persists.
 - **Both storage backends** — concrete `Mongo*Repo` implementations
   (`trutina-storage-mongo`) and concrete `Postgres*Repo` implementations
   (`trutina-storage-postgres`, with Alembic migrations) are confirmed implemented
@@ -45,11 +50,21 @@ transport-specific shape of their own.
   presentation app** — `apps/cli/pyproject.toml` and `apps/api/pyproject.toml` both
   declare `trutina-storage-postgres`, not `trutina-storage-mongo`, as their storage
   dependency. `trutina-storage-mongo` remains in the workspace with its own CI lane
-  but is not app-facing today.
+  but is not app-facing today. Both backends' `connect()`/`disconnect()` now log
+  `db.connected`/`db.disconnected` through stdlib `logging`, never the connection
+  URI.
+- **`trutina-observability`** — a shared package providing `configure_logging()`,
+  `correlation_scope()`, and `CorrelationIdMiddleware`, consumed by exactly the two
+  presentation apps. Every other package (core, shared, config, both storage
+  backends) emits through plain `logging.getLogger(__name__)` calls with zero
+  dependency on this package, enforced by two import-linter contracts. Fully
+  tested (40 unit tests as of its initial build), with its own README/CONTEXT.
 - **The CLI** — `account`, `journal`, `posting` Typer command groups are fully
   wired end to end (command → parser/prompt → handler → service → repository),
   with unit and integration test tiers per feature, plus a working interactive
   shell with live tab completion derived from the real Click command tree.
+  `error_boundary()` now also logs exactly one `command.failed` line per caught
+  failure, and each dispatched shell line binds its own correlation id.
 - **The API** — per `apps/api/README.md`/`CONTEXT.md`, the fixed Router → Mapper →
   Handler → Presenter pipeline, eager lifespan-time `Container` composition against
   `trutina-storage-postgres`, and the shared exception-handling seam are all live,
@@ -57,13 +72,17 @@ transport-specific shape of their own.
   flat exception. `apps/api/README.md` now exists (resolving the prior "no README"
   gap), but it does not enumerate test-tier coverage per feature the way
   `apps/cli`'s documentation does — whether all three features have all five test
-  tiers written remains unconfirmed in this pass.
+  tiers written remains unconfirmed in this pass. `create_app()` now configures
+  logging and attaches `CorrelationIdMiddleware`; every exception handler logs
+  exactly one `request.failed` line through a shared `_log_failure()` helper.
 - **Trial balance** — `TrialBalanceService`, `TrialBalanceRepo`, `AccountBalanceEntry`,
   and `TrialBalanceViewModel` in `trutina-core`; `PostgresTrialBalanceRepo` in
   `trutina-storage-postgres` (a `GROUP BY` over `postings`, no migration); the
   `trial-balance` CLI command; and `GET /trial-balance`. All four layers have unit and
   integration tests. All-time or single `as_of_date` cutoff only; accounts without
-  postings do not appear; PostgreSQL only.
+  postings do not appear; PostgreSQL only. `TrialBalanceService` now also logs
+  `trial_balance.generated` (entry count and `as_of_date` only — never an amount)
+  on every successful report.
 
 ## What Is Partial or Explicitly Out of Scope
 
@@ -85,8 +104,16 @@ transport-specific shape of their own.
   known, accepted upstream gap, not independently re-fixed by either app.
 - The `ACCOUNT_HAS_POSTINGS` account-delete safeguard is wired in
   `AccountService.delete_account()` only when a composition root supplies the
-  optional `has_postings` callback — not confirmed whether either app's
-  composition root currently does.
+  optional `has_postings` callback. Both `apps/api`'s `build_container()` and
+  `apps/cli`'s `CliContext` now supply it against the posting repository —
+  confirm coverage with tests before treating this item as fully closed.
+- No test yet forces a real Postgres constraint violation and inspects the
+  resulting exception's text for a leaked value — `hide_parameters=True` is
+  confirmed set on the engine, but this specific masking behavior is not yet
+  directly exercised by a test.
+- `tools/docker-smoke.sh` has been updated to assert structured logging output
+  in the running container, but has not yet been re-run end-to-end in this pass
+  to confirm it against the current Dockerfile/observability wiring.
 
 ## Cross-Package Conflicts Found During This Pass
 
@@ -109,25 +136,22 @@ transport-specific shape of their own.
    today. Treat API test coverage as "designed for and README-documented" rather
    than "tier-by-tier confirmed" until a pass checks each feature's test
    directory directly.
-3. **Confirmed syntax defect (previously only flagged).** `apps/api/CONTEXT.md`
-   now states, against live source, that `_fill()` in
-   `api/shared/errors/handlers.py` uses `except KeyError, IndexError:`, which is
-   invalid Python 3 syntax (`except (KeyError, IndexError):` is required), and
-   would raise `SyntaxError` at import time as written. This resolves the prior
-   version of this document's open question of whether it was a live bug or a
-   capture artifact — it is confirmed live. **Not yet fixed** — carried forward
-   as an item for `ROADMAP.md`.
-4. **Root import-linter storage-layer naming — resolved in this pass.**
-   `apps/cli/CONTEXT.md` and `apps/api/CONTEXT.md` both flagged that the root
-   `pyproject.toml`'s import-linter `layers` contract "still names its storage
-   layer `trutina.storage_mongo`" while each app's own `pyproject.toml` depends on
-   `trutina-storage-postgres`. Checked directly against the current root
-   `pyproject.toml` in this pass: the `layers` contract already reads
-   `"trutina.storage_mongo | trutina.storage_postgres"` — both backends are
-   named as parallel members of the same layer. `ARCHITECTURE.md` and `AGENTS.md`
-   have been corrected to reflect this and to state explicitly that only
-   `trutina-storage-postgres` is consumed by either app today. This flag is
-   closed.
+3. **Withdrawn — was previously flagged as a confirmed syntax defect.**
+   `except KeyError, IndexError:` in `api/shared/errors/handlers.py::_fill()` was
+   flagged in earlier passes of this document (and of `ROADMAP.md`, `AGENTS.md`,
+   `ARCHITECTURE.md`, `apps/api/CONTEXT.md`) as invalid Python 3 syntax. Confirmed
+   during the logging rollout's Phase 3 that this is in fact valid PEP 758 syntax
+   on Python 3.14 (the unparenthesized multi-exception form is permitted when
+   there is no `as` clause) — the file imports and runs cleanly, `ruff format`
+   with `target-version = "py314"` does not rewrite it, and CI has never failed
+   on it. This flag is now closed and removed from every document that
+   previously carried it.
+4. **Root import-linter storage-layer naming — resolved in a prior pass,
+   re-confirmed here.** The root `pyproject.toml`'s `layers` contract names its
+   storage-adjacent layer as `"trutina.storage_mongo | trutina.storage_postgres |
+trutina.observability"` — all three sit at the same position, with
+   `trutina.observability` added during the logging rollout. `ARCHITECTURE.md`
+   and `AGENTS.md` both reflect this current three-member layer.
 5. **Root `compose.yml`/`compose.dev.yml` still MongoDB-only.** Both files
    provision and sync only MongoDB/`trutina-storage-mongo` paths — no PostgreSQL
    service, no `trutina-storage-postgres` sync/rebuild targets — despite
@@ -135,6 +159,21 @@ transport-specific shape of their own.
    Confirmed against the current file contents in this pass. **Not resolved
    here** — infra file changes are out of scope for a documentation pass; tracked
    in `ROADMAP.md`.
+6. **A real, since-fixed bug found during the logging rollout's own
+   verification, recorded here for cross-package visibility.** Alembic's
+   generated `env.py` (for `trutina-storage-postgres`'s migrations) calls
+   `logging.config.fileConfig()` against `alembic.ini`'s `[loggers]` section,
+   which names only `root`/`sqlalchemy`/`alembic`. `fileConfig()` defaults to
+   `disable_existing_loggers=True`, which silently disabled every other
+   already-instantiated Python logger in the process for the rest of a test
+   session — including this workspace's own
+   `trutina.storage_postgres.shared.connection` logger, whose `db.connected`/
+   `db.disconnected` log lines became silent no-ops after the first migration
+   ran. Fixed by passing `disable_existing_loggers=False` explicitly in `env.py`,
+   plus a belt-and-braces re-enable step added to `tests/fixtures/postgres.py`'s
+   `schema_init`. See `packages/storage-postgres/CONTEXT.md` for the full
+   account; this entry exists so the fact is discoverable from this
+   cross-package document too, not only from that package's own docs.
 
 ## Testing Strategy (cross-cutting)
 
@@ -142,20 +181,23 @@ Every package/app's tests are collected from one root `pytest.ini`
 (`testpaths = tests apps packages`), with a mandatory three-axis marker
 discipline enforced by root `conftest.py`: a hand-written speed marker
 (`unit`/`integration`), an automatically-derived layer marker
-(`core`/`infra`/`cli`/`api`/`shared`/`config`, derived from file path — never
-hand-written), and, for `infra`-layer tests only, an automatically-derived backend
-marker (`mongo`/`postgres`, derived from which storage package's directory the
-test lives under). This lets `pytest -m "unit and cli"` or
-`pytest -m "integration and infra and postgres"` remain trustworthy filters
-instead of decorative metadata that could silently drift from where a test
-actually lives. Root `tests/` holds only shared fixtures/factories/fakes; every
-package/app's real test cases live beside its own code.
+(`core`/`infra`/`cli`/`api`/`shared`/`config`/`observability`, derived from file
+path — never hand-written), and, for `infra`-layer tests only, an
+automatically-derived backend marker (`mongo`/`postgres`, derived from which
+storage package's directory the test lives under). This lets
+`pytest -m "unit and cli"` or `pytest -m "integration and infra and postgres"`
+remain trustworthy filters instead of decorative metadata that could silently
+drift from where a test actually lives. Root `tests/` holds only shared
+fixtures/factories/fakes; every package/app's real test cases live beside its own
+code. `tests/fixtures/postgres.py`'s session-scoped `schema_init` applies the
+real Alembic migration history once per session and re-enables every logger
+afterward (see Cross-Package Conflict #6 above). `tests/fixtures/logging.py`'s
+autouse fixture removes only the handler `trutina-observability`'s
+`configure_logging()` installed itself, after every test.
 
 ## Long-Term Direction
 
 - Confirm and, if needed, correct the `default_posting_date()` conflict above.
-- Fix the confirmed `except KeyError, IndexError:` defect in
-  `api/shared/errors/handlers.py`.
 - Update root `compose.yml`/`compose.dev.yml` to provision PostgreSQL, matching
   what `apps/api`/`apps/cli` actually depend on.
 - Confirm `apps/api/README.md`'s test-tier coverage feature-by-feature, the way
@@ -165,3 +207,8 @@ package/app's real test cases live beside its own code.
 - Add import/export and external integration surfaces once reporting exists.
 - Re-confirm `modules/journal/rule.py` / `modules/posting/rule.py` scaffold status
   directly against current `trutina-core` source.
+- Run `tools/docker-smoke.sh` end to end against the current image and confirm
+  its structured-logging assertion actually passes in a real container.
+- Add a test exercising `hide_parameters=True`'s actual masking effect against a
+  real Postgres constraint-violation exception's text, not just confirming the
+  flag is set on the engine.
