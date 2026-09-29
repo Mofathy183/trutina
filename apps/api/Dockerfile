@@ -34,6 +34,7 @@
     COPY packages/shared/pyproject.toml packages/shared/pyproject.toml
     COPY packages/core/pyproject.toml packages/core/pyproject.toml
     COPY packages/config/pyproject.toml packages/config/pyproject.toml
+    COPY packages/observability/pyproject.toml packages/observability/pyproject.toml
     COPY packages/storage-postgres/pyproject.toml packages/storage-postgres/pyproject.toml
     COPY apps/api/pyproject.toml apps/api/pyproject.toml
     
@@ -85,7 +86,8 @@
     # expose a module-level `app` object itself. Target the real ASGI app
     # module/attribute directly here instead, matching main.py's own
     # uvicorn.run(...) call target.
-    CMD ["uvicorn", "trutina.api.composition.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    CMD ["uvicorn", "trutina.api.composition.app:app", \
+        "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
     
     # ---------------------------------------------------------------------------
     # Stage: dev  (local development only — used via compose.dev.yml)
@@ -104,9 +106,10 @@
     CMD ["uv", "run", "--package", "trutina-api", "uvicorn", \
             "trutina.api.composition.app:app", \
             "--host", "0.0.0.0", "--port", "8000", \
-            "--reload", \
+            "--reload", "--no-access-log", \
             "--reload-dir", "/app/apps/api/src", \
             "--reload-dir", "/app/packages/core/src", \
             "--reload-dir", "/app/packages/config/src", \
             "--reload-dir", "/app/packages/storage-postgres/src", \
-            "--reload-dir", "/app/packages/shared/src"]
+            "--reload-dir", "/app/packages/shared/src", \
+            "--reload-dir", "/app/packages/observability/src"]
