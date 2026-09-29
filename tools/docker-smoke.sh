@@ -95,7 +95,7 @@ echo "==> Waiting for API /health"
 for i in $(seq 1 "$RETRIES"); do
     if curl -fsS "http://localhost:8000/health" >/dev/null 2>&1; then
         echo "API is healthy"
-        exit 0
+        break
     fi
     if [ "$i" -eq "$RETRIES" ]; then
         echo "ERROR: API did not become healthy in time" >&2
@@ -105,3 +105,12 @@ for i in $(seq 1 "$RETRIES"); do
     fi
     sleep "$RETRY_INTERVAL"
 done
+
+echo "==> Verifying structured JSON logging"
+if ! docker logs "$API_NAME" 2>&1 | grep "request.completed" | grep -q "correlation_id"; then
+    echo "ERROR: no structured request.completed log line with a correlation_id found" >&2
+    echo "==> API logs:" >&2
+    docker logs "$API_NAME" >&2 || true
+    exit 1
+fi
+echo "Structured logging confirmed"
