@@ -28,14 +28,14 @@ Enforced mechanically by `import-linter` at the workspace root
 ```text
 apps.cli | apps.api
         ▼
-trutina.storage_mongo
+trutina.storage_mongo | trutina.storage_postgres | trutina.observability
         ▼
 trutina.core            ← this package
         ▼
 trutina.shared | trutina.config
 ```
 
-Two contracts apply directly to this package:
+Three contracts apply directly to this package:
 
 1. **`trutina.core` may not import `beanie` or `pymongo`**, at all, anywhere. This
    is checked as a `forbidden` contract, not a `layers` contract — it's stronger than
@@ -43,7 +43,9 @@ Two contracts apply directly to this package:
    A repository contract (`AccountRepo`, `JournalRepo`, `PostingRepo`) is defined
    entirely in terms of domain types; nothing about its shape may leak a storage
    detail.
-2. **Internal ordering: `posting → journal → account`**, one-directional. `posting`
+2. **`trutina.core` may not import `sqlalchemy` or `asyncpg`**, at all, anywhere —
+   the same rule, applied to the second storage backend once it existed.
+3. **Internal ordering: `posting → journal → account`**, one-directional. `posting`
    may import from `journal` and `account`; `journal` may import from `account`;
    `account` may import from neither. This mirrors the real dependency in the
    accounting model — a posting is derived from a journal entry, which references
@@ -57,6 +59,14 @@ The layering rules are what let `AccountService`, `JournalService`, and
 a bug fix in one module could silently change behavior in a module that has no test
 coverage for that interaction. The one-directional rule keeps the blast radius of any
 change legible from the import statements alone.
+
+A fourth workspace-level rule applies here too, though it has no dedicated
+`forbidden` contract of its own the way the two storage bans do: this package emits
+through `logging.getLogger(__name__)` exclusively, never through `structlog` or
+`trutina.observability`. This is covered by the "Emitters use stdlib logging only"
+contract, which names `trutina.core` explicitly among its `source_modules`. See
+"Why Services Log Success, Never Failure" below for what that means in practice.
+
 `trutina.core.trial_balance` sits outside the `posting → journal → account` contract.
 It imports only from `trutina.shared`, and no import-linter contract names it, so its
 independence from `posting` is a property of the current source, not an enforced rule.
@@ -66,9 +76,9 @@ independence from `posting` is a property of the current source, not an enforced
 ### Repository contracts live in core; implementations do not
 
 `AccountRepo`, `JournalRepo`, and `PostingRepo` are abstract (`abc.ABC`) classes
-defined here. Concrete adapters (`MongoAccountRepo`, etc.) live in
-`trutina-storage-mongo`, a separate, lower-level-of-abstraction-but-higher-in-the-
-dependency-graph package. This is the Dependency Inversion Principle applied
+defined here. Concrete adapters (`MongoAccountRepo`, `PostgresAccountRepo`, etc.) live
+in the two storage packages — separate, lower-level-of-abstraction-but-higher-in-the-
+dependency-graph packages. This is the Dependency Inversion Principle applied
 literally: the domain defines the contract; storage conforms to it, not the other
 way around.
 
@@ -77,7 +87,7 @@ indexes, connection pooling) anywhere in its own types. `PostingRepo.save_many()
 does not promise all-or-nothing persistence, so any stronger adapter guarantee must
 be documented and tested by that adapter. This is deliberate: the alternative
 (leaking a `session` parameter or similar into the contract) would violate the
-zero-Mongo-awareness rule for a marginal gain.
+zero-storage-awareness rule for a marginal gain.
 
 ### DTOs and ViewModels, not raw domain models, at the service boundary
 
@@ -184,11 +194,48 @@ constructed.
 
 Every `raise` inside a service is one of these two types (from `trutina-shared`),
 or a `pydantic.ValidationError` caught and translated into one before it escapes.
-This is what lets every consumer — CLI's `error_boundary()`, a future API exception
-handler — write exactly one catch clause per error type and be confident nothing
+This is what lets every consumer — CLI's `error_boundary()`, the API's exception
+handlers — write exactly one catch clause per error type and be confident nothing
 else can leak through. A service method that lets a raw `KeyError` or a
 storage-driver exception escape is a bug in that service, not a caller's problem to
 work around.
+
+### Why Services Log Success, Never Failure
+
+**Decision:** Each of the four services emits exactly one `logging.INFO` line
+through `logging.getLogger(__name__)` after a state-changing write actually
+succeeds — never before, never speculatively, and never on any path that raises
+`AppError`/`ValidationAppError`. Read-only methods (`get_*`, `list_*`,
+`resolve_*`) never log anything.
+
+**Why success-only:** a failure is already fully described by the `AppError`/
+`ValidationAppError` that propagates out of the service — `.code`, `.context`,
+and (for infra failures) `.cause` are all a caller needs to log it correctly, and
+exactly one seam (an API exception handler, the CLI's `error_boundary()`) is
+responsible for turning that into exactly one log line, at the right level, with
+the right traceback policy. If the service _also_ logged on its own failure path,
+one real failure would produce two log lines — one from the service, one from the
+seam — undermining the "log where the error is handled, not where it is raised"
+principle the whole workspace's logging design follows. Success events have no
+such duplicate-logger problem, since nothing downstream re-announces "this
+succeeded" — the service is the only place that knows the write actually landed.
+
+**Why no monetary field is ever logged:** `journal.created` and `posting.created`
+log `journal_number`/`line_count`, never a debit or credit amount;
+`trial_balance.generated` logs `entry_count`/`as_of_date`, never a balance. This is
+enforced as policy here (nothing in `trutina.core` computes a totals-bearing log
+line), and independently backstopped by `trutina-observability`'s redaction
+processor, which drops any key matching a known monetary name above `DEBUG` — but
+the primary control is simply never emitting the value from the source in the
+first place.
+
+**Why this module only imports `logging`, never `trutina.observability` or
+`structlog`:** the same reasoning that keeps `beanie`/`pymongo`/`sqlalchemy`/
+`asyncpg` out of this package applies here — `trutina-core` must remain usable,
+testable, and importable with zero knowledge of how or where its log lines end up
+formatted or routed. Any application composing this package's services decides
+that, once, at its own composition root; this package only ever decides _that_
+something happened.
 
 ## Control Flow and Data Flow
 
@@ -205,7 +252,9 @@ PostingService.post_journal_entry(journal_number)
     │
     ├─▶ [derive one LedgerPosting per JournalLine]            (pure, in-process)
     │
-    └─▶ PostingRepo.save_many(postings)                      (one repository batch)
+    ├─▶ PostingRepo.save_many(postings)                      (one repository batch)
+    │
+    └─▶ logger.info("posting.created", ...)                  (only after save succeeds)
 ```
 
 ```text
@@ -213,7 +262,9 @@ TrialBalanceService.get_trial_balance(as_of_date=None)
     │
     ├─▶ TrialBalanceRepo.get_account_balances(as_of_date)   (one aggregation)
     │
-    └─▶ TrialBalanceViewModel(entries, as_of_date)           (totals derived, not stored)
+    ├─▶ TrialBalanceViewModel(entries, as_of_date)           (totals derived, not stored)
+    │
+    └─▶ logger.info("trial_balance.generated", ...)          (entry_count, as_of_date only)
 ```
 
 Services call other services (`PostingService` holds a `JournalService`;
@@ -258,11 +309,18 @@ rule drift the domain-validation design decision above exists to prevent.
 - `AccountService.delete_account()` enforces a posting-history safeguard only when
   its optional `has_postings` callback is supplied at composition time. Without that
   callback it performs an existence check and deletes the account, so compositions
-  that omit the callback do not protect posting history.
+  that omit the callback do not protect posting history. Both `apps/api`'s
+  `build_container()` and `apps/cli`'s `CliContext` now supply it.
 - `TrialBalanceService` lists only accounts with postings. Listing every chart account
   as zero rows would be a `TrialBalanceService`-level combination with
   `AccountService.list_accounts()`, not a `TrialBalanceRepo` change; it is not built.
 - `TrialBalanceRepo` has a PostgreSQL implementation only.
+- No `caplog` test yet asserts, across all four services in one pass, that every
+  raised-`AppError` path leaves zero log records behind — each service's own test
+  file covers this individually, but there is no single cross-service regression
+  test pinning "core never logs on failure" as one assertion. Low risk (each
+  service's own tests already cover it), tracked as a minor Phase 7 nice-to-have,
+  not a blocker.
 
 ## Common Mistakes to Avoid
 
@@ -275,9 +333,10 @@ rule drift the domain-validation design decision above exists to prevent.
   constructed. If it doesn't need a repository or another service, it belongs on the
   schema.
 - Introducing an import from `account` into `journal` or `posting` that goes the
-  wrong direction, or any import of `beanie`/`pymongo` anywhere in this package.
-  Both are caught by CI's import-linter step, but catching it locally
-  (`uv run lint-imports`) before pushing is faster than waiting on CI to reject it.
+  wrong direction, or any import of `beanie`/`pymongo`/`sqlalchemy`/`asyncpg`
+  anywhere in this package. All are caught by CI's import-linter step, but catching
+  it locally (`uv run lint-imports`) before pushing is faster than waiting on CI to
+  reject it.
 - Assuming `PostingService` re-validates what `JournalService` already validated. It
   doesn't, on purpose. If you find yourself wanting to add an amount or
   account-existence check inside `PostingService`, that's a signal the check belongs
@@ -286,3 +345,12 @@ rule drift the domain-validation design decision above exists to prevent.
 - Treating `AppError.code` as optional to check. Catching bare `AppError` without
   inspecting `.code` in a caller that needs to distinguish "already posted" from
   "unknown journal number" will misbehave — both raise the same exception type.
+- Adding a log call on a service's failure path "for visibility." The seam that
+  catches the exception already owns exactly one log line for that failure — a
+  second one here is a duplicate, not an enhancement. If a failure genuinely isn't
+  visible enough at the seam, fix the seam's log line, not this package.
+- Importing `trutina.observability` or `structlog` into a service "to get
+  structured fields for free." Plain `logging.getLogger(__name__).info(event,
+extra={"context": {...}})` is the full contract — the composing app's
+  `configure_logging()` call is what turns that into structured output, not
+  anything this package does.
