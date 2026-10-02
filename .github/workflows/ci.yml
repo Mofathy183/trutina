@@ -46,12 +46,18 @@ jobs:
       - name: Marker hygiene
         run: uv run pytest --collect-only -q
 
-  # ── Quality Gate 2: Foundation Packages (shared, config, observability) ──
-  # Not folded into _test-layer.yml: no Mongo/Postgres service, no
-  # integration tier today — a genuinely different shape, not just
-  # fewer lines. trutina-observability joined this job rather than
-  # getting its own _test-layer*.yml file for the same reason: it has
-  # no storage-backend dependency to bring up as a CI service.
+      # Fails if any collected test is not selected by a CI lane below
+      # (it would never run). Lane list lives in the script; keep it in
+      # sync with the selectors in this file and _test-layer*.yml.
+      - name: Lane coverage
+        run: bash tools/ci/check-lane-coverage.sh
+
+  # ── Quality Gate 2: Foundation Packages (shared, config, observability,
+  #    authentication) ──
+  # Not folded into _test-layer.yml: no Mongo/Postgres service. The
+  # integration step is --allow-empty because no foundation package has an
+  # integration tier today; if one appears and needs a service, it will
+  # fail here and should be reclassified or given its own lane.
   foundation:
     name: "QG2 · Shared, Config & Observability Unit Tests"
     runs-on: ubuntu-latest
@@ -70,9 +76,16 @@ jobs:
 
       - run: chmod +x tools/ci/pytest-optional.sh
 
-      - run: >
-          tools/ci/pytest-optional.sh "unit and (shared or config or observability)"
+      - name: Unit tests
+        run: >
+          tools/ci/pytest-optional.sh
+          "unit and (shared or config or observability or authentication)"
           --cov=trutina --cov-report=term-missing
+
+      - name: Integration tests (empty allowed)
+        run: >
+          tools/ci/pytest-optional.sh --allow-empty
+          "integration and (shared or config or observability or authentication)"
 
   # ── Quality Gates 3–5: Storage-backed layers ─────────────────────
   # core/cli/api all depend on PostgreSQL today (_test-layer.yml).
