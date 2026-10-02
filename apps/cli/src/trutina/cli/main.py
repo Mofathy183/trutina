@@ -29,13 +29,36 @@ from trutina.observability import configure_logging, correlation_scope
 
 
 def _known_commands(typer_app) -> set[str]:
-    """Return the top-level command/group names Typer will dispatch directly.
+    """Return the top-level command and group names Typer dispatches directly.
 
-    Derived from ``typer_app.registered_groups`` so a new feature (a
-    future ``reporting`` group, say) is picked up automatically --
-    nothing here needs to change when app.py registers a new group.
+    Typer keeps two separate registries: ``registered_groups`` for
+    sub-apps added with ``add_typer`` (``account``, ``journal``,
+    ``posting``) and ``registered_commands`` for flat commands added with
+    ``app.command(...)`` (``trial-balance``). Both are read, because a
+    one-shot invocation of a flat command would otherwise be treated as an
+    unknown token and open the interactive shell instead of running.
+
+    A command registered without an explicit name is keyed the way Typer
+    itself names it: the callback's function name, lowercased, with
+    underscores replaced by hyphens. Entries with neither a name nor a
+    callback are skipped.
+
+    The result is derived from the app, so a new group or flat command is
+    picked up without any change here.
+
+    Args:
+        typer_app: The root Typer application.
+
+    Returns:
+        The set of first-token names that dispatch one-shot.
     """
-    return {group.name for group in typer_app.registered_groups if group.name}
+    names = {group.name for group in typer_app.registered_groups if group.name}
+    for command in typer_app.registered_commands:
+        if command.name:
+            names.add(command.name)
+        elif command.callback is not None:
+            names.add(command.callback.__name__.lower().replace("_", "-"))
+    return names
 
 
 def _help_flags(typer_app) -> set[str]:
@@ -62,8 +85,9 @@ def _should_enter_shell(argv: list[str], typer_app) -> bool:
     and the process exits immediately, the same way those tools'
     ``--help`` behaves. Only a first token that isn't a registered
     command name (and isn't a help flag) falls through to the shell.
-    A recognized command name (``account``, etc.) always dispatches
-    normally, including ``account --help``, which Typer/Click handles
+    A recognized group or flat command name (account, trial-balance, etc.)
+    always dispatches normally, including account --help,
+    which Typer/Click handles
     on its own once inside that command's parsing.
     """
     if not argv:
