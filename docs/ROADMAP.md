@@ -27,17 +27,10 @@ internal extension points, which live in that package's own README/CONTEXT.
 - **Re-confirm `modules/journal/rule.py` / `modules/posting/rule.py` scaffold
   status** against current `trutina-core` source — carried forward from prior
   docs without independent re-verification in this pass.
-- **Provision PostgreSQL in root `compose.yml`/`compose.dev.yml`.** Both files
-  currently wire up only MongoDB (env vars, service, volume-sync targets), even
-  though `apps/api` and `apps/cli` both declare `trutina-storage-postgres` as their
-  storage dependency in their own `pyproject.toml`. Confirmed stale in this pass.
 - **Correct the `parse_as_of_date()` module docstring** in
   `apps/cli/.../features/trial_balance/parser.py`. It says date-range rules are
   enforced downstream by `LedgerPosting`/`AccountBalanceEntry`; no validation of
   `as_of_date` exists anywhere in the trial balance path.
-- **Run `tools/docker-smoke.sh` end to end against the current image** and
-  confirm the structured `request.completed`/`correlation_id` assertion it now
-  contains actually passes in a real container run, not just in review.
 
 ## Remaining Domain / Reporting Work
 
@@ -115,15 +108,11 @@ every service/storage layer beneath them):
 
 - the `default_posting_date()` documentation conflict is resolved with a
   source-level check, not a guess;
-- root `compose.yml`/`compose.dev.yml` provision PostgreSQL for local
-  development, matching what `apps/api`/`apps/cli` actually depend on;
 - `apps/api/README.md`'s test-tier coverage is confirmed feature-by-feature the
   way `apps/cli/README.md` already is;
 - the trial balance can list every chart account, not only accounts with activity;
 - `MongoPostingRepo.save_many()`'s transaction gap is closed or explicitly
   re-accepted with a documented reason;
-- `tools/docker-smoke.sh` has actually been run against the current image, not
-  only written;
 - future features continue to leave `trutina.core` free of `beanie`/`pymongo`,
   `sqlalchemy`/`asyncpg`, `structlog`/`trutina.observability` imports, and free
   of CLI/API awareness.

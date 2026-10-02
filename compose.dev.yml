@@ -9,7 +9,7 @@
 # This is a zero-setup onboarding path (no local Python/uv/Postgres install
 # required) and a way to test against the same image shape that ships to
 # prod. It is not a required part of the day-to-day dev loop — running
-# `uv run --package trutina-api uvicorn trutina.api.main:app --reload`
+# `uv run --package trutina-api uvicorn trutina.api.composition.app:app --reload`
 # directly on the host will always be faster for a single contributor
 # iterating locally.
 
@@ -47,6 +47,9 @@ services:
         - action: sync
           path: ./packages/shared/src
           target: /app/packages/shared/src
+        - action: sync
+          path: ./packages/observability/src
+          target: /app/packages/observability/src
 
         # Manifest/lock changes: real dependency-resolution events, not
         # something file-sync can safely paper over — force a rebuild.
@@ -62,3 +65,5 @@ services:
           path: ./packages/storage-postgres/pyproject.toml
         - action: rebuild
           path: ./packages/shared/pyproject.toml
+        - action: rebuild
+          path: ./packages/observability/pyproject.toml

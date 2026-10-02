@@ -94,10 +94,11 @@ formatting/lint), `tools/pre-push.sh` (the fast local gate CI also runs first),
 against a real PostgreSQL container, including a check that structured JSON logging
 with a correlation id reaches the container's output).
 
-Root `compose.yml` / `compose.dev.yml` currently provision only MongoDB for local
-development, even though `apps/api` depends on `trutina-storage-postgres` — see
-`PROJECT_CONTEXT.md` for this open gap. `.env.example` / `.env.test.example` already
-carry `TRUTINA_MONGO__*`, `TRUTINA_POSTGRES__*`, and `TRUTINA_LOGGING__*` variables.
+Root `compose.yml` provisions PostgreSQL (alongside the retained MongoDB service),
+applies the Alembic migration history through a one-shot `migrate` service, and starts
+the API image. `compose.dev.yml` adds `develop.watch` for that image, and
+`tools/docker-dev.sh` wraps it. `.env.example` / `.env.test.example` carry
+`TRUTINA_MONGO__*`, `TRUTINA_POSTGRES__*`, and `TRUTINA_LOGGING__*` variables.
 
 ## See Also
 
