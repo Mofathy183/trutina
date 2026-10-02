@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
-# Runs `pytest -m "<marker-expr>" <extra args...>` and treats exit code 5
-# ("no tests collected") as success rather than failure.
+# Runs `pytest -m "<marker-expr>" <extra args...>`.
 #
-# Why this exists: as packages get scaffolded mid-migration with no tests
-# yet for a given layer/speed combination, an empty suite would otherwise
-# hard-fail CI. Previously this guard was only applied to integration runs
-# and hand-copied per job; this script applies it uniformly to unit and
-# integration alike, in one place, so the exit-5 logic can't drift between
-# jobs the way hand-copied inline guards do.
+# An empty selection (pytest exit code 5, "no tests collected") FAILS by
+# default. A mistyped selector, a stripped marker, or a mislabeled test
+# directory would otherwise select nothing and pass silently. A lane that
+# is legitimately empty today (e.g. a package scaffolded before its first
+# test) must say so explicitly by passing --allow-empty as the FIRST
+# argument; that is then visible in review and can be removed later.
 #
 # Usage:
-#   tools/ci/pytest-optional.sh "unit and shared" --cov=trutina --cov-report=term-missing
-#   tools/ci/pytest-optional.sh "integration and core"
+#   tools/ci/pytest-optional.sh "unit and core" --cov=trutina --cov-report=term-missing
+#   tools/ci/pytest-optional.sh --allow-empty "integration and shared"
 set -euo pipefail
 
+allow_empty=0
+if [ "${1:-}" = "--allow-empty" ]; then
+    allow_empty=1
+    shift
+fi
+
 if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <marker-expr> [pytest args...]" >&2
+    echo "Usage: $0 [--allow-empty] <marker-expr> [pytest args...]" >&2
     exit 2
 fi
 
@@ -28,8 +33,13 @@ code=$?
 set -e
 
 if [ "$code" -eq 5 ]; then
-    echo "No tests collected for marker expression '$marker_expr' — treating as pass."
-    exit 0
+    if [ "$allow_empty" -eq 1 ]; then
+        echo "No tests collected for marker expression '$marker_expr' (--allow-empty) — treating as pass."
+        exit 0
+    fi
+    echo "ERROR: no tests collected for marker expression '$marker_expr'." >&2
+    echo "Fix the selector, or pass --allow-empty if this lane is intentionally empty." >&2
+    exit 5
 fi
 
 exit "$code"
