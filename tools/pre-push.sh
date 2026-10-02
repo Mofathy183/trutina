@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Local pre-push gate: fast, no external services required. Never mutates
-# files — if this fails, run `tools/fix.sh` and re-commit. CI runs this
-# exact script as its first, fastest job; integration tests (Mongo-backed)
-# run as a separate CI job this script does not attempt locally.
+# Local pre-push gate: fast, no external services required. Mirrors CI's
+# QG1 (static analysis) plus the unit suite. Never mutates files — if this
+# fails, run `tools/fix.sh` and re-commit. Integration tests need
+# PostgreSQL and run in CI's later lanes, not here.
 set -euo pipefail
 
 # Resolve the repo root via git itself rather than a relative cd from
@@ -21,6 +21,15 @@ uv run ruff check . || { echo "Run tools/fix.sh, then retry." >&2; exit 1; }
 
 echo "==> ty check"
 uv run ty check
+
+echo "==> import boundary contracts"
+uv run lint-imports
+
+echo "==> marker hygiene"
+uv run pytest --collect-only -q
+
+echo "==> lane coverage"
+bash tools/ci/check-lane-coverage.sh
 
 echo "==> fast unit tests"
 uv run pytest -m unit
