@@ -281,9 +281,6 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   active workflow, but is imported and called from `apps/cli`'s journal parser —
   unresolved; not re-confirmed against live source in this pass. See
   `PROJECT_CONTEXT.md`.
-- Root `compose.yml`/`compose.dev.yml` provision only MongoDB, even though `apps/api`
-  and `apps/cli` both depend on `trutina-storage-postgres` today. See
-  `PROJECT_CONTEXT.md`.
 - The trial balance covers only accounts with postings and only PostgreSQL. Full-chart
   output and a MongoDB implementation are not built. See `ROADMAP.md`.
 - Alembic's `fileConfig()` call for `trutina-storage-postgres` migrations now
@@ -292,6 +289,3 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   logger for the rest of a process — see `packages/storage-postgres/CONTEXT.md`
   for the full account, including the belt-and-braces re-enable step in
   `tests/fixtures/postgres.py`'s `schema_init`.
-- `tools/docker-smoke.sh` now asserts a structured `request.completed` log line
-  with a `correlation_id`, but has not yet been re-run end-to-end against the
-  current image in this pass.

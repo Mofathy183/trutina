@@ -111,9 +111,6 @@ transport-specific shape of their own.
   resulting exception's text for a leaked value — `hide_parameters=True` is
   confirmed set on the engine, but this specific masking behavior is not yet
   directly exercised by a test.
-- `tools/docker-smoke.sh` has been updated to assert structured logging output
-  in the running container, but has not yet been re-run end-to-end in this pass
-  to confirm it against the current Dockerfile/observability wiring.
 
 ## Cross-Package Conflicts Found During This Pass
 
@@ -152,13 +149,11 @@ transport-specific shape of their own.
 trutina.observability"` — all three sit at the same position, with
    `trutina.observability` added during the logging rollout. `ARCHITECTURE.md`
    and `AGENTS.md` both reflect this current three-member layer.
-5. **Root `compose.yml`/`compose.dev.yml` still MongoDB-only.** Both files
-   provision and sync only MongoDB/`trutina-storage-mongo` paths — no PostgreSQL
-   service, no `trutina-storage-postgres` sync/rebuild targets — despite
-   `apps/api`'s and `apps/cli`'s real dependency on `trutina-storage-postgres`.
-   Confirmed against the current file contents in this pass. **Not resolved
-   here** — infra file changes are out of scope for a documentation pass; tracked
-   in `ROADMAP.md`.
+5. **Root compose files and PostgreSQL — resolved in M0a-C (#43).** `compose.yml`
+   provisions PostgreSQL, a one-shot `migrate` service, and the API, and
+   `compose.dev.yml` watches every package the API image runs, including
+   `trutina-observability`. `tools/docker-smoke.sh` was run end to end and passes,
+   including its structured-logging assertion.
 6. **A real, since-fixed bug found during the logging rollout's own
    verification, recorded here for cross-package visibility.** Alembic's
    generated `env.py` (for `trutina-storage-postgres`'s migrations) calls
@@ -198,8 +193,6 @@ autouse fixture removes only the handler `trutina-observability`'s
 ## Long-Term Direction
 
 - Confirm and, if needed, correct the `default_posting_date()` conflict above.
-- Update root `compose.yml`/`compose.dev.yml` to provision PostgreSQL, matching
-  what `apps/api`/`apps/cli` actually depend on.
 - Confirm `apps/api/README.md`'s test-tier coverage feature-by-feature, the way
   `apps/cli/README.md` already does for the CLI.
 - Extend reporting beyond the trial balance (full-chart output, period ranges,
@@ -207,8 +200,6 @@ autouse fixture removes only the handler `trutina-observability`'s
 - Add import/export and external integration surfaces once reporting exists.
 - Re-confirm `modules/journal/rule.py` / `modules/posting/rule.py` scaffold status
   directly against current `trutina-core` source.
-- Run `tools/docker-smoke.sh` end to end against the current image and confirm
-  its structured-logging assertion actually passes in a real container.
 - Add a test exercising `hide_parameters=True`'s actual masking effect against a
   real Postgres constraint-violation exception's text, not just confirming the
   flag is set on the engine.
