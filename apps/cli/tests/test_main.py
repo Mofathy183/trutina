@@ -3,6 +3,9 @@ from unittest.mock import MagicMock
 import pytest
 from trutina.cli import main as main_module
 from trutina.cli.composition.app import app
+from trutina.cli.shared.ui import console
+
+from tests.factories import make_fake_cli_context
 
 GROUPS = {"account", "journal", "posting"}
 FLAT_COMMANDS = {"trial-balance"}
@@ -220,3 +223,19 @@ class TestRunDispatch:
 
         app_mock.assert_called_once()
         run_shell_mock.assert_not_called()
+
+
+@pytest.mark.unit
+class TestRunTrialBalanceOneShot:
+    def test_runs_report_without_opening_shell(self, monkeypatch):
+        def fail_shell(state):
+            raise AssertionError("shell must not open for trial-balance")
+
+        monkeypatch.setattr(main_module, "run_shell", fail_shell)
+        monkeypatch.setattr("sys.argv", ["trutina-cli", "trial-balance"])
+
+        with console.capture() as capture, pytest.raises(SystemExit) as exc_info:
+            main_module.run(make_fake_cli_context())
+
+        assert exc_info.value.code == 0
+        assert "No postings found" in capture.get()
