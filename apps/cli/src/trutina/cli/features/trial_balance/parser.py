@@ -13,9 +13,11 @@ date.
 
 Explicitly NOT this module's responsibility:
 
-- Business or domain validation -- date-range rules (future dates,
-    the 2020-01-01 floor) are enforced by LedgerPosting/AccountBalanceEntry
-    validation further downstream, not here.
+- Business or domain validation -- no date-range rule (future dates,
+    the 2020-01-01 floor) is applied anywhere in the trial balance
+    path. Any valid YYYY-MM-DD is accepted; a future date includes
+    every posting, and a date before the earliest posting yields an
+    empty report.
 - Calling services or repositories.
 - Rich prompting, rendering, or console output.
 
