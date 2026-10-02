@@ -222,8 +222,6 @@ against a real PostgreSQL container; the smoke test also asserts a structured
 - `MongoPostingRepo.save_many()` has no multi-document transaction (accepted,
   documented risk in `trutina-storage-mongo`'s own CONTEXT.md; no longer
   app-facing since neither app depends on that package).
-- Root `compose.yml`/`compose.dev.yml` provision only MongoDB, despite
-  `apps/api`/`apps/cli` depending on `trutina-storage-postgres`.
 - `TrialBalanceRepo` is implemented for PostgreSQL only. `trutina-storage-mongo` has
   no implementation, by decision.
 - The trial balance lists only accounts with postings; full-chart, zero-padded output
@@ -240,8 +238,6 @@ against a real PostgreSQL container; the smoke test also asserts a structured
   `trutina.storage_postgres.shared.connection` logger. `tests/fixtures/postgres.py`'s
   `schema_init` also re-enables every logger after migrating, as a backstop.
   See `packages/storage-postgres/CONTEXT.md` for the full account.
-- `tools/docker-smoke.sh` has been updated to assert structured logging output
-  but has not yet been run end-to-end against the current image in this pass.
 
 ## Development Rules
 
