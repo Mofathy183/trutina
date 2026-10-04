@@ -30,6 +30,7 @@ flowchart TD
     OBS --> CONFIG[trutina-config]
     CORE --> SHARED[trutina-shared]
     CORE -.-> CONFIG
+    AUTH[trutina-authentication]
 ```
 
 `trutina-storage-mongo` still implements the account, journal, and posting repository
@@ -37,6 +38,8 @@ contracts and has its own CI lane, but neither `apps/cli` nor `apps/api` depends
 today — see Packages & Apps below. `trutina-observability` is consumed only by the two
 presentation apps; every other package emits through the standard library's `logging`
 module directly.
+`trutina-authentication` holds identity and authentication contracts only and has no
+dependents yet.
 
 ## Packages & Apps
 
@@ -50,6 +53,11 @@ module directly.
   correlation, consumed only by `trutina-cli` and `trutina-api`. Every other package
   emits through plain `logging.getLogger(__name__)` with zero dependency on this
   package. See `packages/observability/README.md` / `CONTEXT.md`.
+- **`trutina-authentication`** — identity and authentication contracts (`Identity`,
+  hasher, token, user, refresh-token and login-attempt ports) plus in-memory test
+  fakes. Contracts only: no implementation exists and no app or storage package
+  depends on it yet. Never imported by `trutina-core`. See
+  `packages/authentication/README.md` / `CONTEXT.md`.
 - **`trutina-storage-postgres`** — the storage backend `apps/cli` and `apps/api`
   actually depend on today: SQLAlchemy async + `asyncpg` implementations of the four
   repository contracts (including the trial balance aggregation), plus Alembic
@@ -61,7 +69,7 @@ module directly.
   Postgres cutover. It has no trial balance implementation. See
   `packages/storage-mongo/README.md` / `CONTEXT.md`.
 - **`trutina-config`** — typed, environment-driven settings (`Settings`/`TestSettings`,
-  `MongoSettings`, `PostgresSettings`, `ApiSettings`, `LoggingSettings`). Depends on
+  `MongoSettings`, `PostgresSettings`, `ApiSettings`, `LoggingSettings`, `AuthSettings`). Depends on
   nothing else in the workspace. See `packages/config/README.md` / `CONTEXT.md`.
 - **`trutina-shared`** — the lowest-level package: reusable account-validation rules and
   the shared `ErrorCode`/`AppError`/`ValidationAppError` model. Depends only on

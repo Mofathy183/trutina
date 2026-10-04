@@ -36,6 +36,12 @@ packages/
 │   └── src/trutina/observability/
 │       ├── __init__.py, configure.py, correlation.py, processors.py, asgi.py
 │       └── tests/
+├── authentication/      trutina-authentication
+│   └── src/trutina/authentication/
+│       ├── __init__.py
+│       ├── identity.py, clock.py, events.py, password.py, tokens.py
+│       ├── user.py, status.py, attempts.py, refresh.py, authenticator.py
+│       └── tests/
 ├── storage-mongo/       trutina-storage-mongo
 │   └── src/trutina/storage_mongo/
 │       ├── {account,journal,posting}/   # document.py, repository.py
@@ -56,7 +62,7 @@ tests/                   # root-level shared fixtures/factories/fakes only — n
 ```
 
 Package/app ownership: `apps/cli/pyproject.toml`, `apps/api/pyproject.toml`,
-`packages/{core,storage-mongo,storage-postgres,config,shared,observability}/pyproject.toml`
+`packages/{core,storage-mongo,storage-postgres,config,shared,observability,authentication}/pyproject.toml`
 each declare that package's own dependencies independently; the root
 `pyproject.toml` declares the workspace
 (`tool.uv.workspace.members = ["apps/*", "packages/*"]`) and the import-linter
@@ -74,7 +80,7 @@ trutina.cli | trutina.api
 trutina.storage_mongo | trutina.storage_postgres | trutina.observability
         │
         ▼
-trutina.core
+trutina.core | trutina.authentication
         │
         ▼
 trutina.shared | trutina.config
@@ -89,7 +95,7 @@ trutina.shared | trutina.config
   storage in the layer chain" — it asserts core has zero awareness that either
   backend exists.
 - **`type = "forbidden"` ("Emitters use stdlib logging only")**: `trutina.core`,
-  `trutina.shared`, `trutina.config`, `trutina.storage_mongo`, and
+  `trutina.shared`, `trutina.config`, `trutina.authentication`, `trutina.storage_mongo`, and
   `trutina.storage_postgres` may never import `structlog` or
   `trutina.observability`. Every emitter outside the two presentation apps uses
   the standard library's `logging` module exclusively.
@@ -103,6 +109,11 @@ trutina.shared | trutina.config
   `posting`, `journal`, or `account`, and no import-linter contract names it, so
   nothing mechanically prevents a future import from either direction. This is
   recorded here rather than described as enforced.
+- `trutina.core` and `trutina.authentication` are independent siblings in the
+  `layers` contract: neither may import the other. A separate `forbidden`
+  contract states core has zero authentication awareness, and another keeps
+  `trutina.authentication` free of `sqlalchemy`, `asyncpg`, `beanie`, `pymongo`,
+  `fastapi`, `starlette`, `typer` and `rich`.
 
 Confirmed per-package dependency facts (from each package's own `pyproject.toml`,
 cross-checked against its README/CONTEXT):
@@ -113,6 +124,7 @@ cross-checked against its README/CONTEXT):
 | `trutina-config`           | _(none)_                                                                              | `pydantic`, `pydantic-settings`            |
 | `trutina-core`             | `trutina-shared`                                                                      | `pydantic`                                 |
 | `trutina-observability`    | `trutina-config`                                                                      | `structlog`, `platformdirs`                |
+| `trutina-authentication`   | _(none)_                                                                              | `pydantic`                                 |
 | `trutina-storage-mongo`    | `trutina-shared`, `trutina-core`, `trutina-config`                                    | `beanie`, `pymongo`                        |
 | `trutina-storage-postgres` | `trutina-shared`, `trutina-core`, `trutina-config`                                    | `sqlalchemy`, `asyncpg`, `alembic`         |
 | `trutina-cli`              | `trutina-core`, `trutina-storage-postgres`, `trutina-config`, `trutina-observability` | `typer`, `rich`, `anyio`, `prompt-toolkit` |
@@ -126,6 +138,8 @@ and `trutina-api` never depend on each other. `trutina-core` never depends on
 `trutina-config`. Only `trutina-cli` and `trutina-api` depend on
 `trutina-observability` — every other workspace package emits through the
 standard library alone.
+`trutina-authentication` is contracts and fakes only; no other workspace package
+depends on it today, and `trutina-core` never will.
 
 ## Layer Responsibilities
 
@@ -141,7 +155,7 @@ adapter (CLI, API) owns its own message/hint catalog keyed by `ErrorCode`. See
 
 Typed settings loaded from environment variables and dotenv files
 (`TRUTINA_`/`TRUTINA_TEST_` prefixes), including `MongoSettings`, `PostgresSettings`,
-`ApiSettings`, and `LoggingSettings`. No I/O beyond dotenv reads; no awareness of
+`ApiSettings`, and `LoggingSettings`, `AuthSettings`. No I/O beyond dotenv reads; no awareness of
 what consumes the settings it produces — `LoggingSettings` describes shape only
 and performs no logging setup of its own. See `packages/config/README.md` /
 `CONTEXT.md`.
@@ -173,6 +187,18 @@ contract. Consumed by exactly `trutina.cli` and `trutina.api`, each once at its
 own composition root; every other package emits through plain
 `logging.getLogger(__name__)` calls with zero dependency on this package. See
 `packages/observability/README.md` / `CONTEXT.md`.
+
+### `trutina.authentication`
+
+Identity and authentication contracts: `Identity`, `AccessState`, a minimal `User`,
+and abstract ports for password and refresh-token hashing, access-token issue and
+verify, user, refresh-token and login-attempt stores, a clock, an event sink, a
+per-write status checker, and the `Authenticator` use case. A peer of
+`trutina.core`, never above or below it: core sees only an opaque `actor: str`
+supplied by its caller. Contracts only: no implementation, route, command or storage
+adapter exists, and no app or storage package depends on it yet. The token and
+refresh-token contracts and `LoginAttemptRepo` are provisional until the M3 ADR and
+M2. See `packages/authentication/README.md` / `CONTEXT.md`.
 
 ### `trutina.storage_mongo`
 
@@ -244,7 +270,8 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   contain business rules; uniqueness checks, cross-aggregate validation, and posting
   derivation all live in `trutina.core` services.
 - Domain models (`trutina.core`) never import from either storage package,
-  `trutina.cli`, `trutina.api`, `trutina.observability`, or `structlog`.
+  `trutina.cli`, `trutina.api`, `trutina.observability`, `trutina.authentication`,
+  or `structlog`.
 - Neither presentation app (`cli`, `api`) may import the other.
 - Every package outside `trutina.cli`/`trutina.api` emits through
   `logging.getLogger(__name__)` only. Only the two presentation apps decide how
@@ -258,7 +285,7 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
 
 - `pytest.ini` (root) sets `testpaths = tests apps packages`, `asyncio_mode = auto`,
   and registers markers `unit`, `integration` (speed axis); `core`, `infra`, `cli`,
-  `api`, `shared`, `config`, `observability` (layer axis); `mongo`, `postgres`
+  `api`, `shared`, `config`, `observability`, `authentication` (layer axis); `mongo`, `postgres`
   (backend axis, meaningful only for `infra`-layer tests).
 - Root `conftest.py` registers the shared fixture plugins
   (`tests.fixtures.{account,posting,journal,mongo,postgres,settings,services,cli,api,logging}`)
@@ -289,3 +316,6 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   logger for the rest of a process — see `packages/storage-postgres/CONTEXT.md`
   for the full account, including the belt-and-braces re-enable step in
   `tests/fixtures/postgres.py`'s `schema_init`.
+- `trutina-authentication` has contracts and test fakes only. No hasher, token
+  module, storage adapter, route or command exists, and no app depends on it.
+  Token-related contracts are provisional until the M3 ADR.
