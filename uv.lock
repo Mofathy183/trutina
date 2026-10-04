@@ -5,6 +5,7 @@ requires-python = ">=3.14"
 [manifest]
 members = [
     "trutina-api",
+    "trutina-authentication",
     "trutina-cli",
     "trutina-config",
     "trutina-core",
@@ -1138,6 +1139,17 @@ requires-dist = [
     { name = "trutina-storage-postgres", editable = "packages/storage-postgres" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0" },
 ]
+
+[[package]]
+name = "trutina-authentication"
+version = "0.1.0"
+source = { editable = "packages/authentication" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2.13.3" }]
 
 [[package]]
 name = "trutina-cli"

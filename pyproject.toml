@@ -46,7 +46,7 @@ type = "layers"
 layers = [
     "trutina.cli | trutina.api",
     "trutina.storage_mongo | trutina.storage_postgres | trutina.observability",
-    "trutina.core",
+    "trutina.core | trutina.authentication",
     "trutina.shared | trutina.config",
 ]
 
@@ -55,6 +55,7 @@ name = "Emitters use stdlib logging only"
 type = "forbidden"
 source_modules = [
     "trutina.core",
+    "trutina.authentication",
     "trutina.shared",
     "trutina.config",
     "trutina.storage_mongo",
@@ -96,3 +97,24 @@ name = "Core must have zero Postgres/SQLAlchemy awareness"
 type = "forbidden"
 source_modules = ["trutina.core"]
 forbidden_modules = ["sqlalchemy", "asyncpg"]
+
+[[tool.importlinter.contracts]]
+name = "Core must have zero authentication awareness"
+type = "forbidden"
+source_modules = ["trutina.core"]
+forbidden_modules = ["trutina.authentication"]
+
+[[tool.importlinter.contracts]]
+name = "Authentication stays free of storage and presentation frameworks"
+type = "forbidden"
+source_modules = ["trutina.authentication"]
+forbidden_modules = [
+    "sqlalchemy",
+    "asyncpg",
+    "beanie",
+    "pymongo",
+    "fastapi",
+    "starlette",
+    "typer",
+    "rich",
+]
