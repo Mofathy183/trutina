@@ -32,15 +32,16 @@ package may depend on it, and it depends on nothing else in the workspace. See
 
 ## API at a Glance
 
-| Symbol                       | Purpose                                                                                        |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- |
-| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.       |
-| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.             |
-| `MongoSettings`              | Nested MongoDB connection settings.                                                            |
-| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                     |
-| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                              |
-| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`. |
-| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                           |
+| Symbol                       | Purpose                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.                     |
+| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.                           |
+| `MongoSettings`              | Nested MongoDB connection settings.                                                                          |
+| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                                   |
+| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                                            |
+| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`.               |
+| `AuthSettings`               | Nested authentication settings: optional signing keys and the active key id. Skeleton; nothing reads it yet. |
+| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                                         |
 
 ### `MongoSettings` fields
 
@@ -86,6 +87,19 @@ package may depend on it, and it depends on nothing else in the workspace. See
 `LoggingSettings` itself performs no logging setup — it only describes shape.
 `trutina-observability`'s `configure_logging()` is its only consumer.
 
+### `AuthSettings` fields
+
+| Field          | Default | Description                                                                                      |
+| -------------- | ------- | ------------------------------------------------------------------------------------------------ |
+| `signing_keys` | `{}`    | Key id to signing secret (`SecretStr`). Empty means no keys configured. Key ids are case-folded. |
+| `active_kid`   | `None`  | Key id used to sign new tokens. Case-folded to match `signing_keys`.                             |
+
+`AuthSettings` only describes shape. It does not check that keys exist, are long enough, or that `active_kid` names a configured key; that is validated at API startup in a later milestone.
+
+### `environment`
+
+`Settings.environment` is `production`, `development` or `test`, and defaults to `production` so a forgotten variable fails closed. Any other value is rejected. `TestSettings` does not override the default: set `TRUTINA_TEST_ENVIRONMENT=test` (in `.env.test` or the CI environment) to opt in. Nothing reads the field yet.
+
 ## Usage
 
 ```python
@@ -116,6 +130,9 @@ and `.env.test` instead of the production namespace.
 Nested settings use a double underscore (`__`) as the delimiter:
 
 ```bash
+TRUTINA_ENVIRONMENT=development
+TRUTINA_AUTH__SIGNING_KEYS__k1=<secret>
+TRUTINA_AUTH__ACTIVE_KID=k1
 TRUTINA_MONGO__URI=mongodb://localhost:27017
 TRUTINA_POSTGRES__URI=postgresql+asyncpg://username:password@localhost:5432/trutina
 TRUTINA_API__PORT=8000
@@ -132,6 +149,7 @@ TRUTINA_LOGGING__LOGGER_LEVELS={"sqlalchemy.engine": "WARNING", "uvicorn.error":
 Test configuration reads the same shape under a `TRUTINA_TEST_` prefix from
 `.env.test`. See `.env.example` and `.env.test.example` at the repo root for
 the full set of currently supported keys.
+Test configuration opts in to the test environment with `TRUTINA_TEST_ENVIRONMENT=test`.
 
 ## Testing
 

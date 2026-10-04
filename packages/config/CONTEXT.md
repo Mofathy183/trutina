@@ -1,6 +1,6 @@
 # trutina-config — Context
 
-For usage, see README.md. This document explains why, not how.
+For usage, see [README.md](README.md). This document explains why, not how.
 
 ## Why this architecture was chosen
 
@@ -59,8 +59,8 @@ that.
   shared test infrastructure rather than being left to each test file to
   remember.
 - **Nested settings models (`MongoSettings`, `ApiSettings`,
-  `PostgresSettings`, `LoggingSettings`) are plain `BaseModel`, not
-  `BaseSettings`.** Confirmed in source: none of the four defines a
+  `PostgresSettings`, `LoggingSettings`, `AuthSettings`) are plain `BaseModel`, not
+  `BaseSettings`.** Confirmed in source: none of the five defines a
   `model_config`/`SettingsConfigDict`. Only the root `Settings`/`TestSettings`
   classes own env-prefix and dotenv-file configuration. This means a nested
   settings object can never be constructed standalone from the environment —
@@ -72,7 +72,7 @@ that.
 ## Design decisions future contributors should preserve
 
 - Every settings group (`MongoSettings`, `ApiSettings`, `PostgresSettings`,
-  `LoggingSettings`, and any future addition) stays a plain `BaseModel`
+  `LoggingSettings`, `AuthSettings`, and any future addition) stays a plain `BaseModel`
   nested inside `Settings` — never its own independently-loaded
   `BaseSettings`.
 - `TestSettings` stays a subclass of `Settings`, overriding only
@@ -105,6 +105,20 @@ future call site (test fixture or real code) to convert first.
 **Constraint for contributors:** if a future settings field is ever given a
 filesystem-path type, apply the same `mode="before"` coercion rather than
 leaving it `str`-only and hoping every caller remembers to convert.
+
+### `environment` defaults to production and `TestSettings` does not override it
+
+**Decision:** `Settings.environment` is a `Literal["production", "development", "test"]` defaulting to `production`. `TestSettings` still overrides only `env_prefix` and `env_file`; it opts in with `TRUTINA_TEST_ENVIRONMENT=test`.
+
+**Why:** development and test behavior (for example public API docs) must always be an explicit opt-in, so forgetting a variable fails closed. Keeping `TestSettings` unchanged preserves the rule that it differs from `Settings` only in namespace.
+
+**Trade-off accepted:** a local run without `.env.test` behaves as production once something reads the field. `.env.test.example` and the CI workflows set the variable to avoid this; revisit when the first reader is added.
+
+### `AuthSettings` key ids are case-folded
+
+**Decision:** both `signing_keys` keys and `active_kid` are case-folded on construction.
+
+**Why:** `pydantic-settings` lower-cases dict keys read from environment variables but not plain string values, so `ACTIVE_KID=K1` would never match a key loaded from `SIGNING_KEYS__K1`. Folding both makes them agree. Do not use `__` inside a key id.
 
 ## Architectural invariants that must never be broken
 
@@ -221,6 +235,7 @@ test_postgres,test_settings,test_logging}.py` cover each nested settings
   pass — `PostgresSettings`' docstring names it as the consumer of these
   fields, but the package's own manifest wasn't available to check. Confirm
   before stating it as fact elsewhere.
+- `AuthSettings` and `Settings.environment` are skeletons. Nothing reads them yet, and key presence, length and `active_kid` validity are not checked here; that is API startup's job in a later milestone.
 
 ## Common mistakes to avoid
 
