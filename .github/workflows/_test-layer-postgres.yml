@@ -24,6 +24,10 @@ on:
 
 env:
   TRUTINA_TEST_POSTGRES__URI: postgresql+asyncpg://postgres:postgres@localhost:5432/trutina_test
+  # CI has no .env.test, and Settings.environment defaults to production
+  # (fail closed). TestSettings does not override that default, so the
+  # test namespace opts in explicitly here.
+  TRUTINA_TEST_ENVIRONMENT: test
 
 jobs:
   test:
