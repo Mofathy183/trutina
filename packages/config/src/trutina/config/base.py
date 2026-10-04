@@ -7,14 +7,18 @@ files through Pydantic Settings.
 """
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .api import ApiSettings
+from .auth import AuthSettings
 from .logging import LoggingSettings
 from .mongo import MongoSettings
 from .postgres import PostgresSettings
+
+Environment = Literal["production", "development", "test"]
 
 
 class Settings(BaseSettings):
@@ -23,6 +27,14 @@ class Settings(BaseSettings):
     Loads application settings from the environment using the
     ``TRUTINA_`` namespace and exposes strongly typed configuration
     objects to the rest of the application.
+
+    Attributes:
+        environment: Deployment environment. Defaults to ``production``
+            so that forgetting to set it fails closed: development and
+            test behavior (for example, public API docs) is always an
+            explicit opt-in. Any other value is rejected at construction.
+            ``TestSettings`` does not override this default; set
+            ``TRUTINA_TEST_ENVIRONMENT=test`` to opt in.
     """
 
     model_config = SettingsConfigDict(
@@ -33,10 +45,12 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    environment: Environment = Field(default="production")
     mongo: MongoSettings = Field(default_factory=MongoSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    auth: AuthSettings = Field(default_factory=AuthSettings)
 
 
 class TestSettings(Settings):
