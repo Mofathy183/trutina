@@ -95,6 +95,21 @@ internal extension points, which live in that package's own README/CONTEXT.
 - Add machine-readable output formats beyond the existing API JSON.
 - Add other external integration surfaces (none exist today in any package).
 
+## Identity and Authentication
+
+`trutina-authentication` contains contracts and fakes only. Still missing:
+
+- Actor attribution: a required `actor` on core write services and `created_by` on
+  journal entries and postings, with a migration; the same for account writes via an
+  audit table.
+- A user store and password registration/login, with throttling and a hasher.
+- Access and refresh tokens, auth routes, and endpoint protection.
+- A CLI `auth` group.
+- Authorization (roles and a permission matrix).
+
+The milestone order, locked decisions and open question (JWT versus one opaque
+session mechanism) are in the identity and authentication plan.
+
 ## Success Criteria
 
 Trutina should be considered on track when, in addition to what is already true

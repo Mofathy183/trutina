@@ -35,6 +35,10 @@ logic. `trutina-shared` and `trutina-config` sit at the bottom because their
 contents (validation rules, the error model, environment-driven settings) are
 needed identically by every package above them and have no accounting-specific or
 transport-specific shape of their own.
+`trutina-authentication` exists as its own package so that identity and
+authentication vocabulary never enters `trutina-core`: the accounting domain sees
+only an opaque `actor: str`. It sits beside core in the import-linter layers
+contract (independent siblings), so neither can import the other.
 
 ## What Is Genuinely Implemented End-to-End Today
 
@@ -111,6 +115,10 @@ transport-specific shape of their own.
   resulting exception's text for a leaked value — `hide_parameters=True` is
   confirmed set on the engine, but this specific masking behavior is not yet
   directly exercised by a test.
+- Identity and authentication — `trutina-authentication` provides contracts and test
+  fakes only. No password hasher, token implementation, storage adapter, route or
+  command exists, no `AUTH_*` `ErrorCode` exists, and no app depends on the package.
+  The token, refresh-token and login-attempt contracts are provisional.
 
 ## Cross-Package Conflicts Found During This Pass
 
@@ -176,7 +184,7 @@ Every package/app's tests are collected from one root `pytest.ini`
 (`testpaths = tests apps packages`), with a mandatory three-axis marker
 discipline enforced by root `conftest.py`: a hand-written speed marker
 (`unit`/`integration`), an automatically-derived layer marker
-(`core`/`infra`/`cli`/`api`/`shared`/`config`/`observability`, derived from file
+(`core`/`infra`/`cli`/`api`/`shared`/`config`/`observability`/`authentication`, derived from file
 path — never hand-written), and, for `infra`-layer tests only, an
 automatically-derived backend marker (`mongo`/`postgres`, derived from which
 storage package's directory the test lives under). This lets
@@ -203,3 +211,5 @@ autouse fixture removes only the handler `trutina-observability`'s
 - Add a test exercising `hide_parameters=True`'s actual masking effect against a
   real Postgres constraint-violation exception's text, not just confirming the
   flag is set on the engine.
+- Build identity and authentication on the `trutina-authentication` contracts, in
+  the milestone order recorded in the identity and authentication plan.
