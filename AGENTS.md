@@ -1,7 +1,7 @@
 # Trutina
 
 Python double-entry bookkeeping engine. `uv` workspace: `apps/{cli,api}` +
-`packages/{core,storage-mongo,storage-postgres,config,shared,observability}`.
+`packages/{core,storage-mongo,storage-postgres,config,shared,observability,authentication}`.
 Root docs cover cross-cutting facts only — package/app internals are
 documented in that package's own README.md/CONTEXT.md.
 
@@ -24,6 +24,7 @@ documented in that package's own README.md/CONTEXT.md.
 | `trutina-config`           | `trutina.config`           | none                                                                          | pydantic, pydantic-settings          |
 | `trutina-core`             | `trutina.core`             | trutina-shared                                                                | pydantic                             |
 | `trutina-observability`    | `trutina.observability`    | trutina-config                                                                | structlog, platformdirs              |
+| `trutina-authentication`   | `trutina.authentication`   | none                                                                          | pydantic                             |
 | `trutina-storage-mongo`    | `trutina.storage_mongo`    | trutina-shared, trutina-core, trutina-config                                  | beanie, pymongo                      |
 | `trutina-storage-postgres` | `trutina.storage_postgres` | trutina-shared, trutina-core, trutina-config                                  | sqlalchemy, asyncpg, alembic         |
 | `trutina-cli`              | `trutina.cli`              | trutina-core, trutina-storage-postgres, trutina-config, trutina-observability | typer, rich, anyio, prompt-toolkit   |
@@ -36,15 +37,20 @@ never depends on `trutina-api`, or vice versa. `trutina-core` never depends on
 storage packages never depend on `trutina-observability` or `structlog` — only
 `trutina-cli` and `trutina-api` do, each exactly once at their own composition
 root.
+`trutina-authentication` is contracts and models only (no implementation) and is not
+declared as a dependency of any other workspace package today. `trutina-core` never
+imports it, and no core service method takes an `Identity`.
 
 ## Import-Linter Contracts (root `pyproject.toml`, enforced in CI)
 
-- `layers`: `trutina.cli | trutina.api → trutina.storage_mongo | trutina.storage_postgres | trutina.observability → trutina.core → trutina.shared | trutina.config`
+- `layers`: `trutina.cli | trutina.api → trutina.storage_mongo | trutina.storage_postgres | trutina.observability → trutina.core | trutina.authentication → trutina.shared | trutina.config` (core and authentication are independent siblings)
 - `forbidden`: `trutina.core` must never import `beanie` or `pymongo`
 - `forbidden`: `trutina.core` must never import `sqlalchemy` or `asyncpg`
 - `layers` (internal to core): `trutina.core.posting → trutina.core.journal → trutina.core.account`
-- `forbidden` ("Emitters use stdlib logging only"): `trutina.core`, `trutina.shared`, `trutina.config`, `trutina.storage_mongo`, `trutina.storage_postgres` must never import `structlog` or `trutina.observability`
+- `forbidden` ("Emitters use stdlib logging only"): `trutina.core`, `trutina.shared`, `trutina.config`, `trutina.authentication`, `trutina.storage_mongo`, `trutina.storage_postgres` must never import `structlog` or `trutina.observability`
 - `forbidden` ("Observability stays generic"): `trutina.observability` must never import `trutina.core`, either storage package, `fastapi`, `starlette`, `typer`, or `rich`
+- `forbidden` ("Core must have zero authentication awareness"): `trutina.core` must never import `trutina.authentication`
+- `forbidden` ("Authentication stays free of storage and presentation frameworks"): `trutina.authentication` must never import `sqlalchemy`, `asyncpg`, `beanie`, `pymongo`, `fastapi`, `starlette`, `typer` or `rich`
 
 ## Repository Layout (real, current)
 
@@ -65,6 +71,8 @@ packages/core/src/trutina/core/{account,journal,posting}/{dtos,repo,service}.py,
 packages/core/src/trutina/core/trial_balance/{dtos,repo,service}.py, schemas/account_balance.py
 packages/observability/src/trutina/observability/
   __init__.py, configure.py, correlation.py, processors.py, asgi.py
+packages/authentication/src/trutina/authentication/
+  {identity,clock,events,password,tokens,user,status,attempts,refresh,authenticator}.py
 packages/storage-mongo/src/trutina/storage_mongo/
   {account,journal,posting}/{document,repository}.py, shared/, connection.py, error_translation.py
 packages/storage-postgres/src/trutina/storage_postgres/
@@ -77,6 +85,7 @@ packages/shared/src/trutina/shared/{rule,util}.py, errors/{codes,errors,translat
 tests/{fixtures,factories,fakes}/     # shared test infra only, no test cases
 tests/fixtures/logging.py             # autouse reset of trutina-observability's installed handler
 tests/fakes/trial_balance_repo.py, tests/factories/trial_balance.py
+tests/fakes/auth.py                   # in-memory fakes for the authentication contracts
 conftest.py, pytest.ini, ty.toml, ruff.toml, pyproject.toml, compose.yml
 ```
 
@@ -185,7 +194,7 @@ against a real PostgreSQL container; the smoke test also asserts a structured
 
 - Root `pytest.ini`: `testpaths = tests apps packages`, `asyncio_mode = auto`,
   markers `unit`/`integration` (speed, hand-written); `core`/`infra`/`cli`/`api`/
-  `shared`/`config`/`observability` (layer, auto-derived from file path by root
+  `shared`/`config`/`observability`/`authentication` (layer, auto-derived from file path by root
   `conftest.py`); and `mongo`/`postgres` (backend, auto-derived, only meaningful
   for `infra`-layer tests). Collection fails loudly if a test hand-writes a
   conflicting layer or backend marker.
@@ -200,7 +209,9 @@ against a real PostgreSQL container; the smoke test also asserts a structured
 
 - `trutina.config`: `Settings` (prod, `TRUTINA_` prefix, `.env`), `TestSettings`
   (`TRUTINA_TEST_` prefix, `.env.test`), `MongoSettings`, `PostgresSettings`,
-  `ApiSettings`, `LoggingSettings`, cached `get_settings()`.
+  `ApiSettings`, `LoggingSettings`, `AuthSettings`, cached `get_settings()`.
+- `Settings.environment` defaults to production; `TestSettings`
+  does not override it (opt in with `TRUTINA_TEST_ENVIRONMENT=test`).
 - Nested env vars use double underscore: `TRUTINA_MONGO__URI`, `TRUTINA_POSTGRES__URI`,
   `TRUTINA_LOGGING__LEVEL`, and their `TRUTINA_TEST_` equivalents.
   `LOGGING__LOGGER_LEVELS` is overridden as a single JSON object, since the
@@ -251,6 +262,10 @@ against a real PostgreSQL container; the smoke test also asserts a structured
   `trutina.api` may, each exactly once at their own composition root.
 - Never let `trutina.observability` import `trutina.core`, either storage
   package, `fastapi`, `starlette`, `typer`, or `rich` — it must stay generic.
+- Never let `trutina.core` import `trutina.authentication`, and never give a core
+  service method an `Identity`. Core receives only an opaque `actor: str` from its
+  caller. Never let `trutina.authentication` import `trutina.core`, a storage
+  package, or a web/CLI framework.
 - A service logs its own success, never its own failure — a raised
   `AppError`/`ValidationAppError` is logged exactly once, by the catching
   presentation-layer seam (`error_boundary()` or the API's exception
