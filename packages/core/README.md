@@ -47,7 +47,7 @@ from trutina.core.account.schemas.account import AccountCategory
 cash = CreateAccountInput(code="1001", name="Cash", category=AccountCategory.ASSET)
 ```
 
-Create a balanced journal input with at least two lines, then pass it to `JournalService.create_journal_entry`:
+Create a balanced journal input with at least two lines, then pass it to `JournalService.create_journal_entry` together with the keyword-only `actor` (see Write methods and the actor below):
 
 ```python
 from datetime import datetime
@@ -67,7 +67,9 @@ Use a `PostingService` to derive postings from a persisted journal entry:
 
 ```python
 async def post_entry(posting_service):
-    postings = await posting_service.post_journal_entry(journal_number=1)
+    postings = await posting_service.post_journal_entry(
+        journal_number=1, actor="system:example"
+    )
     return [(posting.account, posting.is_debit) for posting in postings]
 ```
 
@@ -84,6 +86,10 @@ async def check_books(trial_balance_service):
     )
     return report.total_debits, report.is_balanced, len(scoped.entries)
 ```
+
+## Write methods and the actor
+
+`JournalService.create_journal_entry` and `PostingService.post_journal_entry` require a keyword-only `actor: str`, the opaque identifier of the caller performing the write. Core checks only that it is non-blank (`trutina.shared.rule.is_non_blank_actor`) and otherwise raises `ValidationAppError` with `REQUIRED_FIELD` on `actor`. The check runs before any repository or chart access, so a blank actor consumes no journal number. The actor's format is not inspected, and it is not persisted or included in any log event. Read methods take no actor.
 
 ## Logging
 

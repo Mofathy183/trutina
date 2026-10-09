@@ -190,6 +190,23 @@ invariants belong in the schema. This is the dividing line to preserve when addi
 new validation rule — ask whether the check needs data outside the object being
 constructed.
 
+### Write methods take an opaque actor, checked for presence only
+
+**Decision:** `JournalService.create_journal_entry` and
+`PostingService.post_journal_entry` take a required keyword-only `actor: str`.
+Each calls `is_non_blank_actor` from `trutina-shared` as its first statement and
+raises `ValidationAppError.required_field("actor", actor)` when it is blank.
+
+**Why:** a write that cannot be attributed to a caller cannot be audited later.
+A required parameter turns a forgotten actor into a type error, and checking it
+first means a rejected call performs no repository or chart access and consumes
+no journal number. Core sees only an opaque string: it never imports
+`trutina.authentication`, and no service method takes an `Identity`. The format
+(UUID, `system:` prefix) is the calling application's concern.
+
+**Current behavior:** the actor is validated and then dropped. It is not
+persisted and not added to any log context.
+
 ### `AppError` / `ValidationAppError` are the only exceptions crossing the service boundary
 
 Every `raise` inside a service is one of these two types (from `trutina-shared`),
@@ -244,6 +261,8 @@ cross-service shape that recurs throughout core:
 
 ```text
 PostingService.post_journal_entry(journal_number)
+    │
+    ├─▶ is_non_blank_actor(actor)                           (ValidationAppError if blank)
     │
     ├─▶ JournalService.get_journal_entry(journal_number)   (fetch, not construct)
     │       └─▶ JournalRepo.get_by_number(...)
@@ -321,6 +340,9 @@ rule drift the domain-validation design decision above exists to prevent.
   test pinning "core never logs on failure" as one assertion. Low risk (each
   service's own tests already cover it), tracked as a minor Phase 7 nice-to-have,
   not a blocker.
+- The `actor` on `create_journal_entry` and `post_journal_entry` is validated for
+  presence and not persisted. Repository contracts take no attribution, so no
+  stored row records who wrote it.
 
 ## Common Mistakes to Avoid
 
@@ -354,3 +376,6 @@ rule drift the domain-validation design decision above exists to prevent.
 extra={"context": {...}})` is the full contract — the composing app's
   `configure_logging()` call is what turns that into structured output, not
   anything this package does.
+- Giving a service method an `Identity`, or importing `trutina.authentication`,
+  to "pass the user through." Core receives an opaque `actor: str` from its
+  caller and checks only that it is non-blank.
