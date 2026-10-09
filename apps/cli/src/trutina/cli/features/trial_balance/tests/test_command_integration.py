@@ -6,14 +6,23 @@ result directly, not a coroutine. Every call site below is therefore
 plain, unawaited portal.call(...), matching how CliState.call() and
 command.py themselves invoke it, and mirroring posting's own
 test_command_integration.py exactly.
+
+portal.call(func, *args) accepts no keyword arguments, so service calls
+that need the keyword-only ``actor`` are wrapped in functools.partial.
 """
+
+import functools
 
 import pytest
 from trutina.cli.composition.app import app
 from trutina.cli.shared.ui import console
 from trutina.core.account.schemas.account import AccountCategory
 
-from tests.factories import make_create_account_input, make_create_journal_input
+from tests.factories import (
+    TEST_ACTOR,
+    make_create_account_input,
+    make_create_journal_input,
+)
 
 
 def _invoke(runner, state, args, input=None):
@@ -49,9 +58,19 @@ def seeded_real_state(real_cli_state):
         ),
     )
     entry = real_cli_state.portal.call(
-        journal_service.create_journal_entry, make_create_journal_input()
+        functools.partial(
+            journal_service.create_journal_entry,
+            make_create_journal_input(),
+            actor=TEST_ACTOR,
+        )
     )
-    real_cli_state.portal.call(posting_service.post_journal_entry, entry.journal_number)
+    real_cli_state.portal.call(
+        functools.partial(
+            posting_service.post_journal_entry,
+            entry.journal_number,
+            actor=TEST_ACTOR,
+        )
+    )
 
     return real_cli_state
 
@@ -100,11 +119,18 @@ class TestTrialBalanceCommandIntegration:
         from datetime import datetime
 
         entry = real_cli_state.portal.call(
-            journal_service.create_journal_entry,
-            make_create_journal_input(posting_date=datetime(2025, 6, 1)),
+            functools.partial(
+                journal_service.create_journal_entry,
+                make_create_journal_input(posting_date=datetime(2025, 6, 1)),
+                actor=TEST_ACTOR,
+            )
         )
         real_cli_state.portal.call(
-            posting_service.post_journal_entry, entry.journal_number
+            functools.partial(
+                posting_service.post_journal_entry,
+                entry.journal_number,
+                actor=TEST_ACTOR,
+            )
         )
 
         result, output = _invoke(

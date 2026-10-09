@@ -19,7 +19,7 @@ single-service test could detect.
 import pytest
 from trutina.shared.errors import AppError, ErrorCode
 
-from tests.factories import make_create_journal_input
+from tests.factories import TEST_ACTOR, make_create_journal_input
 
 
 @pytest.mark.integration
@@ -27,8 +27,12 @@ class TestPostingServicePostJournalEntry:
     async def test_posts_journal_and_postings_balance(self, services, simple_accounts):
         _account_service, journal_service, posting_service = services
 
-        entry = await journal_service.create_journal_entry(make_create_journal_input())
-        postings = await posting_service.post_journal_entry(entry.journal_number)
+        entry = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
+        postings = await posting_service.post_journal_entry(
+            entry.journal_number, actor=TEST_ACTOR
+        )
 
         assert len(postings) == len(entry.lines)
         assert all(p.journal_number == entry.journal_number for p in postings)
@@ -49,11 +53,15 @@ class TestPostingServiceDuplicatePosting:
         """
         _account_service, journal_service, posting_service = services
 
-        entry = await journal_service.create_journal_entry(make_create_journal_input())
-        await posting_service.post_journal_entry(entry.journal_number)
+        entry = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
+        await posting_service.post_journal_entry(entry.journal_number, actor=TEST_ACTOR)
 
         with pytest.raises(AppError) as exc_info:
-            await posting_service.post_journal_entry(entry.journal_number)
+            await posting_service.post_journal_entry(
+                entry.journal_number, actor=TEST_ACTOR
+            )
 
         assert exc_info.value.code == ErrorCode.JOURNAL_ALREADY_POSTED
 
@@ -65,8 +73,10 @@ class TestPostingServiceRetrieval:
     ):
         _account_service, journal_service, posting_service = services
 
-        entry = await journal_service.create_journal_entry(make_create_journal_input())
-        await posting_service.post_journal_entry(entry.journal_number)
+        entry = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
+        await posting_service.post_journal_entry(entry.journal_number, actor=TEST_ACTOR)
 
         result = await posting_service.get_postings_by_journal_number(
             entry.journal_number
@@ -99,10 +109,14 @@ class TestCrossServiceWorkflow:
         cash = await account_service.get_account("1001")
         revenue = await account_service.get_account("4001")
 
-        entry = await journal_service.create_journal_entry(make_create_journal_input())
+        entry = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
         assert entry.is_balanced is True
 
-        postings = await posting_service.post_journal_entry(entry.journal_number)
+        postings = await posting_service.post_journal_entry(
+            entry.journal_number, actor=TEST_ACTOR
+        )
 
         cash_postings = await posting_service.get_postings_by_account(cash.name)
         revenue_postings = await posting_service.get_postings_by_account(revenue.name)

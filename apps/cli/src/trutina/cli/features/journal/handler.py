@@ -7,6 +7,7 @@ JournalService lazily from the supplied CliContext the same way
 Account's handlers resolve AccountService.
 """
 
+from trutina.cli.composition.actor import PRE_AUTH_ACTOR
 from trutina.cli.composition.context import CliContext
 from trutina.core.journal import CreateJournalInput, JournalViewModel
 
@@ -16,6 +17,9 @@ async def create_journal_entry_handler(
     dto: CreateJournalInput,
 ) -> JournalViewModel:
     """Create a new journal entry through JournalService.
+
+    The write is attributed to the CLI's fixed pre-auth actor
+    (``PRE_AUTH_ACTOR``); the command carries no identity.
 
     Args:
         ctx: The CliContext for this invocation. Callers must pass
@@ -36,7 +40,7 @@ async def create_journal_entry_handler(
             line amounts, etc.).
     """
     service = await ctx.get_journal_service()
-    return await service.create_journal_entry(dto)
+    return await service.create_journal_entry(dto, actor=PRE_AUTH_ACTOR)
 
 
 async def get_journal_entry_handler(

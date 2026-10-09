@@ -7,6 +7,7 @@ about Typer, Click, or terminal presentation. Every handler resolves
 PostingService lazily from the supplied CliContext.
 """
 
+from trutina.cli.composition.actor import PRE_AUTH_ACTOR
 from trutina.cli.composition.context import CliContext
 from trutina.core.posting import PostingViewModel
 
@@ -16,6 +17,9 @@ async def post_journal_entry_handler(
     journal_number: int,
 ) -> list[PostingViewModel]:
     """Post a validated journal entry, deriving its ledger postings.
+
+    The write is attributed to the CLI's fixed pre-auth actor
+    (``PRE_AUTH_ACTOR``); the command carries no identity.
 
     Args:
         ctx: The CliContext for this invocation. Callers must pass
@@ -34,7 +38,7 @@ async def post_journal_entry_handler(
             PostingService.post_journal_entry.
     """
     service = await ctx.get_posting_service()
-    return await service.post_journal_entry(journal_number)
+    return await service.post_journal_entry(journal_number, actor=PRE_AUTH_ACTOR)
 
 
 async def get_postings_by_account_handler(

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from decimal import Decimal
 
@@ -5,9 +6,15 @@ import pytest
 from trutina.core.account.schemas.account import AccountCategory
 from trutina.core.journal.dtos import JournalLineInput
 from trutina.core.posting.dtos import PostingViewModel
-from trutina.shared.errors import AppError, ErrorCode
+from trutina.shared.errors import (
+    AppError,
+    ErrorCode,
+    FieldViolation,
+    ValidationAppError,
+)
 
 from tests.factories import (
+    TEST_ACTOR,
     make_account,
     make_chart_of_accounts,
     make_create_journal_input,
@@ -33,9 +40,9 @@ class TestPostingServicePostJournalEntry:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        result = await posting_service.post_journal_entry(1)
+        result = await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         assert len(result) == 2
         assert all(isinstance(vm, PostingViewModel) for vm in result)
@@ -51,9 +58,9 @@ class TestPostingServicePostJournalEntry:
                 JournalLineInput(account="Sales Revenue", credit_amount=Decimal("50")),
             ]
         )
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        result = await posting_service.post_journal_entry(1)
+        result = await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         assert len(result) == 3
 
@@ -62,9 +69,9 @@ class TestPostingServicePostJournalEntry:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        result = await posting_service.post_journal_entry(1)
+        result = await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         debit_vm = next(vm for vm in result if vm.is_debit)
         assert debit_vm.account == "Cash"
@@ -77,9 +84,9 @@ class TestPostingServicePostJournalEntry:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        result = await posting_service.post_journal_entry(1)
+        result = await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         credit_vm = next(vm for vm in result if not vm.is_debit)
         assert credit_vm.account == "Sales Revenue"
@@ -92,9 +99,9 @@ class TestPostingServicePostJournalEntry:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        result = await posting_service.post_journal_entry(1)
+        result = await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         assert all(vm.journal_number == 1 for vm in result)
 
@@ -104,9 +111,9 @@ class TestPostingServicePostJournalEntry:
         )
         posting_date = datetime(2024, 6, 15)
         input_ = make_create_journal_input(posting_date=posting_date)
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        result = await posting_service.post_journal_entry(1)
+        result = await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         assert all(vm.posting_date == posting_date for vm in result)
 
@@ -115,9 +122,9 @@ class TestPostingServicePostJournalEntry:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        await posting_service.post_journal_entry(1)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         assert len(posting_repo.saved_batches) == 1
         assert len(posting_repo.saved_batches[0]) == 2
@@ -134,9 +141,9 @@ class TestPostingServicePostJournalEntry:
                 ),
             ]
         )
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        result = await posting_service.post_journal_entry(1)
+        result = await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         total_debits = sum(
             vm.debit_amount for vm in result if vm.debit_amount is not None
@@ -155,9 +162,9 @@ class TestPostingServicePostJournalEntry:
                 ),
             ]
         )
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        result = await posting_service.post_journal_entry(1)
+        result = await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         total_credits = sum(
             vm.credit_amount for vm in result if vm.credit_amount is not None
@@ -168,7 +175,7 @@ class TestPostingServicePostJournalEntry:
         posting_service, _, _ = make_posting_service(chart=_simple_chart())
 
         with pytest.raises(AppError) as exc_info:
-            await posting_service.post_journal_entry(999)
+            await posting_service.post_journal_entry(999, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_JOURNAL_ENTRY
 
@@ -177,12 +184,12 @@ class TestPostingServicePostJournalEntry:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        await posting_service.post_journal_entry(1)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         with pytest.raises(AppError) as exc_info:
-            await posting_service.post_journal_entry(1)
+            await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.JOURNAL_ALREADY_POSTED
 
@@ -191,12 +198,12 @@ class TestPostingServicePostJournalEntry:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        await posting_service.post_journal_entry(1)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         with pytest.raises(AppError) as exc_info:
-            await posting_service.post_journal_entry(1)
+            await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         assert exc_info.value.context["value"] == "1"
         assert exc_info.value.context["resource"] == "journal_entry"
@@ -206,7 +213,7 @@ class TestPostingServicePostJournalEntry:
         posting_service, _, posting_repo = make_posting_service(chart=_simple_chart())
 
         with pytest.raises(AppError):
-            await posting_service.post_journal_entry(999)
+            await posting_service.post_journal_entry(999, actor=TEST_ACTOR)
 
         assert len(posting_repo.saved_batches) == 0
 
@@ -215,13 +222,13 @@ class TestPostingServicePostJournalEntry:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        await posting_service.post_journal_entry(1)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
         first_batch_count = len(posting_repo.saved_batches)
 
         with pytest.raises(AppError):
-            await posting_service.post_journal_entry(1)
+            await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         assert len(posting_repo.saved_batches) == first_batch_count
 
@@ -236,9 +243,9 @@ class TestPostingServicePostJournalEntry:
                 JournalLineInput(account="Sales Revenue", credit_amount=Decimal("100")),
             ]
         )
-        await journal_service.create_journal_entry(input_)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
 
-        result = await posting_service.post_journal_entry(1)
+        result = await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         assert len(result) == 3
         debit_postings = [vm for vm in result if vm.is_debit]
@@ -254,8 +261,8 @@ class TestPostingServiceGetByAccount:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
-        await posting_service.post_journal_entry(1)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         result = await posting_service.get_postings_by_account("Cash")
 
@@ -274,8 +281,8 @@ class TestPostingServiceGetByAccount:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
-        await posting_service.post_journal_entry(1)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         result = await posting_service.get_postings_by_account("Sales Revenue")
 
@@ -287,8 +294,8 @@ class TestPostingServiceGetByAccount:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
-        await posting_service.post_journal_entry(1)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         result = await posting_service.get_postings_by_account("Cash")
 
@@ -299,8 +306,8 @@ class TestPostingServiceGetByAccount:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
-        await posting_service.post_journal_entry(1)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         result_lower = await posting_service.get_postings_by_account("cash")
         result_upper = await posting_service.get_postings_by_account("CASH")
@@ -318,8 +325,8 @@ class TestPostingServiceGetByJournalNumber:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
-        await posting_service.post_journal_entry(1)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         result = await posting_service.get_postings_by_journal_number(1)
 
@@ -337,8 +344,8 @@ class TestPostingServiceGetByJournalNumber:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
-        await posting_service.post_journal_entry(1)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         result = await posting_service.get_postings_by_journal_number(1)
 
@@ -349,8 +356,8 @@ class TestPostingServiceGetByJournalNumber:
             chart=_simple_chart()
         )
         input_ = make_create_journal_input()
-        await journal_service.create_journal_entry(input_)
-        await posting_service.post_journal_entry(1)
+        await journal_service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
 
         result = await posting_service.get_postings_by_journal_number(1)
 
@@ -364,11 +371,11 @@ class TestPostingServiceGetByJournalNumber:
         input1 = make_create_journal_input(description="First")
         input2 = make_create_journal_input(description="Second")
 
-        await journal_service.create_journal_entry(input1)
-        await journal_service.create_journal_entry(input2)
+        await journal_service.create_journal_entry(input1, actor=TEST_ACTOR)
+        await journal_service.create_journal_entry(input2, actor=TEST_ACTOR)
 
-        await posting_service.post_journal_entry(1)
-        await posting_service.post_journal_entry(2)
+        await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(2, actor=TEST_ACTOR)
 
         result1 = await posting_service.get_postings_by_journal_number(1)
         result2 = await posting_service.get_postings_by_journal_number(2)
@@ -377,3 +384,67 @@ class TestPostingServiceGetByJournalNumber:
         assert len(result2) == 2
         assert all(vm.journal_number == 1 for vm in result1)
         assert all(vm.journal_number == 2 for vm in result2)
+
+
+@pytest.mark.unit
+class TestPostingServicePostActorValidation:
+    @pytest.mark.parametrize("actor", ["", "   ", "\t\n"])
+    async def test_raises_validation_error_when_actor_is_blank(self, actor):
+        posting_service, journal_service, _ = make_posting_service(
+            chart=_simple_chart()
+        )
+        await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await posting_service.post_journal_entry(1, actor=actor)
+
+        assert exc_info.value.code == ErrorCode.VALIDATION_ERROR
+        assert exc_info.value.errors == [
+            FieldViolation(code=ErrorCode.REQUIRED_FIELD, field="actor", value=actor)
+        ]
+
+    async def test_does_not_persist_when_actor_is_blank(self):
+        posting_service, journal_service, posting_repo = make_posting_service(
+            chart=_simple_chart()
+        )
+        await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
+
+        with pytest.raises(ValidationAppError):
+            await posting_service.post_journal_entry(1, actor=" ")
+
+        assert posting_repo.saved_batches == []
+
+    async def test_blank_actor_takes_precedence_over_unknown_journal_number(self):
+        posting_service, _, _ = make_posting_service(chart=_simple_chart())
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await posting_service.post_journal_entry(999, actor="")
+
+        assert exc_info.value.errors[0].code == ErrorCode.REQUIRED_FIELD
+
+    async def test_emits_no_log_record_when_actor_is_blank(self, caplog):
+        posting_service, _, _ = make_posting_service(chart=_simple_chart())
+
+        with caplog.at_level(logging.INFO):
+            with pytest.raises(ValidationAppError):
+                await posting_service.post_journal_entry(1, actor="")
+
+        assert [r for r in caplog.records if r.name.startswith("trutina.core")] == []
+
+    async def test_created_log_context_carries_no_actor(self, caplog):
+        posting_service, journal_service, _ = make_posting_service(
+            chart=_simple_chart()
+        )
+        await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
+
+        with caplog.at_level(logging.INFO):
+            await posting_service.post_journal_entry(1, actor=TEST_ACTOR)
+
+        record = next(r for r in caplog.records if r.getMessage() == "posting.created")
+        assert set(record.context) == {"journal_number", "line_count"}

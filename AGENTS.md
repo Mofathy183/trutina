@@ -56,7 +56,7 @@ imports it, and no core service method takes an `Identity`.
 
 ```text
 apps/cli/src/trutina/cli/
-  main.py, composition/{app,bootstrap,context,state}.py,
+  main.py, composition/{app,bootstrap,context,state,actor}.py,
   features/{account,journal,posting}/{command,parser,prompt,handler,formatter}.py,
   features/trial_balance/{command,parser,handler,formatter}.py   # flat command, no prompt.py
   shared/{boundary/error_boundary.py, errors/, formatters/, interaction/, ui/{theme/,shell_banner.py,logo.py}},
@@ -65,7 +65,7 @@ apps/cli/src/trutina/cli/
 apps/api/src/trutina/api/
   composition/{container,bootstrap,app,dependencies}.py,
   features/{system,account,journal,posting,trial_balance}/{router,schemas,mapper,handler,presenter}.py,
-  shared/{response.py, errors/{catalog,handlers,schemas}.py}
+  shared/{response.py, actor.py, errors/{catalog,handlers,schemas}.py}
 
 packages/core/src/trutina/core/{account,journal,posting}/{dtos,repo,service}.py, schemas/
 packages/core/src/trutina/core/trial_balance/{dtos,repo,service}.py, schemas/account_balance.py
@@ -123,6 +123,10 @@ Package/app own tests live beside their own code (e.g.
   state change (or, for trial balance, on report generation) and never on a
   read or a raised `AppError`. No monetary field is ever included in these
   log events.
+- `JournalService.create_journal_entry` and `PostingService.post_journal_entry`
+  require a keyword-only, non-blank `actor: str`, checked first and not persisted
+  or logged. `apps/api` and `apps/cli` each pass their own fixed `PRE_AUTH_ACTOR`
+  constant (`api/shared/actor.py`, `cli/composition/actor.py`).
 
 ## Error Model
 

@@ -4,6 +4,7 @@ import pytest
 from trutina.shared.rule import (
     account_lookup_key,
     clean_account_name,
+    is_non_blank_actor,
     is_valid_line_amounts,
 )
 
@@ -11,13 +12,10 @@ from trutina.shared.rule import (
 @pytest.mark.unit
 class TestCleanAccountName:
     def test_returns_trimmed_name(self):
-        # Arrange
         value = "  Cash  "
 
-        # Act
         result = clean_account_name(value)
 
-        # Assert
         assert result == "Cash"
 
     @pytest.mark.parametrize(
@@ -34,12 +32,9 @@ class TestCleanAccountName:
         ],
     )
     def test_accepts_valid_account_names(self, name):
-        # Arrange
 
-        # Act
         result = clean_account_name(name)
 
-        # Assert
         assert result == name
 
     @pytest.mark.parametrize(
@@ -50,12 +45,9 @@ class TestCleanAccountName:
         ],
     )
     def test_returns_none_when_name_is_empty_or_whitespace_only(self, name):
-        # Arrange
 
-        # Act
         result = clean_account_name(name)
 
-        # Assert
         assert result is None
 
     @pytest.mark.parametrize(
@@ -67,12 +59,9 @@ class TestCleanAccountName:
         ],
     )
     def test_returns_none_when_name_does_not_start_with_letter(self, name):
-        # Arrange
 
-        # Act
         result = clean_account_name(name)
 
-        # Assert
         assert result is None
 
     @pytest.mark.parametrize(
@@ -92,12 +81,9 @@ class TestCleanAccountName:
         self,
         name,
     ):
-        # Arrange
 
-        # Act
         result = clean_account_name(name)
 
-        # Assert
         assert result is None
 
     @pytest.mark.parametrize(
@@ -116,12 +102,9 @@ class TestCleanAccountName:
         self,
         name,
     ):
-        # Arrange
 
-        # Act
         result = clean_account_name(name)
 
-        # Assert
         assert result is None
 
     @pytest.mark.parametrize(
@@ -138,43 +121,34 @@ class TestCleanAccountName:
         self,
         name,
     ):
-        # Arrange
 
-        # Act
         result = clean_account_name(name)
 
-        # Assert
         assert result is None
 
 
 @pytest.mark.unit
 class TestIsValidLineAmounts:
     def test_accepts_debit_only_amount(self):
-        # Arrange
         debit = Decimal("100")
         credit = Decimal("0")
 
-        # Act
         result = is_valid_line_amounts(
             debit=debit,
             credit=credit,
         )
 
-        # Assert
         assert result is True
 
     def test_accepts_credit_only_amount(self):
-        # Arrange
         debit = Decimal("0")
         credit = Decimal("100")
 
-        # Act
         result = is_valid_line_amounts(
             debit=debit,
             credit=credit,
         )
 
-        # Assert
         assert result is True
 
     @pytest.mark.parametrize(
@@ -190,29 +164,23 @@ class TestIsValidLineAmounts:
         debit,
         credit,
     ):
-        # Arrange
 
-        # Act
         result = is_valid_line_amounts(
             debit=debit,
             credit=credit,
         )
 
-        # Assert
         assert result is False
 
     def test_rejects_when_both_amounts_are_zero(self):
-        # Arrange
         debit = Decimal("0")
         credit = Decimal("0")
 
-        # Act
         result = is_valid_line_amounts(
             debit=debit,
             credit=credit,
         )
 
-        # Assert
         assert result is False
 
     @pytest.mark.parametrize(
@@ -229,15 +197,12 @@ class TestIsValidLineAmounts:
         debit,
         credit,
     ):
-        # Arrange
 
-        # Act
         result = is_valid_line_amounts(
             debit=debit,
             credit=credit,
         )
 
-        # Assert
         assert result is True
 
 
@@ -277,3 +242,17 @@ class TestAccountLookupKey:
         result = account_lookup_key("Straße")
 
         assert result == "strasse"
+
+
+@pytest.mark.unit
+class TestIsNonBlankActor:
+    @pytest.mark.parametrize("actor", ["", " ", "   ", "\t", "\n", "\t\n "])
+    def test_rejects_blank_actor(self, actor):
+        assert is_non_blank_actor(actor) is False
+
+    @pytest.mark.parametrize(
+        "actor",
+        ["system:test", "a", " padded ", "1b4e28ba-2fa1-11d2-883f-0016d3cca427"],
+    )
+    def test_accepts_actor_with_content(self, actor):
+        assert is_non_blank_actor(actor) is True

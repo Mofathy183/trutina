@@ -156,3 +156,17 @@ class TestValidationAppError:
         assert called is True
         assert error.code == ErrorCode.VALIDATION_ERROR
         assert error.errors == translated
+
+    def test_required_field_builds_one_required_field_violation(self):
+        error = ValidationAppError.required_field("actor", "   ")
+
+        assert error.code == ErrorCode.VALIDATION_ERROR
+        assert error.errors == [
+            FieldViolation(code=ErrorCode.REQUIRED_FIELD, field="actor", value="   ")
+        ]
+
+    def test_required_field_does_not_downgrade_to_unknown_error(self):
+        error = ValidationAppError.required_field("actor", "")
+
+        assert [v.code for v in error.errors] == [ErrorCode.REQUIRED_FIELD]
+        assert ErrorCode.UNKNOWN_ERROR not in {v.code for v in error.errors}

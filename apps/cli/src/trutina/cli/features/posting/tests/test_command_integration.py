@@ -8,6 +8,10 @@ command.py themselves invoke it. Fixtures/tests here are plain `def`,
 not `async def` -- there is nothing to await once portal.call() is used
 correctly.
 
+portal.call(func, *args) accepts no keyword arguments, so the journal
+service call that needs the keyword-only ``actor`` is wrapped in
+functools.partial.
+
 Assumption flagged: state.portal.call(state.context.get_journal_service)
 / get_posting_service() is assumed to resolve real Mongo-backed services
 identically whether the CliContext was built for fake or real repos --
@@ -16,12 +20,18 @@ exact accessor names on CliContext were not directly confirmed in the
 files available for this task.
 """
 
+import functools
+
 import pytest
 from trutina.cli.features.posting.command import app
 from trutina.cli.shared.ui import console
 from trutina.core.account.schemas.account import AccountCategory
 
-from tests.factories import make_create_account_input, make_create_journal_input
+from tests.factories import (
+    TEST_ACTOR,
+    make_create_account_input,
+    make_create_journal_input,
+)
 
 
 def _invoke(runner, state, args, input=None):
@@ -58,7 +68,11 @@ def seeded_real_state(real_cli_state):
         ),
     )
     real_cli_state.portal.call(
-        journal_service.create_journal_entry, make_create_journal_input()
+        functools.partial(
+            journal_service.create_journal_entry,
+            make_create_journal_input(),
+            actor=TEST_ACTOR,
+        )
     )
 
     return real_cli_state

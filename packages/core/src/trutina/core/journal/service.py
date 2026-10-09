@@ -6,6 +6,7 @@ only entry point for creating, retrieving, and listing journal entries.
 
 Responsibilities:
 
+- Require a non-blank, caller-supplied actor before any other work.
 - Validate account references against the chart of accounts.
 - Assign journal numbers via the repository.
 - Construct domain JournalLine and JournalEntry models from service DTOs.
@@ -31,6 +32,7 @@ from trutina.shared.errors import (
     ErrorCode,
     ValidationAppError,
 )
+from trutina.shared.rule import is_non_blank_actor
 
 from .dtos import (
     CreateJournalInput,
@@ -79,27 +81,39 @@ class JournalService:
     async def create_journal_entry(
         self,
         input: CreateJournalInput,
+        *,
+        actor: str,
     ) -> JournalViewModel:
         """Validate and persist a new journal entry.
 
-        Resolves all account references against a single chart snapshot,
-        assigns the next journal number, constructs the domain entry
-        (which validates its own accounting invariants), and persists it.
-        Logs "journal.created" only after the repository write succeeds.
+        Rejects a blank actor first, so a rejected call touches neither the
+        chart of accounts nor the journal-number sequence. Then resolves all
+        account references against a single chart snapshot, assigns the next
+        journal number, constructs the domain entry (which validates its own
+        accounting invariants), and persists it. Logs "journal.created" only
+        after the repository write succeeds.
 
         Args:
             input: Raw journal entry creation input.
+            actor: Opaque identifier of the caller performing the write. It
+                must contain at least one non-whitespace character; its
+                format is not inspected here. It is checked for presence
+                only: it is not persisted or logged.
 
         Returns:
             The view model of the newly created journal entry.
 
         Raises:
+            ValidationAppError: REQUIRED_FIELD on ``actor`` if it is blank.
+                Also raised when the journal entry fields are structurally
+                invalid (unbalanced totals, future date, invalid line
+                amounts, etc.).
             AppError: UNKNOWN_ACCOUNT if any line references an account
                 that does not exist in the chart of accounts.
-            ValidationAppError: If the journal entry fields are
-                structurally invalid (unbalanced totals, future date,
-                invalid line amounts, etc.).
         """
+        if not is_non_blank_actor(actor):
+            raise ValidationAppError.required_field("actor", actor)
+
         await self._validate_accounts(input.lines)
 
         journal_number = await self._repo.next_journal_number()

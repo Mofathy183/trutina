@@ -13,7 +13,11 @@ from decimal import Decimal
 import pytest
 from trutina.core.account.schemas.account import AccountCategory
 
-from tests.factories import make_create_account_input, make_create_journal_input
+from tests.factories import (
+    TEST_ACTOR,
+    make_create_account_input,
+    make_create_journal_input,
+)
 
 
 async def _seed_accounts(app):
@@ -42,10 +46,10 @@ class TestGetTrialBalanceRouteIntegration:
     async def test_reflects_a_posted_journal_entry(self, real_api_client, real_api_app):
         await _seed_accounts(real_api_app)
         entry = await real_api_app.state.container.journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
         await real_api_app.state.container.posting_service.post_journal_entry(
-            entry.journal_number
+            entry.journal_number, actor=TEST_ACTOR
         )
 
         response = await real_api_client.get("/trial-balance")
@@ -60,10 +64,11 @@ class TestGetTrialBalanceRouteIntegration:
     async def test_respects_as_of_query_param(self, real_api_client, real_api_app):
         await _seed_accounts(real_api_app)
         entry = await real_api_app.state.container.journal_service.create_journal_entry(
-            make_create_journal_input(posting_date=datetime(2025, 6, 1))
+            make_create_journal_input(posting_date=datetime(2025, 6, 1)),
+            actor=TEST_ACTOR,
         )
         await real_api_app.state.container.posting_service.post_journal_entry(
-            entry.journal_number
+            entry.journal_number, actor=TEST_ACTOR
         )
 
         response = await real_api_client.get(
@@ -78,16 +83,18 @@ class TestGetTrialBalanceRouteIntegration:
     ):
         await _seed_accounts(real_api_app)
         early = await real_api_app.state.container.journal_service.create_journal_entry(
-            make_create_journal_input(posting_date=datetime(2025, 1, 1))
+            make_create_journal_input(posting_date=datetime(2025, 1, 1)),
+            actor=TEST_ACTOR,
         )
         late = await real_api_app.state.container.journal_service.create_journal_entry(
-            make_create_journal_input(posting_date=datetime(2025, 6, 1))
+            make_create_journal_input(posting_date=datetime(2025, 6, 1)),
+            actor=TEST_ACTOR,
         )
         await real_api_app.state.container.posting_service.post_journal_entry(
-            early.journal_number
+            early.journal_number, actor=TEST_ACTOR
         )
         await real_api_app.state.container.posting_service.post_journal_entry(
-            late.journal_number
+            late.journal_number, actor=TEST_ACTOR
         )
 
         response = await real_api_client.get("/trial-balance")

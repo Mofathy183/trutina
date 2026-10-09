@@ -139,6 +139,12 @@ current workflow. This is deferred, not broken — nothing currently calls
 it, so it carries no behavioral risk, but it also should not be assumed to
 back any current default-date behavior in journal or posting creation.
 
+`ValidationAppError.required_field()` builds its `FieldViolation` directly, so
+it never passes through `get_field_violations()` and is not affected by the
+`UNKNOWN_ERROR` downgrade above: its violation keeps `ErrorCode.REQUIRED_FIELD`
+on `.code`. `REQUIRED_FIELD` is Pydantic's `"missing"`, and a blank string is not
+strictly missing; no dedicated blank-value code exists.
+
 ## Allowed and Forbidden Dependencies
 
 **Allowed (this package may depend on):**
@@ -222,7 +228,10 @@ adapter (CLI, future API)
 - **`errors.py`**: add a new `AppError` classmethod constructor only when an
   existing one (`not_found`, `conflict`, `storage_unavailable`,
   `storage_timeout`, `unknown`) doesn't already fit the shape of the new
-  failure. Keep every new constructor's `context` JSON-primitive-only.
+  failure. `ValidationAppError` has two constructors: `validation()`
+  (translates a Pydantic error) and `required_field()` (a single
+  `REQUIRED_FIELD` violation for a blank required value). Keep every new
+  constructor's `context` JSON-primitive-only.
 - **`translators.py`**: extend `PYDANTIC_CODES` only when adding support for
   a genuinely new Pydantic-native error type that should pass through
   as-is. Do not use this set as a workaround for the `UNKNOWN_ERROR`
@@ -263,3 +272,7 @@ adapter (CLI, future API)
 - **Putting a feature-specific rule here "because it might be reused
   later."** Speculative generality is a cost, not a hedge. A rule belongs
   in `shared/rule.py` only once at least two features actually use it.
+- **Putting an actor format check in `is_non_blank_actor()`.** It is a presence
+  check only. Whether an actor is a UUID or carries a `system:` prefix is decided
+  by the calling application, so the accounting layers never learn what an
+  identity looks like.

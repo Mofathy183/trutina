@@ -20,7 +20,7 @@ they use fakes:
 import pytest
 from trutina.shared.errors import AppError, ErrorCode
 
-from tests.factories import make_create_journal_input
+from tests.factories import TEST_ACTOR, make_create_journal_input
 
 
 @pytest.mark.integration
@@ -31,7 +31,7 @@ class TestJournalServiceCreateAndRetrieve:
         _account_service, journal_service, _posting_service = services
 
         created = await journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
         fetched = await journal_service.get_journal_entry(created.journal_number)
 
@@ -49,7 +49,9 @@ class TestJournalServiceUnknownAccount:
         _account_service, journal_service, _posting_service = services
 
         with pytest.raises(AppError) as exc_info:
-            await journal_service.create_journal_entry(make_create_journal_input())
+            await journal_service.create_journal_entry(
+                make_create_journal_input(), actor=TEST_ACTOR
+            )
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
 
@@ -65,7 +67,11 @@ class TestJournalServiceNumberAllocation:
         """
         _account_service, journal_service, _posting_service = services
 
-        first = await journal_service.create_journal_entry(make_create_journal_input())
-        second = await journal_service.create_journal_entry(make_create_journal_input())
+        first = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
+        second = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
 
         assert second.journal_number == first.journal_number + 1

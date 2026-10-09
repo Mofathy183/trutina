@@ -119,6 +119,7 @@ contract (independent siblings), so neither can import the other.
   fakes only. No password hasher, token implementation, storage adapter, route or
   command exists, no `AUTH_*` `ErrorCode` exists, and no app depends on the package.
   The token, refresh-token and login-attempt contracts are provisional.
+  Separately from that package, `trutina-core`'s journal and posting write services now require a non-blank `actor: str` and discard it after the check; it is not persisted yet.
 
 ## Cross-Package Conflicts Found During This Pass
 
