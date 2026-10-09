@@ -7,6 +7,7 @@ from .account import (
     make_update_account_input,
     make_update_account_request,
 )
+from .actor import TEST_ACTOR
 from .api import build_url, make_headers
 from .cli import make_fake_cli_context
 from .journal import (
@@ -59,4 +60,5 @@ __all__ = [
     "make_account_balance_entry",
     "make_fake_trial_balance_repo",
     "make_trial_balance_service",
+    "TEST_ACTOR",
 ]
