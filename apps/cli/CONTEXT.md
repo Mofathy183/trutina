@@ -308,6 +308,25 @@ functionality beyond what's needed" development rule warns against. Two
 scalars are simple enough that a wrapper type adds indirection without
 adding safety.
 
+## Why Handlers Pass A Fixed Pre-Auth Actor
+
+**Decision:** `create_journal_entry_handler` and `post_journal_entry_handler`
+pass `PRE_AUTH_ACTOR` (`composition/actor.py`, `"system:pre-auth:cli"`) as the
+keyword-only `actor` that `trutina-core`'s write services require. Handler
+signatures are unchanged and neither command supplies an actor.
+
+**Why:** CLI commands carry no authenticated identity today. Core checks only
+that the actor is non-blank, so a constant is sufficient, and a format check in
+the handler would guard nothing. The `system:` prefix marks a non-user writer and
+the `:cli` suffix records which application wrote.
+
+**Why it lives in `composition/`, not `shared/`:** the identity the CLI writes
+as is process-level state, so it sits with the composition root beside
+`CliContext` and `CliState`. `shared/` holds only subpackages grouped by concern.
+
+**Current behavior:** the constant is validated by core and dropped; it is not
+persisted.
+
 ## Why Trial Balance Is A Flat Command With No Prompt
 
 **Decision:** `trial-balance` is registered with `app.command("trial-balance")` on the
@@ -384,6 +403,7 @@ cli.composition.app
     -> cli.composition.state.CliState.call(...)
       -> cli.features.*.handler
         -> cli.composition.context.CliContext -> trutina-core services
+        -> cli.composition.actor.PRE_AUTH_ACTOR
     -> cli.features.*.formatter -> cli.shared.ui
     -> cli.shared.boundary.error_boundary
          -> cli.shared.formatters.error + cli.shared.errors + cli.shared.ui

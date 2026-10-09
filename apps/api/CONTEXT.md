@@ -120,6 +120,21 @@ service to either fake the entire container or patch an attribute on a shared ob
 fake_service`, which the `override_service` test fixture relies on directly. Narrow
 providers make narrow overrides possible.
 
+## Why Handlers Pass A Fixed Pre-Auth Actor
+
+**Decision:** the journal `create_journal_entry` handler and the posting
+`post_journal_entry_handler` pass `PRE_AUTH_ACTOR` (`api/shared/actor.py`,
+`"system:pre-auth:api"`) as the keyword-only `actor` that `trutina-core`'s write
+services require. Handler signatures are unchanged and routers supply no actor.
+
+**Why:** requests carry no authenticated identity today, and the actor is never
+read from a request body or DTO. Core checks only that it is non-blank. The
+`system:` prefix marks a non-user writer and the `:api` suffix records which
+application wrote.
+
+**Current behavior:** the constant is validated by core and dropped; it is not
+persisted.
+
 ## Why Response Envelope (`BaseResponse`/`SuccessResponse`/`ErrorResponse`) Wraps Every Body
 
 **Decision:** Every domain success model and every error model inherits from
