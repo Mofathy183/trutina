@@ -95,3 +95,22 @@ def account_lookup_key(name: str) -> str:
         The case-folded lookup key.
     """
     return name.casefold()
+
+
+def is_non_blank_actor(actor: str) -> bool:
+    """Whether an actor string names someone: not empty, not whitespace-only.
+
+    Every write must be attributable to a caller. A blank actor would
+    record no one, and the attribution could never be recovered later.
+
+    This is a presence check only. It never inspects the format (UUID,
+    ``system:`` prefix); that belongs to the API and CLI handlers, so the
+    accounting layers never learn what an identity looks like.
+
+    Args:
+        actor: The caller-supplied actor string.
+
+    Returns:
+        True if ``actor`` contains at least one non-whitespace character.
+    """
+    return bool(actor.strip())

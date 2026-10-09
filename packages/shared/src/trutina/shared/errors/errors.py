@@ -201,3 +201,38 @@ class ValidationAppError(AppError):
             code=ErrorCode.VALIDATION_ERROR,
             errors=get_field_violations(exc),
         )
+
+    @classmethod
+    def required_field(cls, field_name: str, value: str) -> ValidationAppError:
+        """Build a single-violation error for a required field that is blank.
+
+        Used when a caller-supplied value is present but carries no
+        content (for example a whitespace-only actor), which Pydantic's
+        own ``missing`` check would not report. The violation is built
+        directly rather than translated from a Pydantic error, so its
+        code stays ``REQUIRED_FIELD`` instead of being downgraded to
+        ``UNKNOWN_ERROR`` by ``get_field_violations()``.
+
+        ``REQUIRED_FIELD`` is ``"missing"`` in Pydantic's vocabulary, and a
+        blank string is not strictly missing. A dedicated blank-value code
+        does not exist, so this is the closest stable identity.
+
+        Args:
+            field_name: The name of the offending field.
+            value: The rejected input, stringified for presentation safety.
+                Must not be a secret.
+
+        Returns:
+            A ValidationAppError with code VALIDATION_ERROR carrying one
+            FieldViolation with code REQUIRED_FIELD.
+        """
+        return cls(
+            code=ErrorCode.VALIDATION_ERROR,
+            errors=[
+                FieldViolation(
+                    code=ErrorCode.REQUIRED_FIELD,
+                    field=field_name,
+                    value=value,
+                )
+            ],
+        )
