@@ -13,6 +13,7 @@ a router or directly from a unit test against a fake-repo-backed
 and the account feature's API handler.
 """
 
+from trutina.api.shared.actor import PRE_AUTH_ACTOR
 from trutina.core.journal.dtos import CreateJournalInput, JournalViewModel
 from trutina.core.journal.service import JournalService
 
@@ -21,6 +22,9 @@ async def create_journal_entry(
     service: JournalService, dto: CreateJournalInput
 ) -> JournalViewModel:
     """Create a new journal entry.
+
+    The write is attributed to the API's fixed pre-auth actor
+    (``PRE_AUTH_ACTOR``); the request carries no identity.
 
     Args:
         service: The resolved ``JournalService`` instance.
@@ -36,7 +40,7 @@ async def create_journal_entry(
             structurally invalid (unbalanced totals, future date,
             invalid line amounts, etc.).
     """
-    return await service.create_journal_entry(dto)
+    return await service.create_journal_entry(dto, actor=PRE_AUTH_ACTOR)
 
 
 async def get_journal_entry(

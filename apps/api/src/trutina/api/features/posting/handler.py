@@ -6,6 +6,7 @@ and the application layer, leaving request mapping, response
 presentation, and error translation to their respective components.
 """
 
+from trutina.api.shared.actor import PRE_AUTH_ACTOR
 from trutina.core.posting.dtos import PostingViewModel
 from trutina.core.posting.service import PostingService
 
@@ -17,7 +18,9 @@ async def post_journal_entry_handler(
     """Post a journal entry and return the derived ledger postings.
 
     Posting converts a balanced journal entry into the immutable ledger
-    history by creating one posting for each journal line.
+    history by creating one posting for each journal line. The write is
+    attributed to the API's fixed pre-auth actor (``PRE_AUTH_ACTOR``);
+    the request carries no identity.
 
     Args:
         service: The posting service coordinating the workflow.
@@ -30,7 +33,7 @@ async def post_journal_entry_handler(
         AppError: If the journal entry does not exist or has already
             been posted.
     """
-    return await service.post_journal_entry(journal_number)
+    return await service.post_journal_entry(journal_number, actor=PRE_AUTH_ACTOR)
 
 
 async def get_postings_by_account_handler(
