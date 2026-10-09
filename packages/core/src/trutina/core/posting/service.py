@@ -8,6 +8,7 @@ effect.
 
 Responsibilities:
 
+- Require a non-blank, caller-supplied actor before any other work.
 - Retrieve the journal entry by number via JournalService.
 - Enforce the one-posting-per-journal-entry invariant.
 - Derive one LedgerPosting per journal line on the entry.
@@ -28,7 +29,8 @@ JournalService is fully validated.
 import logging
 
 from trutina.core.journal.service import JournalService
-from trutina.shared.errors import AppError, ErrorCode
+from trutina.shared.errors import AppError, ErrorCode, ValidationAppError
+from trutina.shared.rule import is_non_blank_actor
 
 from .dtos import PostingViewModel
 from .repo import PostingRepo
@@ -67,28 +69,39 @@ class PostingService:
     async def post_journal_entry(
         self,
         journal_number: int,
+        *,
+        actor: str,
     ) -> list[PostingViewModel]:
         """Derive and persist postings for a validated journal entry.
 
-        Retrieves the journal entry by number, verifies it has not
-        already been posted, builds one LedgerPosting per line, persists
-        the batch in a single repository call, and returns PostingViewModels.
-        Logs "posting.created" once, for the whole batch, only after the
-        repository write succeeds.
+        Rejects a blank actor first, so a rejected call reads nothing from
+        the journal or the posting repository. Then retrieves the journal
+        entry by number, verifies it has not already been posted, builds one
+        LedgerPosting per line, persists the batch in a single repository
+        call, and returns PostingViewModels. Logs "posting.created" once,
+        for the whole batch, only after the repository write succeeds.
         The repository's transaction guarantees, if any, are adapter-specific.
 
         Args:
             journal_number: The journal number of the entry to post.
+            actor: Opaque identifier of the caller performing the write. It
+                must contain at least one non-whitespace character; its
+                format is not inspected here. It is checked for presence
+                only: it is not persisted or logged.
 
         Returns:
             The view models of the newly created postings, in the same
             order as the entry's lines.
 
         Raises:
+            ValidationAppError: REQUIRED_FIELD on ``actor`` if it is blank.
             AppError: UNKNOWN_JOURNAL_ENTRY if no entry has that number.
             AppError: JOURNAL_ALREADY_POSTED if postings already exist
                 for this journal entry.
         """
+        if not is_non_blank_actor(actor):
+            raise ValidationAppError.required_field("actor", actor)
+
         entry = await self._journal_service.get_journal_entry(journal_number)
 
         existing = await self._repo.get_by_journal_number(journal_number)
