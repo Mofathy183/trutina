@@ -14,7 +14,11 @@ integration.
 import pytest
 from trutina.core.account.schemas.account import AccountCategory
 
-from tests.factories import make_create_account_input, make_create_journal_input
+from tests.factories import (
+    TEST_ACTOR,
+    make_create_account_input,
+    make_create_journal_input,
+)
 
 
 async def _seed_accounts(fake_container):
@@ -33,7 +37,7 @@ class TestPostJournalEntryRoute:
     async def test_returns_201(self, api_client, fake_container):
         await _seed_accounts(fake_container)
         entry = await fake_container.journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
 
         response = await api_client.post(f"/postings/{entry.journal_number}")
@@ -43,7 +47,7 @@ class TestPostJournalEntryRoute:
     async def test_returns_one_posting_per_line(self, api_client, fake_container):
         await _seed_accounts(fake_container)
         entry = await fake_container.journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
 
         response = await api_client.post(f"/postings/{entry.journal_number}")
@@ -59,7 +63,7 @@ class TestPostJournalEntryRoute:
     async def test_returns_409_when_already_posted(self, api_client, fake_container):
         await _seed_accounts(fake_container)
         entry = await fake_container.journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
         await api_client.post(f"/postings/{entry.journal_number}")
 
@@ -84,7 +88,7 @@ class TestGetPostingsByAccountRoute:
     async def test_returns_postings_for_account(self, api_client, fake_container):
         await _seed_accounts(fake_container)
         entry = await fake_container.journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
         await api_client.post(f"/postings/{entry.journal_number}")
 
@@ -113,7 +117,7 @@ class TestGetPostingsByJournalNumberRoute:
     ):
         await _seed_accounts(fake_container)
         entry = await fake_container.journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
         await api_client.post(f"/postings/{entry.journal_number}")
 

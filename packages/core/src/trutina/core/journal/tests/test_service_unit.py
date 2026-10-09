@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from decimal import Decimal
 
@@ -9,9 +10,15 @@ from trutina.core.journal.dtos import (
     JournalViewModel,
 )
 from trutina.core.journal.schemas.journal import JournalEntry
-from trutina.shared.errors import AppError, ErrorCode, ValidationAppError
+from trutina.shared.errors import (
+    AppError,
+    ErrorCode,
+    FieldViolation,
+    ValidationAppError,
+)
 
 from tests.factories import (
+    TEST_ACTOR,
     make_account,
     make_chart_of_accounts,
     make_create_journal_input,
@@ -36,7 +43,7 @@ class TestJournalServiceCreate:
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
 
-        result = await service.create_journal_entry(input_)
+        result = await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert isinstance(result, JournalViewModel)
 
@@ -44,7 +51,7 @@ class TestJournalServiceCreate:
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
 
-        result = await service.create_journal_entry(input_)
+        result = await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert result.journal_number == 1
 
@@ -52,8 +59,8 @@ class TestJournalServiceCreate:
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
 
-        first = await service.create_journal_entry(input_)
-        second = await service.create_journal_entry(input_)
+        first = await service.create_journal_entry(input_, actor=TEST_ACTOR)
+        second = await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert first.journal_number == 1
         assert second.journal_number == 2
@@ -62,7 +69,7 @@ class TestJournalServiceCreate:
         service, repo = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
 
-        await service.create_journal_entry(input_)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert len(repo.saved_entries) == 1
         assert isinstance(repo.saved_entries[0], JournalEntry)
@@ -71,7 +78,7 @@ class TestJournalServiceCreate:
         service, repo = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
 
-        result = await service.create_journal_entry(input_)
+        result = await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         saved = repo.saved_entries[0]
         assert saved.journal_number == result.journal_number
@@ -82,7 +89,7 @@ class TestJournalServiceCreate:
 
         input_ = make_create_journal_input()
 
-        await service.create_journal_entry(input_)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         saved = repo.saved_entries[0]
 
@@ -107,7 +114,7 @@ class TestJournalServiceCreate:
             ]
         )
 
-        result = await service.create_journal_entry(input_)
+        result = await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert result.total_debits == Decimal("250.00")
         assert result.total_credits == Decimal("250.00")
@@ -117,7 +124,7 @@ class TestJournalServiceCreate:
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
 
-        result = await service.create_journal_entry(input_)
+        result = await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert len(result.lines) == 2
 
@@ -139,7 +146,7 @@ class TestJournalServiceCreate:
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input(description="Opening balance")
 
-        result = await service.create_journal_entry(input_)
+        result = await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert result.description == "Opening balance"
 
@@ -147,7 +154,7 @@ class TestJournalServiceCreate:
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input(description=None)
 
-        result = await service.create_journal_entry(input_)
+        result = await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert result.description is None
 
@@ -156,7 +163,7 @@ class TestJournalServiceCreate:
         posting_date = datetime(2024, 6, 15)
         input_ = make_create_journal_input(posting_date=posting_date)
 
-        result = await service.create_journal_entry(input_)
+        result = await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert result.posting_date == posting_date
 
@@ -175,7 +182,7 @@ class TestJournalServiceCreateAccountValidation:
         )
 
         with pytest.raises(AppError) as exc_info:
-            await service.create_journal_entry(input_)
+            await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
 
@@ -189,7 +196,7 @@ class TestJournalServiceCreateAccountValidation:
         )
 
         with pytest.raises(AppError) as exc_info:
-            await service.create_journal_entry(input_)
+            await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
 
@@ -204,7 +211,7 @@ class TestJournalServiceCreateAccountValidation:
         )
 
         with pytest.raises(AppError) as exc_info:
-            await service.create_journal_entry(input_)
+            await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert exc_info.value.context["identifier"] == bad_name
         assert exc_info.value.context["resource"] == "account"
@@ -221,7 +228,7 @@ class TestJournalServiceCreateAccountValidation:
         )
 
         with pytest.raises(AppError):
-            await service.create_journal_entry(input_)
+            await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert len(repo.saved_entries) == 0
 
@@ -234,7 +241,7 @@ class TestJournalServiceCreateAccountValidation:
             ]
         )
 
-        result = await service.create_journal_entry(input_)
+        result = await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert result.journal_number == 1
 
@@ -255,7 +262,7 @@ class TestJournalServiceCreateAccountValidation:
         )
 
         with pytest.raises(AppError) as exc_info:
-            await service.create_journal_entry(input_)
+            await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
         assert exc_info.value.context["identifier"] == "Missing One"
@@ -273,7 +280,7 @@ class TestJournalServiceCreateDomainValidation:
         )
 
         with pytest.raises(ValidationAppError) as exc_info:
-            await service.create_journal_entry(input_)
+            await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         error = exc_info.value
         assert error.code == ErrorCode.VALIDATION_ERROR
@@ -288,7 +295,7 @@ class TestJournalServiceCreateDomainValidation:
         input_ = make_create_journal_input(posting_date=datetime(2099, 1, 1))
 
         with pytest.raises(ValidationAppError) as exc_info:
-            await service.create_journal_entry(input_)
+            await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         error = exc_info.value
         assert error.code == ErrorCode.VALIDATION_ERROR
@@ -313,7 +320,7 @@ class TestJournalServiceCreateDomainValidation:
         )
 
         with pytest.raises(ValidationAppError) as exc_info:
-            await service.create_journal_entry(input_)
+            await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert len(exc_info.value.errors) > 0
         assert exc_info.value.code == ErrorCode.VALIDATION_ERROR
@@ -328,7 +335,7 @@ class TestJournalServiceCreateDomainValidation:
         )
 
         with pytest.raises(ValidationAppError) as exc_info:
-            await service.create_journal_entry(input_)
+            await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert len(exc_info.value.errors) > 0
 
@@ -342,7 +349,7 @@ class TestJournalServiceCreateDomainValidation:
         )
 
         with pytest.raises(ValidationAppError):
-            await service.create_journal_entry(input_)
+            await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         assert len(repo.saved_entries) == 0
 
@@ -352,7 +359,7 @@ class TestJournalServiceGet:
     async def test_returns_view_model_for_existing_entry(self):
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
-        await service.create_journal_entry(input_)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         result = await service.get_journal_entry(1)
 
@@ -365,7 +372,7 @@ class TestJournalServiceGet:
         input_ = make_create_journal_input(
             posting_date=posting_date, description="Payroll"
         )
-        await service.create_journal_entry(input_)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         result = await service.get_journal_entry(1)
 
@@ -405,7 +412,7 @@ class TestJournalServiceGet:
             ]
         )
 
-        await service.create_journal_entry(input_)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         result = await service.get_journal_entry(1)
 
@@ -426,7 +433,7 @@ class TestJournalServiceList:
     async def test_returns_single_entry_after_one_create(self):
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
-        await service.create_journal_entry(input_)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         result = await service.list_journal_entries()
 
@@ -436,9 +443,9 @@ class TestJournalServiceList:
     async def test_returns_all_entries_after_multiple_creates(self):
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
-        await service.create_journal_entry(input_)
-        await service.create_journal_entry(input_)
-        await service.create_journal_entry(input_)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         result = await service.list_journal_entries()
 
@@ -447,9 +454,9 @@ class TestJournalServiceList:
     async def test_entries_ordered_ascending_by_journal_number(self):
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
-        await service.create_journal_entry(input_)
-        await service.create_journal_entry(input_)
-        await service.create_journal_entry(input_)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         result = await service.list_journal_entries()
 
@@ -460,7 +467,7 @@ class TestJournalServiceList:
     async def test_list_returns_view_models_not_domain_objects(self):
         service, _ = make_journal_service(chart=_simple_chart())
         input_ = make_create_journal_input()
-        await service.create_journal_entry(input_)
+        await service.create_journal_entry(input_, actor=TEST_ACTOR)
 
         result = await service.list_journal_entries()
 
@@ -470,11 +477,11 @@ class TestJournalServiceList:
         service, _ = make_journal_service(chart=_simple_chart())
 
         await service.create_journal_entry(
-            make_create_journal_input(description="Opening")
+            make_create_journal_input(description="Opening"), actor=TEST_ACTOR
         )
 
         await service.create_journal_entry(
-            make_create_journal_input(description="Payroll")
+            make_create_journal_input(description="Payroll"), actor=TEST_ACTOR
         )
 
         result = await service.list_journal_entries()
@@ -497,7 +504,8 @@ class TestJournalServiceList:
                         credit_amount=Decimal("500"),
                     ),
                 ]
-            )
+            ),
+            actor=TEST_ACTOR,
         )
 
         result = await service.list_journal_entries()
@@ -505,3 +513,73 @@ class TestJournalServiceList:
         assert result[0].total_debits == Decimal("500")
         assert result[0].total_credits == Decimal("500")
         assert result[0].is_balanced is True
+
+
+@pytest.mark.unit
+class TestJournalServiceCreateActorValidation:
+    @pytest.mark.parametrize("actor", ["", "   ", "\t\n"])
+    async def test_raises_validation_error_when_actor_is_blank(self, actor):
+        service, _ = make_journal_service(chart=_simple_chart())
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.create_journal_entry(make_create_journal_input(), actor=actor)
+
+        assert exc_info.value.code == ErrorCode.VALIDATION_ERROR
+        assert exc_info.value.errors == [
+            FieldViolation(code=ErrorCode.REQUIRED_FIELD, field="actor", value=actor)
+        ]
+
+    async def test_does_not_persist_when_actor_is_blank(self):
+        service, repo = make_journal_service(chart=_simple_chart())
+
+        with pytest.raises(ValidationAppError):
+            await service.create_journal_entry(make_create_journal_input(), actor=" ")
+
+        assert repo.saved_entries == []
+
+    async def test_blank_actor_consumes_no_journal_number(self):
+        service, _ = make_journal_service(chart=_simple_chart())
+
+        with pytest.raises(ValidationAppError):
+            await service.create_journal_entry(make_create_journal_input(), actor="")
+        created = await service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
+
+        assert created.journal_number == 1
+
+    async def test_blank_actor_takes_precedence_over_unknown_account(self):
+        service, _ = make_journal_service(chart=_simple_chart())
+        input_ = make_create_journal_input(
+            lines=[
+                JournalLineInput(account="Ghost Account", debit_amount=Decimal("100")),
+                JournalLineInput(account="Sales Revenue", credit_amount=Decimal("100")),
+            ]
+        )
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.create_journal_entry(input_, actor="")
+
+        assert exc_info.value.errors[0].code == ErrorCode.REQUIRED_FIELD
+
+    async def test_emits_no_log_record_when_actor_is_blank(self, caplog):
+        service, _ = make_journal_service(chart=_simple_chart())
+
+        with caplog.at_level(logging.INFO):
+            with pytest.raises(ValidationAppError):
+                await service.create_journal_entry(
+                    make_create_journal_input(), actor=""
+                )
+
+        assert [r for r in caplog.records if r.name.startswith("trutina.core")] == []
+
+    async def test_created_log_context_carries_no_actor(self, caplog):
+        service, _ = make_journal_service(chart=_simple_chart())
+
+        with caplog.at_level(logging.INFO):
+            await service.create_journal_entry(
+                make_create_journal_input(), actor=TEST_ACTOR
+            )
+
+        record = next(r for r in caplog.records if r.getMessage() == "journal.created")
+        assert set(record.context) == {"journal_number", "line_count"}

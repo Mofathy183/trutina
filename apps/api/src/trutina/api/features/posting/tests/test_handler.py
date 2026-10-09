@@ -8,6 +8,7 @@ from trutina.core.posting.dtos import PostingViewModel
 from trutina.shared.errors import AppError, ErrorCode
 
 from tests.factories import (
+    TEST_ACTOR,
     make_create_journal_input,
     make_posting_feature_chart,
     make_posting_service,
@@ -20,7 +21,9 @@ class TestPostJournalEntryHandler:
         posting_service, journal_service, _ = make_posting_service(
             chart=make_posting_feature_chart()
         )
-        entry = await journal_service.create_journal_entry(make_create_journal_input())
+        entry = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
 
         result = await post_journal_entry_handler(posting_service, entry.journal_number)
 
@@ -31,7 +34,9 @@ class TestPostJournalEntryHandler:
         posting_service, journal_service, posting_repo = make_posting_service(
             chart=make_posting_feature_chart()
         )
-        entry = await journal_service.create_journal_entry(make_create_journal_input())
+        entry = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
 
         await post_journal_entry_handler(posting_service, entry.journal_number)
 
@@ -51,7 +56,9 @@ class TestPostJournalEntryHandler:
         posting_service, journal_service, _ = make_posting_service(
             chart=make_posting_feature_chart()
         )
-        entry = await journal_service.create_journal_entry(make_create_journal_input())
+        entry = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
         await post_journal_entry_handler(posting_service, entry.journal_number)
 
         with pytest.raises(AppError) as exc_info:
@@ -75,7 +82,9 @@ class TestGetPostingsByAccountHandler:
         posting_service, journal_service, _ = make_posting_service(
             chart=make_posting_feature_chart()
         )
-        entry = await journal_service.create_journal_entry(make_create_journal_input())
+        entry = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
         await post_journal_entry_handler(posting_service, entry.journal_number)
 
         result = await get_postings_by_account_handler(posting_service, "Cash")
@@ -99,7 +108,9 @@ class TestGetPostingsByJournalNumberHandler:
         posting_service, journal_service, _ = make_posting_service(
             chart=make_posting_feature_chart()
         )
-        entry = await journal_service.create_journal_entry(make_create_journal_input())
+        entry = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
         await post_journal_entry_handler(posting_service, entry.journal_number)
 
         result = await get_postings_by_journal_number_handler(

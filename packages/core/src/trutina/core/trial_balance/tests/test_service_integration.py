@@ -22,7 +22,7 @@ from decimal import Decimal
 
 import pytest
 
-from tests.factories import make_create_journal_input
+from tests.factories import TEST_ACTOR, make_create_journal_input
 
 
 @pytest.mark.integration
@@ -40,8 +40,10 @@ class TestTrialBalanceServiceGetTrialBalance:
     ):
         _account_service, journal_service, posting_service = services
 
-        entry = await journal_service.create_journal_entry(make_create_journal_input())
-        await posting_service.post_journal_entry(entry.journal_number)
+        entry = await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
+        await posting_service.post_journal_entry(entry.journal_number, actor=TEST_ACTOR)
 
         result = await trial_balance_service.get_trial_balance()
 
@@ -56,13 +58,15 @@ class TestTrialBalanceServiceGetTrialBalance:
         _account_service, journal_service, posting_service = services
 
         first = await journal_service.create_journal_entry(
-            make_create_journal_input(description="First")
+            make_create_journal_input(description="First"), actor=TEST_ACTOR
         )
         second = await journal_service.create_journal_entry(
-            make_create_journal_input(description="Second")
+            make_create_journal_input(description="Second"), actor=TEST_ACTOR
         )
-        await posting_service.post_journal_entry(first.journal_number)
-        await posting_service.post_journal_entry(second.journal_number)
+        await posting_service.post_journal_entry(first.journal_number, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(
+            second.journal_number, actor=TEST_ACTOR
+        )
 
         result = await trial_balance_service.get_trial_balance()
 
@@ -81,7 +85,9 @@ class TestTrialBalanceServiceGetTrialBalance:
         postings, not journal entries directly."""
         _account_service, journal_service, _posting_service = services
 
-        await journal_service.create_journal_entry(make_create_journal_input())
+        await journal_service.create_journal_entry(
+            make_create_journal_input(), actor=TEST_ACTOR
+        )
 
         result = await trial_balance_service.get_trial_balance()
 
@@ -93,13 +99,15 @@ class TestTrialBalanceServiceGetTrialBalance:
         _account_service, journal_service, posting_service = services
 
         early = await journal_service.create_journal_entry(
-            make_create_journal_input(posting_date=datetime(2025, 1, 1))
+            make_create_journal_input(posting_date=datetime(2025, 1, 1)),
+            actor=TEST_ACTOR,
         )
         late = await journal_service.create_journal_entry(
-            make_create_journal_input(posting_date=datetime(2025, 6, 1))
+            make_create_journal_input(posting_date=datetime(2025, 6, 1)),
+            actor=TEST_ACTOR,
         )
-        await posting_service.post_journal_entry(early.journal_number)
-        await posting_service.post_journal_entry(late.journal_number)
+        await posting_service.post_journal_entry(early.journal_number, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(late.journal_number, actor=TEST_ACTOR)
 
         result = await trial_balance_service.get_trial_balance(
             as_of_date=datetime(2025, 3, 1)
@@ -115,13 +123,15 @@ class TestTrialBalanceServiceGetTrialBalance:
         _account_service, journal_service, posting_service = services
 
         early = await journal_service.create_journal_entry(
-            make_create_journal_input(posting_date=datetime(2025, 1, 1))
+            make_create_journal_input(posting_date=datetime(2025, 1, 1)),
+            actor=TEST_ACTOR,
         )
         late = await journal_service.create_journal_entry(
-            make_create_journal_input(posting_date=datetime(2025, 6, 1))
+            make_create_journal_input(posting_date=datetime(2025, 6, 1)),
+            actor=TEST_ACTOR,
         )
-        await posting_service.post_journal_entry(early.journal_number)
-        await posting_service.post_journal_entry(late.journal_number)
+        await posting_service.post_journal_entry(early.journal_number, actor=TEST_ACTOR)
+        await posting_service.post_journal_entry(late.journal_number, actor=TEST_ACTOR)
 
         result = await trial_balance_service.get_trial_balance(as_of_date=None)
 

@@ -16,7 +16,11 @@ should switch to real HTTP calls per the standard pattern.
 import pytest
 from trutina.core.account.schemas.account import AccountCategory
 
-from tests.factories import make_create_account_input, make_create_journal_input
+from tests.factories import (
+    TEST_ACTOR,
+    make_create_account_input,
+    make_create_journal_input,
+)
 
 
 async def _seed_accounts(app):
@@ -37,7 +41,7 @@ class TestPostJournalEntryRoute:
     ):
         await _seed_accounts(real_api_app)
         entry = await real_api_app.state.container.journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
 
         response = await real_api_client.post(f"/postings/{entry.journal_number}")
@@ -50,7 +54,7 @@ class TestPostJournalEntryRoute:
     ):
         await _seed_accounts(real_api_app)
         entry = await real_api_app.state.container.journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
         await real_api_client.post(f"/postings/{entry.journal_number}")
 
@@ -66,7 +70,7 @@ class TestGetPostingsByAccountRoute:
     ):
         await _seed_accounts(real_api_app)
         entry = await real_api_app.state.container.journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
         await real_api_client.post(f"/postings/{entry.journal_number}")
 
@@ -85,7 +89,7 @@ class TestGetPostingsByJournalNumberRoute:
     ):
         await _seed_accounts(real_api_app)
         entry = await real_api_app.state.container.journal_service.create_journal_entry(
-            make_create_journal_input()
+            make_create_journal_input(), actor=TEST_ACTOR
         )
         await real_api_client.post(f"/postings/{entry.journal_number}")
 
