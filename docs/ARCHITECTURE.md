@@ -17,7 +17,7 @@ apps/
 ├── cli/                 trutina-cli
 │   └── src/trutina/cli/
 │       ├── main.py
-│       ├── composition/      # app.py, bootstrap.py, context.py, state.py
+│       ├── composition/      # app.py, bootstrap.py, context.py, state.py, actor.py
 │       ├── features/{account,journal,posting,trial_balance}/
 │       ├── shared/{boundary,errors,formatters,interaction,ui}/
 │       └── shell/            # loop.py, dispatch.py, completion.py, keybindings.py, builtins.py
@@ -25,7 +25,7 @@ apps/
     └── src/trutina/api/
         ├── composition/      # container.py, bootstrap.py, app.py, dependencies.py
         ├── features/{system,account,journal,posting,trial_balance}/
-        └── shared/           # response.py, errors/{catalog,handlers,schemas}.py
+        └── shared/           # response.py, actor.py, errors/{catalog,handlers,schemas}.py
 
 packages/
 ├── core/                trutina-core

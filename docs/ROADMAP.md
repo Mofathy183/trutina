@@ -99,9 +99,7 @@ internal extension points, which live in that package's own README/CONTEXT.
 
 `trutina-authentication` contains contracts and fakes only. Still missing:
 
-- Actor attribution: a required `actor` on core write services and `created_by` on
-  journal entries and postings, with a migration; the same for account writes via an
-  audit table.
+- Actor attribution: journal and posting write services accept and validate a required `actor`, and the API and CLI pass fixed pre-auth constants. Still missing: persisting it as `created_by` on journal entries and postings (with a migration), the same for account writes via an audit table, and replacing the constants with real identities.
 - A user store and password registration/login, with throttling and a hasher.
 - Access and refresh tokens, auth routes, and endpoint protection.
 - A CLI `auth` group.
