@@ -132,8 +132,7 @@ read from a request body or DTO. Core checks only that it is non-blank. The
 `system:` prefix marks a non-user writer and the `:api` suffix records which
 application wrote.
 
-**Current behavior:** the constant is validated by core and dropped; it is not
-persisted.
+**Current behavior:** the constant is validated by core and persisted by `trutina-storage-postgres` as `created_by` on the journal entry and on every posting row, so rows written by the API are distinguishable from rows written by the CLI.
 
 ## Why Response Envelope (`BaseResponse`/`SuccessResponse`/`ErrorResponse`) Wraps Every Body
 
