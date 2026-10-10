@@ -16,6 +16,8 @@ Account names and posting account names are persisted with derived lookup-key co
 
 Journal entries and their lines are explicitly inserted in one transaction, retaining input order through `line_index`. Posting batches are also committed as one transaction, and their `(journal_number, line_index)` uniqueness constraint is the database backstop for concurrent requests that both pass the service-level pre-check.
 
+Attribution is stored as a nullable `created_by` text column on `journal_entries` and `postings`. It is nullable because rows written before M1a have no actor and cannot be backfilled; null means pre-attribution, and system writers use explicit values such as `system:pre-auth:api`. It is written on the entry row only, not per journal line, because lines are inserted in the same transaction as their entry and inherit its attribution. Postings carry it on every row because they are the ledger's immutable record. There is no foreign key, because the value is an opaque string supplied by the calling application, not a reference to a users table. `_to_domain()` never reads it, since it is not part of `JournalEntry` or `LedgerPosting`.
+
 Journal number reservation advances the identity column's backing PostgreSQL sequence directly. PostgreSQL sequence advances are not rolled back, so a reserved number remains consumed even when no later journal entry is saved.
 
 The trial balance is a report, not a stored resource, so `PostgresTrialBalanceRepo` owns no table and needs no migration. It runs one aggregation over `postings`: `SUM(debit_amount)` and `SUM(credit_amount)` grouped by `account_key`. Grouping on the lookup key merges postings recorded under different casings of one account name into a single row, and `MIN(account)` supplies a deterministic display name (the alphabetically-first recorded spelling). When an `as_of_date` is supplied, a `posting_date <= as_of_date` predicate scopes the rows; when it is `None`, every posting is included. Results are ordered ascending by display name. Every call recomputes from current rows; nothing is cached or materialized.
@@ -89,6 +91,8 @@ The trial balance aggregation scans every posting in scope on each call. `postin
 `PostgresTrialBalanceRepo._to_domain()` lets a Pydantic `ValidationError` escape if a row fails `AccountBalanceEntry` validation; it is not translated to `AppError`. The same holds for the other repositories' row reconstruction.
 
 No test yet forces a real constraint-violation exception (e.g. a duplicate account code write) and asserts the resulting exception's `str()` contains no leaked account code/name — `hide_parameters=True` is confirmed _set_ on the engine (`test_engine_is_created_with_hide_parameters`), but its actual masking effect on a real exception's text is not yet directly exercised by a test. Tracked as a small Phase 7 addition.
+
+`created_by` is nullable with no CHECK constraint and no index. Nothing stops a writer from passing a value the calling application would consider malformed, because format validation is deferred to the API and CLI handlers (M4b). Revisit a CHECK constraint on rows after a cutoff date once real identities exist.
 
 ## Allowed and Forbidden Dependencies
 

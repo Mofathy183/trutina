@@ -18,6 +18,7 @@ from tests.factories import (
     make_account,
     make_chart_of_accounts,
     make_create_journal_input,
+    make_posting_feature_chart,
 )
 from tests.factories.posting import make_posting_service
 
@@ -448,3 +449,40 @@ class TestPostingServicePostActorValidation:
 
         record = next(r for r in caplog.records if r.getMessage() == "posting.created")
         assert set(record.context) == {"journal_number", "line_count"}
+
+
+@pytest.mark.unit
+class TestPostingServiceCreatedBy:
+    async def test_passes_actor_to_repo_as_created_by(self, create_input):
+        posting_service, journal_service, posting_repo = make_posting_service(
+            chart=make_posting_feature_chart()
+        )
+        await journal_service.create_journal_entry(create_input, actor=TEST_ACTOR)
+
+        await posting_service.post_journal_entry(1, actor="system:pre-auth:cli")
+
+        assert posting_repo.saved_created_by == ["system:pre-auth:cli"]
+
+    async def test_records_one_created_by_per_batch_not_per_posting(self, create_input):
+        posting_service, journal_service, posting_repo = make_posting_service(
+            chart=make_posting_feature_chart()
+        )
+        await journal_service.create_journal_entry(create_input, actor=TEST_ACTOR)
+
+        await posting_service.post_journal_entry(1, actor="system:pre-auth:api")
+
+        assert len(posting_repo.saved_batches[0]) == 2
+        assert posting_repo.saved_created_by == ["system:pre-auth:api"]
+
+    async def test_blank_actor_records_nothing(self, create_input):
+        posting_service, journal_service, posting_repo = make_posting_service(
+            chart=make_posting_feature_chart()
+        )
+        await journal_service.create_journal_entry(create_input, actor=TEST_ACTOR)
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await posting_service.post_journal_entry(1, actor="   ")
+
+        assert exc_info.value.errors[0].code == ErrorCode.REQUIRED_FIELD
+        assert posting_repo.saved_created_by == []
+        assert posting_repo.saved_batches == []

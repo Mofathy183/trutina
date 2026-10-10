@@ -1,5 +1,7 @@
 import pytest
 import pytest_asyncio
+from trutina.cli.composition import CliContext
+from trutina.cli.composition.actor import PRE_AUTH_ACTOR
 from trutina.cli.features.posting.handler import (
     get_postings_by_account_handler,
     get_postings_by_journal_number_handler,
@@ -12,11 +14,14 @@ from trutina.shared.errors import AppError, ErrorCode
 from tests.factories import (
     make_account,
     make_chart_of_accounts,
+    make_fake_account_repo,
     make_fake_journal_repo,
     make_fake_posting_repo,
     make_journal_entry,
 )
+from tests.factories.actor import TEST_ACTOR
 from tests.factories.cli import make_fake_cli_context
+from tests.fakes import FakeJournalRepo, FakePostingRepo
 
 
 def _simple_chart():
@@ -44,7 +49,7 @@ async def journal_cli_context():
     journal_repo = make_fake_journal_repo()
     posting_repo = make_fake_posting_repo()
     entry = make_journal_entry(journal_number=1)
-    await journal_repo.save(entry)
+    await journal_repo.save(entry, created_by=TEST_ACTOR)
 
     return make_fake_cli_context(
         journal_repo=journal_repo,
@@ -132,3 +137,22 @@ class TestGetPostingsByJournalNumberHandler:
         result = await get_postings_by_journal_number_handler(empty_cli_context, 999)
 
         assert result == []
+
+
+@pytest.mark.unit
+class TestPostJournalEntryHandlerAttribution:
+    async def test_attributes_the_write_to_the_cli_pre_auth_actor(
+        self, simple_chart, create_input
+    ):
+        posting_repo = FakePostingRepo()
+        ctx = CliContext(
+            account_repo=make_fake_account_repo(chart=simple_chart),
+            journal_repo=FakeJournalRepo(),
+            posting_repo=posting_repo,
+        )
+        journal_service = await ctx.get_journal_service()
+        await journal_service.create_journal_entry(create_input, actor=TEST_ACTOR)
+
+        await post_journal_entry_handler(ctx, 1)
+
+        assert posting_repo.saved_created_by == [PRE_AUTH_ACTOR]

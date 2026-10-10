@@ -10,7 +10,8 @@ Responsibilities:
 - Validate account references against the chart of accounts.
 - Assign journal numbers via the repository.
 - Construct domain JournalLine and JournalEntry models from service DTOs.
-- Coordinate persistence through JournalRepo.
+- Coordinate persistence through JournalRepo, passing the caller's
+    actor to the repository as ``created_by``.
 - Translate domain validation failures into ValidationAppError.
 - Return stable ViewModels to callers.
 - Log "journal.created" through the standard library's logging module
@@ -90,18 +91,20 @@ class JournalService:
         chart of accounts nor the journal-number sequence. Then resolves all
         account references against a single chart snapshot, assigns the next
         journal number, constructs the domain entry (which validates its own
-        accounting invariants), and persists it. Logs "journal.created" only
-        after the repository write succeeds.
+        accounting invariants), and persists it together with the actor as
+        ``created_by``. Logs "journal.created" only after the repository
+        write succeeds.
 
         Args:
             input: Raw journal entry creation input.
             actor: Opaque identifier of the caller performing the write. It
                 must contain at least one non-whitespace character; its
-                format is not inspected here. It is checked for presence
-                only: it is not persisted or logged.
+                format is not inspected here. It is passed to the
+                repository as ``created_by`` and is not logged.
 
         Returns:
-            The view model of the newly created journal entry.
+            The view model of the newly created journal entry. It does not
+            carry the actor.
 
         Raises:
             ValidationAppError: REQUIRED_FIELD on ``actor`` if it is blank.
@@ -129,7 +132,7 @@ class JournalService:
         except ValidationError as exc:
             raise ValidationAppError.validation(exc) from exc
 
-        await self._repo.save(entry)
+        await self._repo.save(entry, created_by=actor)
 
         logger.info(
             "journal.created",

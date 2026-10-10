@@ -1,3 +1,5 @@
+from functools import partial
+
 import pytest
 from anyio.from_thread import start_blocking_portal
 from trutina.cli.composition.state import CliState
@@ -13,6 +15,7 @@ from tests.factories import (
     make_fake_posting_repo,
     make_journal_entry,
 )
+from tests.factories.actor import TEST_ACTOR
 from tests.factories.cli import make_fake_cli_context
 
 
@@ -49,7 +52,7 @@ def posting_cli_state():
 
     with start_blocking_portal(backend="asyncio") as portal:
         entry = make_journal_entry(journal_number=1)
-        portal.call(journal_repo.save, entry)
+        portal.call(partial(journal_repo.save, entry, created_by=TEST_ACTOR))
 
         context = make_fake_cli_context(
             journal_repo=journal_repo,

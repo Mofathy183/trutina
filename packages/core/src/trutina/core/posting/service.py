@@ -12,7 +12,8 @@ Responsibilities:
 - Retrieve the journal entry by number via JournalService.
 - Enforce the one-posting-per-journal-entry invariant.
 - Derive one LedgerPosting per journal line on the entry.
-- Persist the derived postings through PostingRepo.
+- Persist the derived postings through PostingRepo, passing the
+    caller's actor to the repository as ``created_by``.
 - Return stable PostingViewModels to callers.
 - Log "posting.created" through the standard library's logging module
     once a batch of postings is persisted -- one line per
@@ -78,20 +79,21 @@ class PostingService:
         the journal or the posting repository. Then retrieves the journal
         entry by number, verifies it has not already been posted, builds one
         LedgerPosting per line, persists the batch in a single repository
-        call, and returns PostingViewModels. Logs "posting.created" once,
-        for the whole batch, only after the repository write succeeds.
-        The repository's transaction guarantees, if any, are adapter-specific.
+        call together with the actor as ``created_by``, and returns
+        PostingViewModels. Logs "posting.created" once, for the whole batch,
+        only after the repository write succeeds. The repository's
+        transaction guarantees, if any, are adapter-specific.
 
         Args:
             journal_number: The journal number of the entry to post.
             actor: Opaque identifier of the caller performing the write. It
                 must contain at least one non-whitespace character; its
-                format is not inspected here. It is checked for presence
-                only: it is not persisted or logged.
+                format is not inspected here. It is passed to the
+                repository as ``created_by`` and is not logged.
 
         Returns:
             The view models of the newly created postings, in the same
-            order as the entry's lines.
+            order as the entry's lines. They do not carry the actor.
 
         Raises:
             ValidationAppError: REQUIRED_FIELD on ``actor`` if it is blank.
@@ -115,7 +117,7 @@ class PostingService:
 
         postings = self._derive_postings(entry)
 
-        await self._repo.save_many(postings)
+        await self._repo.save_many(postings, created_by=actor)
 
         logger.info(
             "posting.created",

@@ -73,6 +73,12 @@ class PostingModel(TimestampedMixin, Base):
         line_index: Position of the originating journal line this
             posting was derived from. Unique per
             (`journal_number`, `line_index`) -- see module docstring.
+        created_by: Opaque identifier of the caller that posted the
+            entry. Null means the row predates actor attribution. Set on
+            every posting in a batch, since postings are the ledger's
+            immutable record. No foreign key: the value is a string
+            supplied by the calling application, not a reference to a
+            users row.
     """
 
     __tablename__ = "postings"
@@ -112,3 +118,4 @@ class PostingModel(TimestampedMixin, Base):
         DateTime(timezone=False), nullable=False
     )
     line_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by: Mapped[str | None] = mapped_column(Text, nullable=True)

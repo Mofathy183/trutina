@@ -57,6 +57,13 @@ class JournalEntryModel(TimestampedMixin, Base):
             2020-01-01 and not in the future, mirroring `JournalEntry`'s
             own domain validator.
         description: Optional free-text description of the entry.
+        created_by: Opaque identifier of the caller that wrote the entry.
+            Null means the row predates actor attribution; system writers
+            use an explicit value such as ``system:pre-auth:api``. No
+            foreign key: the value is a string supplied by the calling
+            application, not a reference to a users row. Lines inherit
+            their entry's attribution, so `journal_lines` has no
+            equivalent column.
     """
 
     __tablename__ = "journal_entries"
@@ -74,6 +81,7 @@ class JournalEntryModel(TimestampedMixin, Base):
         DateTime(timezone=False), nullable=False
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class JournalLineModel(TimestampedMixin, Base):

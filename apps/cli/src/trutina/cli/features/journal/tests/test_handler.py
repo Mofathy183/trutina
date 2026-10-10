@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 import pytest
+from trutina.cli.composition.actor import PRE_AUTH_ACTOR
 from trutina.cli.composition.context import CliContext
 from trutina.cli.features.journal.handler import (
     create_journal_entry_handler,
@@ -15,8 +16,10 @@ from tests.factories import (
     make_account,
     make_chart_of_accounts,
     make_create_journal_input,
+    make_fake_account_repo,
 )
 from tests.factories.cli import make_fake_cli_context
+from tests.fakes import FakeJournalRepo, FakePostingRepo
 
 
 def _simple_chart():
@@ -145,3 +148,20 @@ class TestListJournalEntriesHandler:
         result = await list_journal_entries_handler(journal_cli_context)
 
         assert [vm.journal_number for vm in result] == [1, 2]
+
+
+@pytest.mark.unit
+class TestCreateJournalEntryHandlerAttribution:
+    async def test_attributes_the_write_to_the_cli_pre_auth_actor(
+        self, simple_chart, create_input
+    ):
+        journal_repo = FakeJournalRepo()
+        ctx = CliContext(
+            account_repo=make_fake_account_repo(chart=simple_chart),
+            journal_repo=journal_repo,
+            posting_repo=FakePostingRepo(),
+        )
+
+        await create_journal_entry_handler(ctx, create_input)
+
+        assert journal_repo.saved_created_by == [PRE_AUTH_ACTOR]

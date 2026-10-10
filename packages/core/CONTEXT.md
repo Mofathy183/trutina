@@ -204,8 +204,7 @@ no journal number. Core sees only an opaque string: it never imports
 `trutina.authentication`, and no service method takes an `Identity`. The format
 (UUID, `system:` prefix) is the calling application's concern.
 
-**Current behavior:** the actor is validated and then dropped. It is not
-persisted and not added to any log context.
+**Current behavior:** after the presence check, the service passes the actor to the repository as the keyword-only `created_by` (`JournalRepo.save`, `PostingRepo.save_many`). `trutina-storage-postgres` persists it; `trutina-storage-mongo` is frozen and accepts it without storing it. It is not added to any log context, and it is not a field of any domain model, so reads never return it.
 
 ### `AppError` / `ValidationAppError` are the only exceptions crossing the service boundary
 
@@ -271,7 +270,7 @@ PostingService.post_journal_entry(journal_number)
     │
     ├─▶ [derive one LedgerPosting per JournalLine]            (pure, in-process)
     │
-    ├─▶ PostingRepo.save_many(postings)                      (one repository batch)
+    ├─▶ PostingRepo.save_many(postings, created_by=actor)    (one repository batch)
     │
     └─▶ logger.info("posting.created", ...)                  (only after save succeeds)
 ```
@@ -340,9 +339,7 @@ rule drift the domain-validation design decision above exists to prevent.
   test pinning "core never logs on failure" as one assertion. Low risk (each
   service's own tests already cover it), tracked as a minor Phase 7 nice-to-have,
   not a blocker.
-- The `actor` on `create_journal_entry` and `post_journal_entry` is validated for
-  presence and not persisted. Repository contracts take no attribution, so no
-  stored row records who wrote it.
+- `created_by` is stored by `trutina-storage-postgres` only. `trutina-storage-mongo` is frozen and accepts it without storing it, so a Mongo-backed deployment would silently drop attribution. Rows written before attribution carry a null `created_by`. Account writes record no actor until M1c.
 
 ## Common Mistakes to Avoid
 

@@ -11,6 +11,13 @@ class FakeJournalRepo(JournalRepo):
     Journal numbers are issued sequentially starting from 1. The counter
     advances each time :meth:`next_journal_number` is called, regardless
     of whether the issued number is subsequently saved.
+
+    Attributes:
+        saved_entries: Every entry passed to ``save``, in call order.
+        saved_created_by: The ``created_by`` argument of every ``save``
+            call, in call order. Index ``i`` belongs to
+            ``saved_entries[i]``. Reads do not return it, matching the
+            contract: ``created_by`` is not part of the domain model.
     """
 
     def __init__(self) -> None:
@@ -18,9 +25,11 @@ class FakeJournalRepo(JournalRepo):
         self._next_number: int = 1
 
         self.saved_entries: list[JournalEntry] = []
+        self.saved_created_by: list[str] = []
 
-    async def save(self, entry: JournalEntry) -> None:
+    async def save(self, entry: JournalEntry, *, created_by: str) -> None:
         self.saved_entries.append(entry)
+        self.saved_created_by.append(created_by)
         self._entries[entry.journal_number] = entry
 
     async def get_by_number(self, journal_number: int) -> JournalEntry | None:

@@ -57,6 +57,7 @@ contract (independent siblings), so neither can import the other.
   but is not app-facing today. Both backends' `connect()`/`disconnect()` now log
   `db.connected`/`db.disconnected` through stdlib `logging`, never the connection
   URI.
+  `trutina-storage-mongo` is frozen: it accepts `created_by` and does not store it.
 - **`trutina-observability`** — a shared package providing `configure_logging()`,
   `correlation_scope()`, and `CorrelationIdMiddleware`, consumed by exactly the two
   presentation apps. Every other package (core, shared, config, both storage
@@ -119,7 +120,7 @@ contract (independent siblings), so neither can import the other.
   fakes only. No password hasher, token implementation, storage adapter, route or
   command exists, no `AUTH_*` `ErrorCode` exists, and no app depends on the package.
   The token, refresh-token and login-attempt contracts are provisional.
-  Separately from that package, `trutina-core`'s journal and posting write services now require a non-blank `actor: str` and discard it after the check; it is not persisted yet.
+  Separately from that package, `trutina-core`'s journal and posting write services require a non-blank `actor: str` and pass it to the repository as `created_by`, which `trutina-storage-postgres` persists. The actor is not yet a real identity: both apps pass a fixed pre-auth constant until M4b and M4.5.
 
 ## Cross-Package Conflicts Found During This Pass
 

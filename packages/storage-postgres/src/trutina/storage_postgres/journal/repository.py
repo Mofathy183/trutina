@@ -14,6 +14,11 @@ insert. A sequence advance in PostgreSQL is not undone by a rolled-back
 transaction, so a number returned by next_journal_number() can never be
 reused even if the caller never calls save() for it -- the same
 gap-tolerant guarantee an IDENTITY column already provides on its own.
+
+The caller's ``created_by`` is written to the journal_entries row only;
+journal_lines inherit their entry's attribution and carry no column of
+their own. It is not part of the JournalEntry domain model, so
+_to_domain() never reads it back.
 """
 
 from sqlalchemy import select, text
@@ -58,13 +63,15 @@ class PostgresJournalRepo(JournalRepo):
         self._session_factory = session_factory
         self._executor = executor
 
-    async def save(self, entry: JournalEntry) -> None:
+    async def save(self, entry: JournalEntry, *, created_by: str) -> None:
         """Persist a journal entry and its lines in a single transaction.
 
         Args:
             entry: A fully validated domain JournalEntry, carrying a
                 journal_number previously obtained from
                 next_journal_number().
+            created_by: Opaque identifier of the caller performing the
+                write, stored as given on the journal_entries row.
 
         Raises:
             AppError: If journal_number is already in use by a
@@ -81,6 +88,7 @@ class PostgresJournalRepo(JournalRepo):
                         journal_number=entry.journal_number,
                         posting_date=entry.posting_date,
                         description=entry.description,
+                        created_by=created_by,
                     )
                 )
                 for index, line in enumerate(entry.lines):
@@ -227,6 +235,8 @@ class PostgresJournalRepo(JournalRepo):
 
         Constructs a real JournalEntry, so every invariant it enforces
         (balance, line count, date range) is re-checked on every read.
+        ``created_by`` is deliberately not read: it is not part of the
+        domain model.
 
         Args:
             entry: The persisted journal_entries row.

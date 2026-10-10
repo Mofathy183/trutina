@@ -9,9 +9,11 @@ that can only be proven against a real query planner.
 
 Postings reference journal_entries.journal_number via a RESTRICT
 foreign key, so every posting written here must first have a real
-journal_entries row -- seeded directly via postgres_journal_repo,
-mirroring posting/tests/test_repository_integration.py's own
-_seed_journal_entry helper.
+journal_entries row -- seeded directly via postgres_journal_repo with
+the _seed_journal_entry helper below.
+
+Both repositories require a created_by on every write. It is irrelevant
+to the aggregation, so every write here passes TEST_ACTOR.
 """
 
 from datetime import datetime
@@ -20,10 +22,13 @@ from decimal import Decimal
 import pytest
 
 from tests.factories import make_credit_posting, make_debit_posting, make_journal_entry
+from tests.factories.actor import TEST_ACTOR
 
 
 async def _seed_journal_entry(postgres_journal_repo, journal_number: int) -> None:
-    await postgres_journal_repo.save(make_journal_entry(journal_number=journal_number))
+    await postgres_journal_repo.save(
+        make_journal_entry(journal_number=journal_number), created_by=TEST_ACTOR
+    )
 
 
 @pytest.mark.integration
@@ -47,7 +52,8 @@ class TestPostgresTrialBalanceRepoGetAccountBalances:
                 make_credit_posting(
                     account="Sales Revenue", amount=Decimal("300"), journal_number=1
                 ),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
 
         result = await postgres_trial_balance_repo.get_account_balances()
@@ -71,7 +77,8 @@ class TestPostgresTrialBalanceRepoGetAccountBalances:
                 make_credit_posting(
                     account="Sales Revenue", amount=Decimal("100"), journal_number=1
                 ),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
         await postgres_posting_repo.save_many(
             [
@@ -81,7 +88,8 @@ class TestPostgresTrialBalanceRepoGetAccountBalances:
                 make_credit_posting(
                     account="Sales Revenue", amount=Decimal("50"), journal_number=2
                 ),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
 
         result = await postgres_trial_balance_repo.get_account_balances()
@@ -105,7 +113,8 @@ class TestPostgresTrialBalanceRepoGetAccountBalances:
                 make_credit_posting(
                     account="Sales Revenue", amount=Decimal("150"), journal_number=1
                 ),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
 
         result = await postgres_trial_balance_repo.get_account_balances()
@@ -128,7 +137,8 @@ class TestPostgresTrialBalanceRepoGetAccountBalances:
                     amount=Decimal("50"),
                     journal_number=1,
                 ),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
 
         result = await postgres_trial_balance_repo.get_account_balances()
@@ -156,7 +166,8 @@ class TestPostgresTrialBalanceRepoGetAccountBalances:
                     journal_number=1,
                     posting_date=datetime(2025, 1, 1),
                 ),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
         await postgres_posting_repo.save_many(
             [
@@ -172,7 +183,8 @@ class TestPostgresTrialBalanceRepoGetAccountBalances:
                     journal_number=2,
                     posting_date=datetime(2025, 6, 1),
                 ),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
 
         result = await postgres_trial_balance_repo.get_account_balances(
@@ -200,7 +212,8 @@ class TestPostgresTrialBalanceRepoGetAccountBalances:
                     journal_number=1,
                     posting_date=datetime(2025, 6, 1),
                 ),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
 
         result = await postgres_trial_balance_repo.get_account_balances(as_of_date=None)

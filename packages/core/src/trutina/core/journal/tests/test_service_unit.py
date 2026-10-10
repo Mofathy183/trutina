@@ -583,3 +583,46 @@ class TestJournalServiceCreateActorValidation:
 
         record = next(r for r in caplog.records if r.getMessage() == "journal.created")
         assert set(record.context) == {"journal_number", "line_count"}
+
+
+@pytest.mark.unit
+class TestJournalServiceCreatedBy:
+    async def test_passes_actor_to_repo_as_created_by(
+        self, journal_service, create_input
+    ):
+        service, repo = journal_service
+
+        await service.create_journal_entry(create_input, actor="system:pre-auth:api")
+
+        assert repo.saved_created_by == ["system:pre-auth:api"]
+
+    async def test_passes_actor_without_inspecting_its_format(
+        self, journal_service, create_input
+    ):
+        service, repo = journal_service
+        actor = "5b2f6a3e-0c1d-4e7a-9a52-3d8f1c2b7e90"
+
+        await service.create_journal_entry(create_input, actor=actor)
+
+        assert repo.saved_created_by == [actor]
+
+    async def test_records_each_calls_own_actor(self, journal_service, create_input):
+        service, repo = journal_service
+
+        await service.create_journal_entry(create_input, actor="system:pre-auth:cli")
+        await service.create_journal_entry(create_input, actor="system:pre-auth:api")
+
+        assert repo.saved_created_by == [
+            "system:pre-auth:cli",
+            "system:pre-auth:api",
+        ]
+
+    async def test_blank_actor_records_nothing(self, journal_service, create_input):
+        service, repo = journal_service
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.create_journal_entry(create_input, actor="   ")
+
+        assert exc_info.value.errors[0].code == ErrorCode.REQUIRED_FIELD
+        assert repo.saved_created_by == []
+        assert repo.saved_entries == []

@@ -4,6 +4,7 @@ from trutina.api.features.posting.handler import (
     get_postings_by_journal_number_handler,
     post_journal_entry_handler,
 )
+from trutina.api.shared.actor import PRE_AUTH_ACTOR
 from trutina.core.posting.dtos import PostingViewModel
 from trutina.shared.errors import AppError, ErrorCode
 
@@ -119,3 +120,16 @@ class TestGetPostingsByJournalNumberHandler:
 
         assert len(result) == 2
         assert all(vm.journal_number == entry.journal_number for vm in result)
+
+
+@pytest.mark.unit
+class TestPostJournalEntryAttribution:
+    async def test_attributes_the_write_to_the_api_pre_auth_actor(self, create_input):
+        posting_service, journal_service, posting_repo = make_posting_service(
+            chart=make_posting_feature_chart()
+        )
+        await journal_service.create_journal_entry(create_input, actor=TEST_ACTOR)
+
+        await post_journal_entry_handler(posting_service, 1)
+
+        assert posting_repo.saved_created_by == [PRE_AUTH_ACTOR]

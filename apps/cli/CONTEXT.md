@@ -324,8 +324,7 @@ the `:cli` suffix records which application wrote.
 as is process-level state, so it sits with the composition root beside
 `CliContext` and `CliState`. `shared/` holds only subpackages grouped by concern.
 
-**Current behavior:** the constant is validated by core and dropped; it is not
-persisted.
+**Current behavior:** the constant is validated by core and persisted by `trutina-storage-postgres` as `created_by` on the journal entry and on every posting row, so rows written by the CLI are distinguishable from rows written by the API.
 
 ## Why Trial Balance Is A Flat Command With No Prompt
 

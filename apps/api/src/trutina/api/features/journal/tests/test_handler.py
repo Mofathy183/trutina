@@ -15,6 +15,7 @@ from trutina.api.features.journal.handler import (
     get_journal_entry,
     list_journal_entries,
 )
+from trutina.api.shared.actor import PRE_AUTH_ACTOR
 from trutina.core.account.schemas.account import AccountCategory
 from trutina.core.journal.dtos import JournalViewModel
 from trutina.shared.errors import AppError, ErrorCode
@@ -95,3 +96,18 @@ class TestListJournalEntriesHandler:
         result = await list_journal_entries(service)
 
         assert len(result) == 2
+
+
+@pytest.mark.unit
+class TestCreateJournalEntryAttribution:
+    async def test_attributes_the_write_to_the_api_pre_auth_actor(
+        self, journal_service, create_input
+    ):
+        service, repo = journal_service
+
+        await create_journal_entry(service, create_input)
+
+        assert repo.saved_created_by == [PRE_AUTH_ACTOR]
+
+    async def test_pre_auth_actor_names_the_api(self):
+        assert PRE_AUTH_ACTOR == "system:pre-auth:api"
