@@ -211,6 +211,7 @@ new features target PostgreSQL only. Contains no business rules. `connect()`/
 `disconnect()` each log one `db.connected`/`db.disconnected` line via stdlib
 `logging`, never including the connection URI. Not currently depended on by
 `apps/cli` or `apps/api`. See `packages/storage-mongo/README.md` / `CONTEXT.md`.
+Frozen: its journal and posting adapters accept the keyword-only `created_by` from the repository contracts and do not store it, so it records no attribution.
 
 ### `trutina.storage_postgres`
 
@@ -226,6 +227,7 @@ never includes bound parameter values. Alembic's `env.py` explicitly passes
 `disable_existing_loggers=False` to its `fileConfig()` call, after a confirmed bug
 where the default value silently disabled every non-Alembic-declared Python logger
 mid-process — see `packages/storage-postgres/README.md` / `CONTEXT.md`.
+`journal_entries` and `postings` carry a nullable `created_by` column recording the actor passed by the services; it is not part of any domain model and is never returned by a repository read.
 
 ### `trutina.cli`
 

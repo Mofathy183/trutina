@@ -124,9 +124,12 @@ Package/app own tests live beside their own code (e.g.
   read or a raised `AppError`. No monetary field is ever included in these
   log events.
 - `JournalService.create_journal_entry` and `PostingService.post_journal_entry`
-  require a keyword-only, non-blank `actor: str`, checked first and not persisted
-  or logged. `apps/api` and `apps/cli` each pass their own fixed `PRE_AUTH_ACTOR`
-  constant (`api/shared/actor.py`, `cli/composition/actor.py`).
+  require a keyword-only, non-blank `actor: str`, checked first and never logged.
+  After the check it is passed to the repository as `created_by` and persisted by
+  `trutina-storage-postgres` (nullable column on `journal_entries` and `postings`;
+  null means written before attribution). `apps/api` and `apps/cli` each pass their
+  own fixed `PRE_AUTH_ACTOR` constant (`api/shared/actor.py`,
+  `cli/composition/actor.py`).
 
 ## Error Model
 
@@ -237,6 +240,10 @@ against a real PostgreSQL container; the smoke test also asserts a structured
 - `MongoPostingRepo.save_many()` has no multi-document transaction (accepted,
   documented risk in `trutina-storage-mongo`'s own CONTEXT.md; no longer
   app-facing since neither app depends on that package).
+- `trutina-storage-mongo` is frozen: its journal and posting adapters accept
+  `created_by` to satisfy the repository contracts and do not store it. Do not wire
+  it into an app without first storing attribution. New features target PostgreSQL
+  only.
 - `TrialBalanceRepo` is implemented for PostgreSQL only. `trutina-storage-mongo` has
   no implementation, by decision.
 - The trial balance lists only accounts with postings; full-chart, zero-padded output
