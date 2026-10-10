@@ -147,6 +147,21 @@ class TestPostingModelLineIndex:
 
 
 @pytest.mark.unit
+class TestPostingModelCreatedBy:
+    def test_created_by_is_nullable(self):
+        column = _table(PostingModel).columns["created_by"]
+        assert column.nullable is True
+
+    def test_created_by_is_text(self):
+        column = _table(PostingModel).columns["created_by"]
+        assert column.type.__class__.__name__ == "Text"
+
+    def test_created_by_has_no_foreign_key(self):
+        column = _table(PostingModel).columns["created_by"]
+        assert not column.foreign_keys
+
+
+@pytest.mark.unit
 class TestPostingModelExactlyOneSideCheck:
     def test_check_constraint_exists(self):
         check_names = {c.name for c in _check_constraints(_table(PostingModel))}
