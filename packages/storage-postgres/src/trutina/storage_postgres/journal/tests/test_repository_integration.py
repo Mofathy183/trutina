@@ -4,18 +4,34 @@ Does not re-verify JournalEntry's own validation (balance, line count,
 date range) -- covered by test_repository_unit.py and trutina-core's own
 schema tests. These tests verify persistence behavior: that a reserved
 journal number round-trips through save()/get_by_number(), that
-next_journal_number() allocates monotonically and without reuse, and
-that list_entries() returns every entry in journal-number order.
+next_journal_number() allocates monotonically and without reuse, that
+list_entries() returns every entry in journal-number order, and that
+save() records created_by on the journal_entries row.
+
+created_by is not part of the JournalEntry domain model, so reading an
+entry back through the repository never returns it. Those tests read the
+column with raw SQL instead.
 """
 
 from datetime import datetime
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import text
 from trutina.core.journal.schemas.line import JournalLine
 from trutina.shared.errors import AppError
 
 from tests.factories import make_journal_entry
+from tests.factories.actor import TEST_ACTOR
+
+
+async def _stored_created_by(postgres_connection, journal_number: int) -> str | None:
+    async with postgres_connection.engine.connect() as conn:
+        result = await conn.execute(
+            text("SELECT created_by FROM journal_entries WHERE journal_number = :n"),
+            {"n": journal_number},
+        )
+        return result.scalar_one()
 
 
 @pytest.mark.integration
@@ -46,7 +62,7 @@ class TestPostgresJournalRepoSaveAndGet:
         number = await postgres_journal_repo.next_journal_number()
         entry = make_journal_entry(journal_number=number)
 
-        await postgres_journal_repo.save(entry)
+        await postgres_journal_repo.save(entry, created_by=TEST_ACTOR)
         fetched = await postgres_journal_repo.get_by_number(number)
 
         assert fetched is not None
@@ -64,7 +80,7 @@ class TestPostgresJournalRepoSaveAndGet:
             ],
         )
 
-        await postgres_journal_repo.save(entry)
+        await postgres_journal_repo.save(entry, created_by=TEST_ACTOR)
         fetched = await postgres_journal_repo.get_by_number(number)
 
         assert [line.account for line in fetched.lines] == [
@@ -80,7 +96,7 @@ class TestPostgresJournalRepoSaveAndGet:
             journal_number=number, posting_date=posting_date, description="Payroll"
         )
 
-        await postgres_journal_repo.save(entry)
+        await postgres_journal_repo.save(entry, created_by=TEST_ACTOR)
         fetched = await postgres_journal_repo.get_by_number(number)
 
         assert fetched.posting_date == posting_date
@@ -97,10 +113,60 @@ class TestPostgresJournalRepoSaveAndGet:
         self, postgres_journal_repo
     ):
         number = await postgres_journal_repo.next_journal_number()
-        await postgres_journal_repo.save(make_journal_entry(journal_number=number))
+        await postgres_journal_repo.save(
+            make_journal_entry(journal_number=number), created_by=TEST_ACTOR
+        )
 
         with pytest.raises(AppError):
-            await postgres_journal_repo.save(make_journal_entry(journal_number=number))
+            await postgres_journal_repo.save(
+                make_journal_entry(journal_number=number), created_by=TEST_ACTOR
+            )
+
+
+@pytest.mark.integration
+class TestPostgresJournalRepoCreatedBy:
+    async def test_stores_created_by_on_the_entry_row(
+        self, postgres_journal_repo, postgres_connection
+    ):
+        number = await postgres_journal_repo.next_journal_number()
+
+        await postgres_journal_repo.save(
+            make_journal_entry(journal_number=number), created_by=TEST_ACTOR
+        )
+
+        assert await _stored_created_by(postgres_connection, number) == TEST_ACTOR
+
+    async def test_stores_created_by_verbatim(
+        self, postgres_journal_repo, postgres_connection
+    ):
+        number = await postgres_journal_repo.next_journal_number()
+        actor = "system:pre-auth:api"
+
+        await postgres_journal_repo.save(
+            make_journal_entry(journal_number=number), created_by=actor
+        )
+
+        assert await _stored_created_by(postgres_connection, number) == actor
+
+    async def test_keeps_each_entrys_own_created_by(
+        self, postgres_journal_repo, postgres_connection
+    ):
+        first = await postgres_journal_repo.next_journal_number()
+        second = await postgres_journal_repo.next_journal_number()
+
+        await postgres_journal_repo.save(
+            make_journal_entry(journal_number=first), created_by="system:pre-auth:cli"
+        )
+        await postgres_journal_repo.save(
+            make_journal_entry(journal_number=second), created_by="system:pre-auth:api"
+        )
+
+        assert await _stored_created_by(postgres_connection, first) == (
+            "system:pre-auth:cli"
+        )
+        assert await _stored_created_by(postgres_connection, second) == (
+            "system:pre-auth:api"
+        )
 
 
 @pytest.mark.integration
@@ -117,11 +183,11 @@ class TestPostgresJournalRepoListEntries:
     ):
         first_number = await postgres_journal_repo.next_journal_number()
         await postgres_journal_repo.save(
-            make_journal_entry(journal_number=first_number)
+            make_journal_entry(journal_number=first_number), created_by=TEST_ACTOR
         )
         second_number = await postgres_journal_repo.next_journal_number()
         await postgres_journal_repo.save(
-            make_journal_entry(journal_number=second_number)
+            make_journal_entry(journal_number=second_number), created_by=TEST_ACTOR
         )
 
         result = await postgres_journal_repo.list_entries()
