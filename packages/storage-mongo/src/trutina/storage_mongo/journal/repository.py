@@ -109,7 +109,7 @@ class MongoJournalRepo(JournalRepo):
     def __init__(self, executor: MongoExecutor) -> None:
         self._executor = executor
 
-    async def save(self, entry: JournalEntry) -> None:
+    async def save(self, entry: JournalEntry, *, created_by: str) -> None:
         """Persist a validated journal entry as a new MongoDB document.
 
         Args:
@@ -123,6 +123,10 @@ class MongoJournalRepo(JournalRepo):
                 allocation sequence.
             AppError: STORAGE_UNAVAILABLE or STORAGE_TIMEOUT if the database
                 cannot complete the write.
+
+        Frozen:
+            accepts ``created_by`` to satisfy JournalRepo and does
+            not store it. This adapter records no attribution.
         """
         doc = self._to_document(entry)
         try:

@@ -115,7 +115,9 @@ class MongoPostingRepo(PostingRepo):
     def __init__(self, executor: MongoExecutor) -> None:
         self._executor = executor
 
-    async def save_many(self, postings: list[LedgerPosting]) -> None:
+    async def save_many(
+        self, postings: list[LedgerPosting], *, created_by: str
+    ) -> None:
         """Persist a batch of derived postings.
 
         All postings in the batch are mapped to ``PostingDocument``
@@ -132,6 +134,10 @@ class MongoPostingRepo(PostingRepo):
         Raises:
             AppError: STORAGE_UNAVAILABLE or STORAGE_TIMEOUT if the
                 database cannot complete the write.
+
+        Frozen:
+            accepts ``created_by`` to satisfy PostingRepo and does
+            not store it. This adapter records no attribution.
         """
         if not postings:
             return
