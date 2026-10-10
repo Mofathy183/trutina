@@ -114,6 +114,10 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+## Attribution
+
+`journal_entries` and `postings` carry a nullable `created_by` column. `PostgresJournalRepo.save()` and `PostgresPostingRepo.save_many()` take a keyword-only `created_by` and store it as given: once on the entry row, and on every posting row in a batch. Journal lines inherit their entry's attribution and have no column of their own. A null value means the row was written before attribution existed. `created_by` is not part of any core domain model, so repository reads never return it; read it with SQL. See [CONTEXT.md](CONTEXT.md) for why.
+
 ## Logging
 
 `connect()` and `disconnect()` each emit one `logging.getLogger(__name__)` line — `db.connected` and `db.disconnected` — through Python's standard library only; this package imports nothing from `trutina-observability` or `structlog`. `db.connected`'s context carries `backend`, `pool_size`, `max_overflow`, and `pool_pre_ping` — never `postgres.uri`, since the URI can embed credentials. The engine itself is constructed with `hide_parameters=True`, so any exception SQLAlchemy raises omits bound parameter values (account names, amounts, etc.) from its text, independent of what any caller does with the exception afterward. See [CONTEXT.md](CONTEXT.md) for the full rationale and the Alembic logging caveat below.
