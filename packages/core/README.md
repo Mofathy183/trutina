@@ -89,7 +89,7 @@ async def check_books(trial_balance_service):
 
 ## Write methods and the actor
 
-`JournalService.create_journal_entry` and `PostingService.post_journal_entry` require a keyword-only `actor: str`, the opaque identifier of the caller performing the write. Core checks only that it is non-blank (`trutina.shared.rule.is_non_blank_actor`) and otherwise raises `ValidationAppError` with `REQUIRED_FIELD` on `actor`. The check runs before any repository or chart access, so a blank actor consumes no journal number. The actor's format is not inspected, and it is not persisted or included in any log event. Read methods take no actor.
+`JournalService.create_journal_entry` and `PostingService.post_journal_entry` require a keyword-only `actor: str`, the opaque identifier of the caller performing the write. Core checks only that it is non-blank (`trutina.shared.rule.is_non_blank_actor`) and otherwise raises `ValidationAppError` with `REQUIRED_FIELD` on `actor`. The check runs before any repository or chart access, so a blank actor consumes no journal number. The actor's format is not inspected. After the check, the service passes it to the repository as a keyword-only `created_by`; `trutina-storage-postgres` stores it on the journal entry row and on every posting row. It is never included in a log event, and reads do not return it because it is not part of the domain models. `trutina-storage-mongo` is frozen: it accepts `created_by` and does not store it. Read methods take no actor.
 
 ## Logging
 
