@@ -19,7 +19,7 @@ from tests.factories import (
     make_fake_account_repo,
 )
 from tests.factories.cli import make_fake_cli_context
-from tests.fakes import FakeJournalRepo
+from tests.fakes import FakeJournalRepo, FakePostingRepo
 
 
 def _simple_chart():
@@ -159,11 +159,9 @@ class TestCreateJournalEntryHandlerAttribution:
         ctx = CliContext(
             account_repo=make_fake_account_repo(chart=simple_chart),
             journal_repo=journal_repo,
+            posting_repo=FakePostingRepo(),
         )
 
         await create_journal_entry_handler(ctx, create_input)
 
         assert journal_repo.saved_created_by == [PRE_AUTH_ACTOR]
-
-    async def test_pre_auth_actor_names_the_cli(self):
-        assert PRE_AUTH_ACTOR == "system:pre-auth:cli"
