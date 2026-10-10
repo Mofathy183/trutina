@@ -15,6 +15,10 @@ account_key is a plain column, not a database-computed one -- like
 accounts.name_key, it is produced here, once, via account_lookup_key(),
 on every posting written, so it can never disagree with the
 Unicode-correct case-folding rule the rest of the domain uses.
+
+The caller's ``created_by`` is written to every posting row in a batch,
+since postings are the ledger's immutable record. It is not part of the
+LedgerPosting domain model, so _to_domain() never reads it back.
 """
 
 from sqlalchemy import select
@@ -57,7 +61,9 @@ class PostgresPostingRepo(PostingRepo):
         self._session_factory = session_factory
         self._executor = executor
 
-    async def save_many(self, postings: list[LedgerPosting]) -> None:
+    async def save_many(
+        self, postings: list[LedgerPosting], *, created_by: str
+    ) -> None:
         """Persist a batch of postings in a single transaction.
 
         All postings in the batch are assumed derived from one journal
@@ -67,6 +73,9 @@ class PostgresPostingRepo(PostingRepo):
         Args:
             postings: Fully validated LedgerPosting records, in the
                 order they should be recorded.
+            created_by: Opaque identifier of the caller performing the
+                write, stored as given on every posting row in the
+                batch.
 
         Raises:
             AppError: JOURNAL_ALREADY_POSTED if the batch collides with
@@ -89,6 +98,7 @@ class PostgresPostingRepo(PostingRepo):
                             journal_number=posting.journal_number,
                             posting_date=posting.posting_date,
                             line_index=index,
+                            created_by=created_by,
                         )
                     )
                 await session.commit()
@@ -175,7 +185,8 @@ class PostgresPostingRepo(PostingRepo):
 
         Constructs a real, frozen LedgerPosting, so every invariant it
         enforces (single-sided amounts, date range, account validity) is
-        re-checked on every read.
+        re-checked on every read. ``created_by`` is deliberately not
+        read: it is not part of the domain model.
 
         Args:
             model: The persisted row.
