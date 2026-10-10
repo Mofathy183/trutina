@@ -44,7 +44,7 @@ class JournalRepo(ABC):
     """
 
     @abstractmethod
-    async def save(self, entry: JournalEntry) -> None:
+    async def save(self, entry: JournalEntry, *, created_by: str) -> None:
         """Persist a validated journal entry.
 
         The entry must carry a journal number previously obtained from
@@ -52,8 +52,18 @@ class JournalRepo(ABC):
         storage-level duplicate-key violation into AppError before it
         leaves this method.
 
+        ``created_by`` records which caller performed the write. It is
+        an opaque string supplied by JournalService, which has already
+        checked that it is non-blank; adapters store it as given and
+        never inspect its format. It is not a field of the JournalEntry
+        domain model, so reading an entry back does not return it. An
+        adapter that cannot store it must say so in its own
+        documentation.
+
         Args:
             entry: A fully validated domain JournalEntry.
+            created_by: Opaque identifier of the caller performing the
+                write.
 
         Raises:
             AppError: STORAGE_UNAVAILABLE if the backend cannot be

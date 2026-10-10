@@ -44,7 +44,9 @@ class PostingRepo(ABC):
     """
 
     @abstractmethod
-    async def save_many(self, postings: list[LedgerPosting]) -> None:
+    async def save_many(
+        self, postings: list[LedgerPosting], *, created_by: str
+    ) -> None:
         """Persist a batch of ledger postings.
 
         All postings in the batch are derived from a single journal entry.
@@ -52,9 +54,19 @@ class PostingRepo(ABC):
         all-or-nothing persistence; adapter guarantees are implementation
         specific.
 
+        ``created_by`` records which caller posted the entry. It is an
+        opaque string supplied by PostingService, which has already
+        checked that it is non-blank; adapters store it as given, once
+        per posting, and never inspect its format. It is not a field of
+        the LedgerPosting domain model, so reading postings back does
+        not return it. An adapter that cannot store it must say so in
+        its own documentation.
+
         Args:
             postings: A list of fully validated LedgerPosting records
                 derived from a single journal entry.
+            created_by: Opaque identifier of the caller performing the
+                write.
 
         Raises:
             AppError: STORAGE_UNAVAILABLE if the backend cannot be
