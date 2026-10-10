@@ -18,6 +18,10 @@ uv run python -c "from trutina.storage_mongo import MongoConnection; print(Mongo
 
 `trutina-storage-mongo` implements the `AccountRepo`, `JournalRepo`, and `PostingRepo` contracts from `trutina-core` with MongoDB and Beanie. It provides connection helpers, Beanie document models, and concrete repositories for use at an application's composition root. It has no `TrialBalanceRepo` implementation and is not currently depended on by either presentation app — see `PROJECT_CONTEXT.md` at the repo root for that cutover. For design decisions, invariants, and accepted risks, see [CONTEXT.md](CONTEXT.md).
 
+## Frozen
+
+This package is frozen. It is no longer a dependency of either presentation app and receives no new features. `MongoJournalRepo.save()` and `MongoPostingRepo.save_many()` accept the keyword-only `created_by` required by the `trutina-core` contracts and do not store it, so this adapter records no attribution. Do not wire it into an app without first storing `created_by`. See [CONTEXT.md](CONTEXT.md).
+
 ## API at a Glance
 
 | Symbol                                                  | Purpose                                                                                       |

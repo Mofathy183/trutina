@@ -70,6 +70,16 @@ instantiated at import time). Recorded here only so a future contributor
 auditing this package for the same class of bug doesn't need to re-derive
 why it doesn't apply.
 
+## Frozen: attribution is accepted and dropped
+
+**Decision:** new features target PostgreSQL only. When the repository contracts gained a keyword-only `created_by` (`JournalRepo.save`, `PostingRepo.save_many`), the Mongo adapters were changed to accept it and ignore it, rather than store it or raise.
+
+**Why:** neither presentation app depends on this package, so nothing in production can reach it. Storing the value would mean adding fields to the Beanie documents and keeping them in step with a backend no feature targets. Raising would break this package's CI lane for no production benefit.
+
+**Cost accepted:** a frozen adapter that silently drops attribution. If this package is ever wired into an app, every write through it will have no recorded actor. Treat that as a blocker for re-wiring, not a detail: store `created_by` first.
+
+**How it is kept honest:** the adapter docstrings say the value is not stored, and one unit test per repository asserts the call succeeds and the stored document has no `created_by` field, so "ignored" is pinned as deliberate.
+
 ## Trade-offs accepted
 
 **No multi-document transactions.** `MongoPostingRepo.save_many()` uses a
