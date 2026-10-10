@@ -29,6 +29,9 @@ Coverage
 - Timestamps: created_at set on insert, equals updated_at, naive after
     round-trip.
 - Index integrity after clean_db.
+- Frozen attribution: save_many() accepts the contract's ``created_by``
+    and does not store it. This adapter is frozen and records no
+    attribution; this test pins that as deliberate, not accidental.
 """
 
 from datetime import UTC, datetime
@@ -40,6 +43,7 @@ from trutina.core.posting.schemas.ledger_posting import LedgerPosting
 from trutina.storage_mongo.posting import PostingDocument
 
 from tests.factories import make_credit_posting, make_debit_posting
+from tests.factories.actor import TEST_ACTOR
 
 
 def _floor_to_milliseconds(dt: datetime) -> datetime:
@@ -58,7 +62,7 @@ class TestMongoPostingRepoSaveMany:
         debit = make_debit_posting(journal_number=1)
         credit = make_credit_posting(journal_number=1)
 
-        await mongo_posting_repo.save_many([debit, credit])
+        await mongo_posting_repo.save_many([debit, credit], created_by=TEST_ACTOR)
 
         result = await mongo_posting_repo.get_by_journal_number(1)
         assert len(result) == 2
@@ -66,7 +70,7 @@ class TestMongoPostingRepoSaveMany:
     async def test_empty_list_is_a_no_op(
         self, mongo_posting_repo: PostingRepo, clean_db
     ):
-        await mongo_posting_repo.save_many([])
+        await mongo_posting_repo.save_many([], created_by=TEST_ACTOR)
 
         count = await clean_db["postings"].count_documents({})
         assert count == 0
@@ -74,7 +78,7 @@ class TestMongoPostingRepoSaveMany:
     async def test_persists_single_posting(self, mongo_posting_repo: PostingRepo):
         debit = make_debit_posting(journal_number=1)
 
-        await mongo_posting_repo.save_many([debit])
+        await mongo_posting_repo.save_many([debit], created_by=TEST_ACTOR)
 
         result = await mongo_posting_repo.get_by_journal_number(1)
         assert len(result) == 1
@@ -90,7 +94,7 @@ class TestMongoPostingRepoSaveMany:
             ),
         ]
 
-        await mongo_posting_repo.save_many(postings)
+        await mongo_posting_repo.save_many(postings, created_by=TEST_ACTOR)
 
         result = await mongo_posting_repo.get_by_journal_number(1)
         assert len(result) == 3
@@ -98,7 +102,9 @@ class TestMongoPostingRepoSaveMany:
     async def test_stores_account_key_in_raw_bson(
         self, mongo_posting_repo: PostingRepo, clean_db
     ):
-        await mongo_posting_repo.save_many([make_debit_posting(account="Cash")])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(account="Cash")], created_by=TEST_ACTOR
+        )
 
         raw = await clean_db["postings"].find_one({"account": "Cash"})
 
@@ -108,7 +114,9 @@ class TestMongoPostingRepoSaveMany:
     async def test_does_not_store_is_debit_in_raw_bson(
         self, mongo_posting_repo: PostingRepo, clean_db
     ):
-        await mongo_posting_repo.save_many([make_debit_posting()])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting()], created_by=TEST_ACTOR
+        )
 
         raw = await clean_db["postings"].find_one({})
 
@@ -118,7 +126,9 @@ class TestMongoPostingRepoSaveMany:
     async def test_stores_amounts_as_strings_in_raw_bson(
         self, mongo_posting_repo: PostingRepo, clean_db
     ):
-        await mongo_posting_repo.save_many([make_debit_posting()])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting()], created_by=TEST_ACTOR
+        )
 
         raw = await clean_db["postings"].find_one({})
 
@@ -132,7 +142,7 @@ class TestMongoPostingRepoSaveMany:
         debit = make_debit_posting(journal_number=1)
         credit = make_credit_posting(journal_number=1)
 
-        await mongo_posting_repo.save_many([debit, credit])
+        await mongo_posting_repo.save_many([debit, credit], created_by=TEST_ACTOR)
 
         docs = (
             await clean_db["postings"]
@@ -142,6 +152,21 @@ class TestMongoPostingRepoSaveMany:
         )
 
         assert [d["line_index"] for d in docs] == [0, 1]
+
+
+@pytest.mark.integration
+class TestMongoPostingRepoFrozenCreatedBy:
+    async def test_accepts_created_by_and_does_not_store_it(
+        self, mongo_posting_repo: PostingRepo, clean_db
+    ):
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(), make_credit_posting()], created_by=TEST_ACTOR
+        )
+
+        docs = await clean_db["postings"].find({}).to_list()
+
+        assert len(docs) == 2
+        assert all("created_by" not in doc for doc in docs)
 
 
 @pytest.mark.integration
@@ -156,7 +181,9 @@ class TestMongoPostingRepoGetByAccount:
     async def test_returns_postings_for_matching_account(
         self, mongo_posting_repo: PostingRepo
     ):
-        await mongo_posting_repo.save_many([make_debit_posting(account="Cash")])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(account="Cash")], created_by=TEST_ACTOR
+        )
 
         result = await mongo_posting_repo.get_by_account("Cash")
 
@@ -170,7 +197,8 @@ class TestMongoPostingRepoGetByAccount:
             [
                 make_debit_posting(account="Cash"),
                 make_credit_posting(account="Sales Revenue"),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
 
         result = await mongo_posting_repo.get_by_account("Cash")
@@ -182,7 +210,9 @@ class TestMongoPostingRepoGetByAccount:
     async def test_matches_case_insensitively(
         self, mongo_posting_repo: PostingRepo, variant: str
     ):
-        await mongo_posting_repo.save_many([make_debit_posting(account="Cash")])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(account="Cash")], created_by=TEST_ACTOR
+        )
 
         result = await mongo_posting_repo.get_by_account(variant)
 
@@ -194,7 +224,7 @@ class TestMongoPostingRepoGetByAccount:
         later = make_debit_posting(account="Cash", posting_date=datetime(2024, 6, 1))
         earlier = make_debit_posting(account="Cash", posting_date=datetime(2024, 1, 1))
 
-        await mongo_posting_repo.save_many([later, earlier])
+        await mongo_posting_repo.save_many([later, earlier], created_by=TEST_ACTOR)
 
         result = await mongo_posting_repo.get_by_account("Cash")
 
@@ -206,7 +236,9 @@ class TestMongoPostingRepoGetByAccount:
     async def test_returns_ledger_posting_instances(
         self, mongo_posting_repo: PostingRepo
     ):
-        await mongo_posting_repo.save_many([make_debit_posting()])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting()], created_by=TEST_ACTOR
+        )
 
         result = await mongo_posting_repo.get_by_account("Cash")
 
@@ -216,7 +248,8 @@ class TestMongoPostingRepoGetByAccount:
         self, mongo_posting_repo: PostingRepo
     ):
         await mongo_posting_repo.save_many(
-            [make_debit_posting(account="Accounts Receivable")]
+            [make_debit_posting(account="Accounts Receivable")],
+            created_by=TEST_ACTOR,
         )
 
         result = await mongo_posting_repo.get_by_account("accounts receivable")
@@ -240,7 +273,8 @@ class TestMongoPostingRepoGetByJournalNumber:
             [
                 make_debit_posting(journal_number=1),
                 make_credit_posting(journal_number=1),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
 
         result = await mongo_posting_repo.get_by_journal_number(1)
@@ -254,7 +288,7 @@ class TestMongoPostingRepoGetByJournalNumber:
         debit = make_debit_posting(journal_number=1, account="Cash")
         credit = make_credit_posting(journal_number=1, account="Sales Revenue")
 
-        await mongo_posting_repo.save_many([debit, credit])
+        await mongo_posting_repo.save_many([debit, credit], created_by=TEST_ACTOR)
 
         result = await mongo_posting_repo.get_by_journal_number(1)
 
@@ -264,8 +298,12 @@ class TestMongoPostingRepoGetByJournalNumber:
     async def test_does_not_return_postings_for_other_journal_numbers(
         self, mongo_posting_repo: PostingRepo
     ):
-        await mongo_posting_repo.save_many([make_debit_posting(journal_number=1)])
-        await mongo_posting_repo.save_many([make_debit_posting(journal_number=2)])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(journal_number=1)], created_by=TEST_ACTOR
+        )
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(journal_number=2)], created_by=TEST_ACTOR
+        )
 
         result = await mongo_posting_repo.get_by_journal_number(1)
 
@@ -275,7 +313,9 @@ class TestMongoPostingRepoGetByJournalNumber:
     async def test_returns_ledger_posting_instances(
         self, mongo_posting_repo: PostingRepo
     ):
-        await mongo_posting_repo.save_many([make_debit_posting(journal_number=1)])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(journal_number=1)], created_by=TEST_ACTOR
+        )
 
         result = await mongo_posting_repo.get_by_journal_number(1)
 
@@ -288,13 +328,15 @@ class TestMongoPostingRepoGetByJournalNumber:
             [
                 make_debit_posting(journal_number=1),
                 make_credit_posting(journal_number=1),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
         await mongo_posting_repo.save_many(
             [
                 make_debit_posting(journal_number=2),
                 make_credit_posting(journal_number=2),
-            ]
+            ],
+            created_by=TEST_ACTOR,
         )
 
         result_one = await mongo_posting_repo.get_by_journal_number(1)
@@ -313,7 +355,8 @@ class TestDecimalRoundTrip:
     ):
         amount = Decimal("123.45")
         await mongo_posting_repo.save_many(
-            [make_debit_posting(journal_number=1, amount=amount)]
+            [make_debit_posting(journal_number=1, amount=amount)],
+            created_by=TEST_ACTOR,
         )
 
         result = await mongo_posting_repo.get_by_journal_number(1)
@@ -325,7 +368,8 @@ class TestDecimalRoundTrip:
     ):
         amount = Decimal("99.99")
         await mongo_posting_repo.save_many(
-            [make_credit_posting(journal_number=1, amount=amount)]
+            [make_credit_posting(journal_number=1, amount=amount)],
+            created_by=TEST_ACTOR,
         )
 
         result = await mongo_posting_repo.get_by_journal_number(1)
@@ -337,7 +381,8 @@ class TestDecimalRoundTrip:
     ):
         amount = Decimal("1234567890.12")
         await mongo_posting_repo.save_many(
-            [make_debit_posting(journal_number=1, amount=amount)]
+            [make_debit_posting(journal_number=1, amount=amount)],
+            created_by=TEST_ACTOR,
         )
 
         result = await mongo_posting_repo.get_by_journal_number(1)
@@ -345,7 +390,9 @@ class TestDecimalRoundTrip:
         assert result[0].debit_amount == amount
 
     async def test_zero_side_decodes_to_zero(self, mongo_posting_repo: PostingRepo):
-        await mongo_posting_repo.save_many([make_debit_posting(journal_number=1)])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(journal_number=1)], created_by=TEST_ACTOR
+        )
 
         result = await mongo_posting_repo.get_by_journal_number(1)
 
@@ -356,7 +403,9 @@ class TestDecimalRoundTrip:
 class TestMongoPostingRepoTimestamps:
     async def test_created_at_is_set_on_save(self, mongo_posting_repo: PostingRepo):
         before = _floor_to_milliseconds(datetime.now(UTC))
-        await mongo_posting_repo.save_many([make_debit_posting(journal_number=1)])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(journal_number=1)], created_by=TEST_ACTOR
+        )
         after = datetime.now(UTC)
 
         doc = await PostingDocument.find_one(PostingDocument.journal_number == 1)
@@ -372,7 +421,9 @@ class TestMongoPostingRepoTimestamps:
     async def test_updated_at_equals_created_at_after_save(
         self, mongo_posting_repo: PostingRepo
     ):
-        await mongo_posting_repo.save_many([make_debit_posting(journal_number=1)])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(journal_number=1)], created_by=TEST_ACTOR
+        )
 
         doc = await PostingDocument.find_one(PostingDocument.journal_number == 1)
 
@@ -382,7 +433,9 @@ class TestMongoPostingRepoTimestamps:
     async def test_timestamps_are_naive_after_database_round_trip(
         self, mongo_posting_repo: PostingRepo
     ):
-        await mongo_posting_repo.save_many([make_debit_posting(journal_number=1)])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(journal_number=1)], created_by=TEST_ACTOR
+        )
 
         doc = await PostingDocument.find_one(PostingDocument.journal_number == 1)
 
@@ -396,7 +449,9 @@ class TestIndexIntegrityAfterCleanDb:
     async def test_account_lookup_still_works_after_cleanup(
         self, mongo_posting_repo: PostingRepo
     ):
-        await mongo_posting_repo.save_many([make_debit_posting(account="Cash")])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(account="Cash")], created_by=TEST_ACTOR
+        )
 
         result = await mongo_posting_repo.get_by_account("Cash")
 
@@ -405,7 +460,9 @@ class TestIndexIntegrityAfterCleanDb:
     async def test_journal_number_lookup_still_works_after_cleanup(
         self, mongo_posting_repo: PostingRepo
     ):
-        await mongo_posting_repo.save_many([make_debit_posting(journal_number=1)])
+        await mongo_posting_repo.save_many(
+            [make_debit_posting(journal_number=1)], created_by=TEST_ACTOR
+        )
 
         result = await mongo_posting_repo.get_by_journal_number(1)
 

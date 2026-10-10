@@ -36,6 +36,9 @@ Coverage
 - Timestamps: created_at set on insert, updated_at equals created_at
     (journal entries are immutable, so these are set once and never advanced).
 - Index integrity: unique journal_number enforced after clean_db.
+- Frozen attribution: save() accepts the contract's ``created_by`` and
+    does not store it. This adapter is frozen and records no attribution;
+    this test pins that as deliberate, not accidental.
 """
 
 from datetime import UTC, datetime
@@ -52,6 +55,7 @@ from tests.factories import (
     make_debit_line,
     make_journal_entry,
 )
+from tests.factories.actor import TEST_ACTOR
 
 
 def _floor_to_milliseconds(dt: datetime) -> datetime:
@@ -71,7 +75,7 @@ class TestMongoJournalRepoSave:
     async def test_persists_entry(self, mongo_journal_repo: JournalRepo):
         entry = make_journal_entry(journal_number=1)
 
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
         assert result is not None
@@ -81,7 +85,7 @@ class TestMongoJournalRepoSave:
         posting_date = datetime(2024, 6, 15)
         entry = make_journal_entry(journal_number=1, posting_date=posting_date)
 
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
         assert result is not None
@@ -90,7 +94,7 @@ class TestMongoJournalRepoSave:
     async def test_persists_description(self, mongo_journal_repo: JournalRepo):
         entry = make_journal_entry(journal_number=1, description="Opening balance")
 
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
         assert result is not None
@@ -99,7 +103,7 @@ class TestMongoJournalRepoSave:
     async def test_persists_none_description(self, mongo_journal_repo: JournalRepo):
         entry = make_journal_entry(journal_number=1, description=None)
 
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
         assert result is not None
@@ -109,10 +113,10 @@ class TestMongoJournalRepoSave:
         self, mongo_journal_repo: JournalRepo
     ):
         entry = make_journal_entry(journal_number=1)
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         with pytest.raises(AppError) as exc_info:
-            await mongo_journal_repo.save(entry)
+            await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.DUPLICATE_JOURNAL_NUMBER
         assert exc_info.value.context["field"] == "journal_number"
@@ -121,10 +125,25 @@ class TestMongoJournalRepoSave:
 
 
 @pytest.mark.integration
+class TestMongoJournalRepoFrozenCreatedBy:
+    async def test_accepts_created_by_and_does_not_store_it(
+        self, mongo_journal_repo: JournalRepo, clean_db
+    ):
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=1), created_by=TEST_ACTOR
+        )
+
+        raw = await clean_db["journal_entries"].find_one({"journal_number": 1})
+
+        assert raw is not None
+        assert "created_by" not in raw
+
+
+@pytest.mark.integration
 class TestMongoJournalRepoGetByNumber:
     async def test_returns_entry_when_found(self, mongo_journal_repo: JournalRepo):
         entry = make_journal_entry(journal_number=1)
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
 
@@ -140,7 +159,7 @@ class TestMongoJournalRepoGetByNumber:
         self, mongo_journal_repo: JournalRepo
     ):
         entry = make_journal_entry(journal_number=1)
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
 
@@ -150,7 +169,7 @@ class TestMongoJournalRepoGetByNumber:
         self, mongo_journal_repo: JournalRepo
     ):
         entry = make_journal_entry(journal_number=1)
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
 
@@ -168,7 +187,9 @@ class TestMongoJournalRepoListEntries:
         assert result == []
 
     async def test_returns_single_entry(self, mongo_journal_repo: JournalRepo):
-        await mongo_journal_repo.save(make_journal_entry(journal_number=1))
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=1), created_by=TEST_ACTOR
+        )
 
         result = await mongo_journal_repo.list_entries()
 
@@ -176,9 +197,15 @@ class TestMongoJournalRepoListEntries:
         assert result[0].journal_number == 1
 
     async def test_returns_all_entries(self, mongo_journal_repo: JournalRepo):
-        await mongo_journal_repo.save(make_journal_entry(journal_number=1))
-        await mongo_journal_repo.save(make_journal_entry(journal_number=2))
-        await mongo_journal_repo.save(make_journal_entry(journal_number=3))
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=1), created_by=TEST_ACTOR
+        )
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=2), created_by=TEST_ACTOR
+        )
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=3), created_by=TEST_ACTOR
+        )
 
         result = await mongo_journal_repo.list_entries()
 
@@ -187,9 +214,15 @@ class TestMongoJournalRepoListEntries:
     async def test_returns_entries_sorted_by_journal_number_ascending(
         self, mongo_journal_repo: JournalRepo
     ):
-        await mongo_journal_repo.save(make_journal_entry(journal_number=3))
-        await mongo_journal_repo.save(make_journal_entry(journal_number=1))
-        await mongo_journal_repo.save(make_journal_entry(journal_number=2))
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=3), created_by=TEST_ACTOR
+        )
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=1), created_by=TEST_ACTOR
+        )
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=2), created_by=TEST_ACTOR
+        )
 
         result = await mongo_journal_repo.list_entries()
 
@@ -198,7 +231,9 @@ class TestMongoJournalRepoListEntries:
     async def test_returns_journal_entry_instances(
         self, mongo_journal_repo: JournalRepo
     ):
-        await mongo_journal_repo.save(make_journal_entry(journal_number=1))
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=1), created_by=TEST_ACTOR
+        )
 
         result = await mongo_journal_repo.list_entries()
 
@@ -249,7 +284,7 @@ class TestDecimalRoundTrip:
                 make_credit_line(amount=amount),
             ],
         )
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
 
@@ -268,7 +303,7 @@ class TestDecimalRoundTrip:
                 make_credit_line(amount=amount),
             ],
         )
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
 
@@ -287,7 +322,7 @@ class TestDecimalRoundTrip:
                 make_credit_line(amount=amount),
             ],
         )
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
 
@@ -302,7 +337,7 @@ class TestEmbeddedLines:
         self, mongo_journal_repo: JournalRepo
     ):
         entry = make_journal_entry(journal_number=1)
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
 
@@ -313,7 +348,7 @@ class TestEmbeddedLines:
         self, mongo_journal_repo: JournalRepo
     ):
         entry = make_journal_entry(journal_number=1)
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
 
@@ -333,7 +368,7 @@ class TestEmbeddedLines:
                 make_credit_line(account="Accounts Payable", amount=Decimal("100")),
             ],
         )
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         result = await mongo_journal_repo.get_by_number(1)
 
@@ -348,7 +383,9 @@ class TestEmbeddedLines:
 class TestMongoJournalRepoTimestamps:
     async def test_created_at_is_set_on_save(self, mongo_journal_repo: JournalRepo):
         before = _floor_to_milliseconds(datetime.now(UTC))
-        await mongo_journal_repo.save(make_journal_entry(journal_number=1))
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=1), created_by=TEST_ACTOR
+        )
         after = datetime.now(UTC)
 
         doc = await JournalDocument.find_one(JournalDocument.journal_number == 1)
@@ -364,7 +401,9 @@ class TestMongoJournalRepoTimestamps:
     async def test_updated_at_equals_created_at_after_save(
         self, mongo_journal_repo: JournalRepo
     ):
-        await mongo_journal_repo.save(make_journal_entry(journal_number=1))
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=1), created_by=TEST_ACTOR
+        )
 
         doc = await JournalDocument.find_one(JournalDocument.journal_number == 1)
 
@@ -374,7 +413,9 @@ class TestMongoJournalRepoTimestamps:
     async def test_timestamps_are_naive_after_database_round_trip(
         self, mongo_journal_repo: JournalRepo
     ):
-        await mongo_journal_repo.save(make_journal_entry(journal_number=1))
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=1), created_by=TEST_ACTOR
+        )
 
         doc = await JournalDocument.find_one(JournalDocument.journal_number == 1)
 
@@ -396,7 +437,7 @@ class TestAmountNotStoredAsFloat:
                 make_credit_line(amount=amount),
             ],
         )
-        await mongo_journal_repo.save(entry)
+        await mongo_journal_repo.save(entry, created_by=TEST_ACTOR)
 
         raw = await clean_db["journal_entries"].find_one({"journal_number": 1})
 
@@ -411,9 +452,13 @@ class TestIndexIntegrityAfterCleanDb:
     async def test_unique_journal_number_index_enforced_after_cleanup(
         self, mongo_journal_repo: JournalRepo
     ):
-        await mongo_journal_repo.save(make_journal_entry(journal_number=1))
+        await mongo_journal_repo.save(
+            make_journal_entry(journal_number=1), created_by=TEST_ACTOR
+        )
 
         with pytest.raises(AppError) as exc_info:
-            await mongo_journal_repo.save(make_journal_entry(journal_number=1))
+            await mongo_journal_repo.save(
+                make_journal_entry(journal_number=1), created_by=TEST_ACTOR
+            )
 
         assert exc_info.value.code == ErrorCode.DUPLICATE_JOURNAL_NUMBER

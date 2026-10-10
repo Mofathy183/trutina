@@ -9,6 +9,7 @@ from trutina.storage_mongo.posting import MongoPostingRepo, PostingDocument
 from trutina.storage_mongo.shared import MongoExecutor
 
 from tests.factories import make_credit_posting, make_debit_posting
+from tests.factories.actor import TEST_ACTOR
 
 
 @pytest.fixture
@@ -272,6 +273,6 @@ class TestMongoPostingRepoConstruction:
     async def test_save_many_with_empty_list_is_a_no_op(self):
         repo = MongoPostingRepo(MongoExecutor())
 
-        result = await repo.save_many([])
+        result = await repo.save_many([], created_by=TEST_ACTOR)
 
         assert result is None
