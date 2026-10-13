@@ -18,6 +18,8 @@ Journal entries and their lines are explicitly inserted in one transaction, reta
 
 Attribution is stored as a nullable `created_by` text column on `journal_entries` and `postings`. It is nullable because rows written before M1a have no actor and cannot be backfilled; null means pre-attribution, and system writers use explicit values such as `system:pre-auth:api`. It is written on the entry row only, not per journal line, because lines are inserted in the same transaction as their entry and inherit its attribution. Postings carry it on every row because they are the ledger's immutable record. There is no foreign key, because the value is an opaque string supplied by the calling application, not a reference to a users table. `_to_domain()` never reads it, since it is not part of `JournalEntry` or `LedgerPosting`.
 
+Users live in one `users` table keyed by an application-supplied UUID, because the id is the subject identifier carried by tokens and audit records. `email` is the only identity column and is stored already normalized by `trutina-authentication`'s `User`, so the single constraint `uq_users_email` enforces case-insensitive uniqueness and no lookup-key column exists. `PostgresUserRepo` normalizes lookups with the same `normalize_email()`. `created_at` is stamped by the database and read back; a caller-supplied value is ignored. `password_hash` is NOT NULL. `_on_duplicate()` maps `uq_users_email` to `DUPLICATE_USER_EMAIL` with `resource` and `field` only, never the address, because `AppError.context` reaches logs. `set_active` and `update_password_hash` run one `UPDATE ... RETURNING` and raise `UNKNOWN_USER` when no row matched. Users are never deleted.
+
 Journal number reservation advances the identity column's backing PostgreSQL sequence directly. PostgreSQL sequence advances are not rolled back, so a reserved number remains consumed even when no later journal entry is saved.
 
 The trial balance is a report, not a stored resource, so `PostgresTrialBalanceRepo` owns no table and needs no migration. It runs one aggregation over `postings`: `SUM(debit_amount)` and `SUM(credit_amount)` grouped by `account_key`. Grouping on the lookup key merges postings recorded under different casings of one account name into a single row, and `MIN(account)` supplies a deterministic display name (the alphabetically-first recorded spelling). When an `as_of_date` is supplied, a `posting_date <= as_of_date` predicate scopes the rows; when it is `None`, every posting is included. Results are ordered ascending by display name. Every call recomputes from current rows; nothing is cached or materialized.
@@ -94,8 +96,10 @@ No test yet forces a real constraint-violation exception (e.g. a duplicate accou
 
 `created_by` is nullable with no CHECK constraint and no index. Nothing stops a writer from passing a value the calling application would consider malformed, because format validation is deferred to the API and CLI handlers (M4b). Revisit a CHECK constraint on rows after a cutoff date once real identities exist.
 
+`DUPLICATE_USER_EMAIL` reveals that an address is registered. Whether it may reach a caller is decided with the register use case, not here.
+
 ## Allowed and Forbidden Dependencies
 
-**Allowed** (per `pyproject.toml`): `trutina-shared`, `trutina-core`, `trutina-config`, `sqlalchemy`, `asyncpg`, `alembic`.
+**Allowed** (per `pyproject.toml`): `trutina-shared`, `trutina-core`, `trutina-config`, `trutina-authentication`, `sqlalchemy`, `asyncpg`, `alembic`.
 
 **Forbidden:** `trutina-cli`, `trutina-api`, `trutina-storage-mongo`, `trutina-observability`, `structlog`, or any presentation library. This package emits through `logging.getLogger(__name__)` only, enforced by the "Emitters use stdlib logging only" import-linter contract — it must never import `trutina.observability` or `structlog` directly.
