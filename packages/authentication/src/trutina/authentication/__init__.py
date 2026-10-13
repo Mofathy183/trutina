@@ -4,6 +4,7 @@ from .credentials import (
     PasswordHasher,
     User,
     UserRepo,
+    normalize_email,
 )
 from .identity import AccessState, Identity, UserStatusChecker
 from .shared import AuthEvent, AuthEventSink, Clock, NoOpAuthEventSink
@@ -39,4 +40,5 @@ __all__ = [
     "User",
     "UserRepo",
     "UserStatusChecker",
+    "normalize_email",
 ]

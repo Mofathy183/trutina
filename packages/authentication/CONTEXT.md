@@ -4,7 +4,7 @@ For usage, see README.md. This document explains why, not how.
 
 ## Why This Package Exists
 
-Trutina needs to know who performed a write, without the accounting domain learning what a user, a password or a token is. This package holds the vocabulary for identity and authentication so that `trutina-core` never has to. Today it is contracts only: it fixes the seams that later milestones fill in, and gives tests fakes to build against before any implementation exists.
+Trutina needs to know who performed a write, without the accounting domain learning what a user, a password or a token is. This package holds the vocabulary for identity and authentication so that `trutina-core` never has to. Today it is contracts and models only (the one adapter, for `UserRepo`, lives in `trutina-storage-postgres`): it fixes the seams that later milestones fill in, and gives tests fakes to build against before any implementation exists.
 
 ## The Rule This Package Protects
 
@@ -37,6 +37,18 @@ Internal direction: `credentials` and `tokens` may import `identity`; `identity`
 
 `PasswordHasher` is slow, salted and verified; `RefreshTokenHasher` is fast and deterministic because refresh tokens are 256-bit random values that are looked up by hash. Using the password hasher for lookup is impossible by design (it is not deterministic), and using the fast hash for passwords would be a security defect, so the two are separate ports.
 
+### Email is stored once, normalized by the model
+
+`normalize_email()` trims and case-folds, and `User` applies it in a validator, so every constructed user already carries the canonical address. One plain unique index on one column then gives case-insensitive uniqueness, with no second key column and no database-side `lower()` that could disagree with `casefold()`. `UserRepo.get_by_email` normalizes its argument the same way. The rule lives here, with the model that owns it, not in `trutina-shared`. Cost accepted: the address as typed is not kept. It is normalization only; no email format is validated.
+
+### `created_at` belongs to the database
+
+`UserRepo.create` ignores a caller-supplied `created_at`. The storage layer stamps it and reads it back, so there is one source for the timestamp.
+
+### Deactivation, not deletion, and errors without personal data
+
+Users are never hard-deleted, so `set_active` is how access is removed. `set_active` and `update_password_hash` raise `UNKNOWN_USER` for an unknown id. `create` raises `DUPLICATE_USER_EMAIL` with a context of `resource` and `field` only, never the address, because `AppError.context` reaches logs and responses.
+
 ### `PasswordHasher` is async and owns its own offloading
 
 Hashing is CPU-bound. The implementation, not the caller, runs it off the event loop and bounds concurrency, so no call site can forget either. `verify` returns `False` for a malformed hash so the unknown-user path (verifying against a dummy hash) behaves exactly like a wrong password.
@@ -63,7 +75,7 @@ These may change before they are implemented:
 
 - `TokenIssuer`, `TokenVerifier`, `AccessToken` and `RefreshTokenRepo` depend on decision D1 (JWT versus one opaque session mechanism), settled in the M3 ADR.
 - `LoginAttemptRepo` is finalized in M2 with the throttling logic.
-- `User` is deliberately minimal; the users milestone designs its final shape alongside its adapter.
+- `User` is deliberately minimal: fields are added by the milestone that needs them.
 
 ## Allowed and Forbidden Dependencies
 
@@ -72,13 +84,16 @@ These may change before they are implemented:
 **Forbidden:** `trutina.core`; `trutina.storage_mongo`, `trutina.storage_postgres`, `trutina.observability`, `structlog`; `sqlalchemy`, `asyncpg`, `beanie`, `pymongo`, `fastapi`, `starlette`, `typer`, `rich`. Enforced by the workspace import-linter: core and authentication are independent siblings in the layers contract, and dedicated forbidden contracts cover the rest. Like every package outside the two apps, it emits through stdlib `logging` only.
 
 **Direction:** storage packages and the apps may import this package; it imports nothing above `shared`/`config`.
+`trutina-storage-postgres` imports it, forUserRepo.
 
 ## Known Gaps
 
-- No implementation of any contract exists. No hasher, token module, storage adapter, route or command uses these ports yet, and no app or storage package declares a dependency on this package.
-- No `AUTH_*` `ErrorCode` members exist yet. `Authenticator.authenticate` documents that it will raise `AppError` but cannot name a code until the first implementation adds them.
+- Only `UserRepo` has an implementation (`PostgresUserRepo`, in `trutina-storage-postgres`, which declares the dependency on this package). No hasher, token module, route or command exists, and no app depends on this package.
+- No `AUTH_*` `ErrorCode` members exist yet. `Authenticator.authenticate` documents that it will raise `AppError` but cannot name a code until the first implementation adds them. The user codes `DUPLICATE_USER_EMAIL` and `UNKNOWN_USER` do exist.
 - Once password login ships there is no self-service recovery for a locked-out user until password reset is built (deferred past core authentication).
 - `FakeUserRepo.create` does not reject duplicate emails; the service pre-check and the storage unique index are the real guards.
+- Email format is not validated, and normalization is a case fold only.
+- `DUPLICATE_USER_EMAIL` reveals that an address is registered. Whether it may reach a caller is decided with the register use case.
 
 ## Extension Points
 

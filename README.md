@@ -27,6 +27,7 @@ flowchart TD
     API --> OBS
     STORAGE_PG --> CORE[trutina-core]
     STORAGE_MONGO[trutina-storage-mongo] --> CORE
+    STORAGE_PG --> AUTH
     OBS --> CONFIG[trutina-config]
     CORE --> SHARED[trutina-shared]
     CORE -.-> CONFIG
@@ -38,8 +39,8 @@ contracts and has its own CI lane, but neither `apps/cli` nor `apps/api` depends
 today — see Packages & Apps below. `trutina-observability` is consumed only by the two
 presentation apps; every other package emits through the standard library's `logging`
 module directly.
-`trutina-authentication` holds identity and authentication contracts only and has no
-dependents yet.
+`trutina-authentication` holds identity and authentication contracts and models only;
+its sole dependent is `trutina-storage-postgres`, for the `UserRepo` adapter.
 
 ## Packages & Apps
 
@@ -55,14 +56,13 @@ dependents yet.
   package. See `packages/observability/README.md` / `CONTEXT.md`.
 - **`trutina-authentication`** — identity and authentication contracts (`Identity`,
   hasher, token, user, refresh-token and login-attempt ports) plus in-memory test
-  fakes. Contracts only: no implementation exists and no app or storage package
-  depends on it yet. Never imported by `trutina-core`. See
+  fakes. Contracts and models only; no hasher, token or login exists,
+  and only `trutina-storage-postgres` depends on it (for the `UserRepo` adapter). Never imported by `trutina-core`. See
   `packages/authentication/README.md` / `CONTEXT.md`.
 - **`trutina-storage-postgres`** — the storage backend `apps/cli` and `apps/api`
-  actually depend on today: SQLAlchemy async + `asyncpg` implementations of the four
-  repository contracts (including the trial balance aggregation), plus Alembic
-  migrations. Logs connection lifecycle events and constructs its engine with
-  `hide_parameters=True`. See `packages/storage-postgres/README.md` / `CONTEXT.md`.
+  actually depend on today: SQLAlchemy async + `asyncpg` implementations of the four core repository contracts
+  (including the trial balance aggregation) plus `UserRepo` plus Alembic
+  migrations. Logs connection lifecycle events and constructs its engine with`hide_parameters=True`. See `packages/storage-postgres/README.md`/`CONTEXT.md`.
 - **`trutina-storage-mongo`** — the original MongoDB/Beanie adapter. Still implements the
   account, journal, and posting contracts and is tested independently in its own CI
   lane, but is no longer a declared dependency of either presentation app since the

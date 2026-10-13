@@ -132,6 +132,19 @@ class TestHandleAppError:
         assert response.status_code == DEFAULT_ERROR_ENTRY.status_code
         assert body["message"] == DEFAULT_ERROR_ENTRY.message
 
+    async def test_duplicate_user_email_is_409_with_no_address_in_body(self):
+        exc = AppError(
+            code=ErrorCode.DUPLICATE_USER_EMAIL,
+            context={"resource": "user", "field": "email"},
+        )
+
+        response = await _handle_app_error(_make_request(), exc)
+
+        body = _body(response)
+        assert response.status_code == 409
+        assert body["error_code"] == ErrorCode.DUPLICATE_USER_EMAIL.value
+        assert "@" not in body["message"]
+
 
 @pytest.mark.unit
 class TestHandleValidationAppError:

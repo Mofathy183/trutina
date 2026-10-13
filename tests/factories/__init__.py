@@ -32,6 +32,7 @@ from .trial_balance import (
     make_fake_trial_balance_repo,
     make_trial_balance_service,
 )
+from .user import make_user
 
 __all__ = [
     "make_credit_posting",
@@ -61,4 +62,5 @@ __all__ = [
     "make_fake_trial_balance_repo",
     "make_trial_balance_service",
     "TEST_ACTOR",
+    "make_user",
 ]

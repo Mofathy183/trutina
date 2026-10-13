@@ -50,6 +50,9 @@ services:
         - action: sync
           path: ./packages/observability/src
           target: /app/packages/observability/src
+        - action: sync
+          path: ./packages/authentication/src
+          target: /app/packages/authentication/src
 
         # Manifest/lock changes: real dependency-resolution events, not
         # something file-sync can safely paper over — force a rebuild.
@@ -67,3 +70,5 @@ services:
           path: ./packages/shared/pyproject.toml
         - action: rebuild
           path: ./packages/observability/pyproject.toml
+        - action: rebuild
+          path: ./packages/authentication/pyproject.toml

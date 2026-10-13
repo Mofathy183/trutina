@@ -218,8 +218,8 @@ adapter (CLI, future API)
   docstring naming the accounting fact it protects). Do not add a class or
   introduce state — every function here is expected to be pure.
 - **`codes.py`**: add new `ErrorCode` members inside the correct grouped
-  section (Generic, Pydantic built-in types, Shared date rules, Account,
-  Journal, Posting, Storage), using the `"domain.specific_name"`
+  section (Generic, Pydantic built-in types, Shared date rules, Account, Journal, Posting, User, Storage),
+  using the `"domain.specific_name"`
   string-value convention already established (e.g.
   `"account.invalid_name"`, `"journal.unbalanced"`). Never reuse an
   existing value for a different meaning — `ErrorCode` values are a stable

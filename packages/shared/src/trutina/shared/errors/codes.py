@@ -64,3 +64,7 @@ class ErrorCode(StrEnum):
     # ── Storage ────────────────────────────────────────────────────────────
     STORAGE_UNAVAILABLE = "storage.unavailable"
     STORAGE_TIMEOUT = "storage.timeout"
+
+    # ── User domain ────────────────────────────────────────────────────────
+    DUPLICATE_USER_EMAIL = "user.duplicate_email"
+    UNKNOWN_USER = "user.unknown"

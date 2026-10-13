@@ -562,11 +562,11 @@ callback, so `trutina-cli --help` never reaches it.
   related formatters use `ERRORS.get(..., ERRORS[ErrorCode.UNKNOWN_ERROR])`
   (and the same fallback for `HINTS`). A new `ErrorCode` added upstream
   without a matching `ERRORS`/`HINTS` entry here degrades to that generic
-  catalog text rather than failing loudly — this is presentation
-  degradation, not a test failure, so it must be checked
-  manually when `trutina-shared`'s `ErrorCode` enum changes. The same is
-  true of `_ERROR_LEVEL_CODES` — a new incident-worthy code that's never
-  added there silently logs at INFO instead of ERROR.
+  catalog text rather than failing loudly — at runtime it degrades to that generic text,
+  but `shared/errors/tests/test_catalog_parity.py` fails the build when any code lacks an `ERRORS` or `HINTS` entry
+  (the one documented exclusion is `REQUEST_VALIDATION_ERROR`, never rendered).
+  `ERROR_LEVEL_CODES` has no such check: a new incident-worthy code that's never added there silently logs at INFO instead of ERROR.
+  a new incident-worthy code that's never added there silently logs at INFO instead of ERROR.
 - **`Fake*Repo` instances behave closely enough to their PostgreSQL
   counterparts for CLI-level assertions.** E.g. `FakeJournalRepo` issues
   sequential journal numbers starting at 1 regardless of whether the

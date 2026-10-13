@@ -4,6 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import SecretStr
 from trutina.authentication import User
+from trutina.shared.errors import AppError, ErrorCode
 
 from tests.fakes import FakeLoginAttemptRepo, FakePasswordHasher, FakeUserRepo
 
@@ -78,6 +79,34 @@ class TestFakeUserRepo:
         stored = await repo.get_by_id(user.id)
         assert stored is not None
         assert stored.password_hash == "new"
+
+    async def test_set_active_updates_the_flag(self):
+        repo = FakeUserRepo()
+        user = User(
+            id=uuid4(),
+            email="a@b.c",
+            password_hash="h",
+            is_active=True,
+            created_at=NOW,
+        )
+        await repo.create(user)
+
+        await repo.set_active(user.id, False)
+
+        stored = await repo.get_by_id(user.id)
+        assert stored is not None
+        assert stored.is_active is False
+
+    async def test_raises_unknown_user_when_updating_a_missing_user(self):
+        repo = FakeUserRepo()
+
+        with pytest.raises(AppError) as hash_exc:
+            await repo.update_password_hash(uuid4(), "new")
+        with pytest.raises(AppError) as active_exc:
+            await repo.set_active(uuid4(), False)
+
+        assert hash_exc.value.code == ErrorCode.UNKNOWN_USER
+        assert active_exc.value.code == ErrorCode.UNKNOWN_USER
 
 
 @pytest.mark.unit

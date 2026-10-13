@@ -88,6 +88,7 @@ contract (independent siblings), so neither can import the other.
   postings do not appear; PostgreSQL only. `TrialBalanceService` now also logs
   `trial_balance.generated` (entry count and `as_of_date` only — never an amount)
   on every successful report.
+- **User store** — `UserRepo` (contract and `User` model in `trutina-authentication`) has a PostgreSQL adapter, `PostgresUserRepo`, over a `users` table with its own migration. Email is stored normalized, `set_active` replaces deletion, and two user error codes exist with API and CLI catalog entries. Storage only: no hasher, register, login, route or command uses it yet.
 
 ## What Is Partial or Explicitly Out of Scope
 

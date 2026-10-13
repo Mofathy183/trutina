@@ -16,6 +16,7 @@ from alembic.config import Config
 from sqlalchemy import inspect
 
 PREVIOUS_REVISION = "7e1b970f05a7"
+REVISION_BEFORE_USERS = "a3f1c9d2b7e4"
 
 
 def _config() -> Config:
@@ -41,6 +42,13 @@ async def _created_by_present(engine) -> dict[str, bool]:
         )
 
 
+async def _users_table_exists(engine) -> bool:
+    async with engine.connect() as conn:
+        return await conn.run_sync(
+            lambda sync_conn: inspect(sync_conn).has_table("users")
+        )
+
+
 @pytest.mark.integration
 class TestCreatedByMigration:
     async def test_downgrade_removes_and_upgrade_restores_columns(
@@ -62,3 +70,26 @@ class TestCreatedByMigration:
 
         assert after_downgrade == {"journal_entries": False, "postings": False}
         assert after_upgrade == {"journal_entries": True, "postings": True}
+
+
+@pytest.mark.integration
+class TestUsersMigration:
+    async def test_downgrade_removes_and_upgrade_restores_users_table(
+        self, schema_init, postgres_connection
+    ):
+        cfg = _config()
+        loop = asyncio.get_event_loop()
+        engine = postgres_connection.engine
+
+        try:
+            await loop.run_in_executor(
+                None, lambda: command.downgrade(cfg, REVISION_BEFORE_USERS)
+            )
+            after_downgrade = await _users_table_exists(engine)
+        finally:
+            await loop.run_in_executor(None, lambda: command.upgrade(cfg, "head"))
+
+        after_upgrade = await _users_table_exists(engine)
+
+        assert after_downgrade is False
+        assert after_upgrade is True

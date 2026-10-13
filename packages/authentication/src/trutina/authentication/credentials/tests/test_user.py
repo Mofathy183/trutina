@@ -37,3 +37,6 @@ class TestUser:
     def test_is_frozen(self):
         with pytest.raises(ValidationError):
             _user().is_active = False  # ty: ignore[invalid-assignment]
+
+    def test_normalizes_the_email_on_construction(self):
+        assert _user(email="  Ann@Example.COM ").email == "ann@example.com"

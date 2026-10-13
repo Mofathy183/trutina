@@ -97,10 +97,10 @@ internal extension points, which live in that package's own README/CONTEXT.
 
 ## Identity and Authentication
 
-`trutina-authentication` contains contracts and fakes only. Still missing:
+`trutina-authentication` contains contracts and fakes, and its `UserRepo` has a PostgreSQL adapter (`users` table). Still missing:
 
 - Actor attribution: journal and posting writes validate a required `actor`, pass it to the repository as `created_by`, and `trutina-storage-postgres` persists it. Still missing: the same for account writes via an audit table (M1c), and replacing the fixed pre-auth constants with real identities (M4b, M4.5). Mongo is frozen and does not store `created_by`.
-- A user store and password registration/login, with throttling and a hasher.
+- Password registration and login, with throttling and a hasher. The user store exists; email format validation does not.
 - Access and refresh tokens, auth routes, and endpoint protection.
 - A CLI `auth` group.
 - Authorization (roles and a permission matrix).

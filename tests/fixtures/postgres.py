@@ -19,6 +19,7 @@ from alembic.config import Config
 from sqlalchemy import text
 from trutina.config import TestSettings
 from trutina.storage_postgres.account.repository import PostgresAccountRepo
+from trutina.storage_postgres.identity import PostgresUserRepo
 from trutina.storage_postgres.journal import PostgresJournalRepo
 from trutina.storage_postgres.posting import PostgresPostingRepo
 from trutina.storage_postgres.shared import connect, disconnect
@@ -114,7 +115,7 @@ async def clean_pg_db(schema_init, postgres_connection):
     async with postgres_connection.engine.begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE accounts, journal_entries, journal_lines, postings "
+                "TRUNCATE accounts, journal_entries, journal_lines, postings, users "
                 "RESTART IDENTITY CASCADE"
             )
         )
@@ -149,3 +150,10 @@ async def postgres_trial_balance_repo(clean_pg_db, postgres_connection):
     return PostgresTrialBalanceRepo(
         postgres_connection.session_factory, PostgresExecutor()
     )
+
+
+@pytest_asyncio.fixture
+async def postgres_user_repo(clean_pg_db, postgres_connection):
+    """A PostgresUserRepo backed by the clean test database."""
+
+    return PostgresUserRepo(postgres_connection.session_factory, PostgresExecutor())
