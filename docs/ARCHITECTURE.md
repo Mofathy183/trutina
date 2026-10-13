@@ -39,8 +39,7 @@ packages/
 ├── authentication/      trutina-authentication
 │   └── src/trutina/authentication/
 │       ├── __init__.py
-│       ├── identity.py, clock.py, events.py, password.py, tokens.py
-│       ├── user.py, status.py, attempts.py, refresh.py, authenticator.py
+│       ├── {identity,credentials,tokens,shared}/   # contracts grouped by role
 │       └── tests/
 ├── storage-mongo/       trutina-storage-mongo
 │   └── src/trutina/storage_mongo/
@@ -50,6 +49,7 @@ packages/
 ├── storage-postgres/    trutina-storage-postgres
 │   └── src/trutina/storage_postgres/
 │       ├── {account,journal,posting,trial_balance}/   # repository.py
+│       ├── identity/                     # model.py, repository.py (users)
 │       ├── shared/                       # PostgresExecutor, connect()/disconnect()
 │       ├── models.py
 │       └── alembic.ini, alembic/
@@ -126,7 +126,7 @@ cross-checked against its README/CONTEXT):
 | `trutina-observability`    | `trutina-config`                                                                      | `structlog`, `platformdirs`                |
 | `trutina-authentication`   | _(none)_                                                                              | `pydantic`                                 |
 | `trutina-storage-mongo`    | `trutina-shared`, `trutina-core`, `trutina-config`                                    | `beanie`, `pymongo`                        |
-| `trutina-storage-postgres` | `trutina-shared`, `trutina-core`, `trutina-config`                                    | `sqlalchemy`, `asyncpg`, `alembic`         |
+| `trutina-storage-postgres` | `trutina-shared`, `trutina-core`, `trutina-config`, `trutina-authentication`          | `sqlalchemy`, `asyncpg`, `alembic`         |
 | `trutina-cli`              | `trutina-core`, `trutina-storage-postgres`, `trutina-config`, `trutina-observability` | `typer`, `rich`, `anyio`, `prompt-toolkit` |
 | `trutina-api`              | `trutina-core`, `trutina-storage-postgres`, `trutina-config`, `trutina-observability` | `fastapi[standard]`, `uvicorn[standard]`   |
 
@@ -138,8 +138,8 @@ and `trutina-api` never depend on each other. `trutina-core` never depends on
 `trutina-config`. Only `trutina-cli` and `trutina-api` depend on
 `trutina-observability` — every other workspace package emits through the
 standard library alone.
-`trutina-authentication` is contracts and fakes only; no other workspace package
-depends on it today, and `trutina-core` never will.
+`trutina-authentication` is contracts, models and fakes; only `trutina-storage-postgres`
+depends on it (for `UserRepo`), and `trutina-core` never will.
 
 ## Layer Responsibilities
 
@@ -195,8 +195,8 @@ and abstract ports for password and refresh-token hashing, access-token issue an
 verify, user, refresh-token and login-attempt stores, a clock, an event sink, a
 per-write status checker, and the `Authenticator` use case. A peer of
 `trutina.core`, never above or below it: core sees only an opaque `actor: str`
-supplied by its caller. Contracts only: no implementation, route, command or storage
-adapter exists, and no app or storage package depends on it yet. The token and
+supplied by its caller. Contracts and models only: no hasher, token module, route or command exists, and no app depends on it.
+The one storage adapter, `PostgresUserRepo`, lives in `trutina.storage_postgres`. The token and
 refresh-token contracts and `LoginAttemptRepo` are provisional until the M3 ADR and
 M2. See `packages/authentication/README.md` / `CONTEXT.md`.
 
@@ -227,7 +227,9 @@ never includes bound parameter values. Alembic's `env.py` explicitly passes
 `disable_existing_loggers=False` to its `fileConfig()` call, after a confirmed bug
 where the default value silently disabled every non-Alembic-declared Python logger
 mid-process — see `packages/storage-postgres/README.md` / `CONTEXT.md`.
-`journal_entries` and `postings` carry a nullable `created_by` column recording the actor passed by the services; it is not part of any domain model and is never returned by a repository read.
+`journal_entries` and `postings` carry a nullable `created_by` column recording the actor passed by the services;
+it is not part of any domain model and is never returned by a repository read.
+It also implements `UserRepo` (defined in `trutina.authentication`) against a users table.
 
 ### `trutina.cli`
 
@@ -318,6 +320,6 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   logger for the rest of a process — see `packages/storage-postgres/CONTEXT.md`
   for the full account, including the belt-and-braces re-enable step in
   `tests/fixtures/postgres.py`'s `schema_init`.
-- `trutina-authentication` has contracts and test fakes only. No hasher, token
-  module, storage adapter, route or command exists, and no app depends on it.
+- `trutina-authentication` has contracts and test fakes only. No hasher, token module, route or command exists,
+  and no app depends on it; only the `UserRepo` adapter exists.
   Token-related contracts are provisional until the M3 ADR.
