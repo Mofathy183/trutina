@@ -157,6 +157,17 @@ ERRORS: ErrorMap = {
         message="This journal entry has already been posted to the ledger.",
     ),
     #
+    # User domain
+    #
+    ErrorCode.DUPLICATE_USER_EMAIL: ErrorDetail(
+        code=ErrorCode.DUPLICATE_USER_EMAIL,
+        message="A user with this email already exists.",
+    ),
+    ErrorCode.UNKNOWN_USER: ErrorDetail(
+        code=ErrorCode.UNKNOWN_USER,
+        message="No user exists with that identifier.",
+    ),
+    #
     # Storage
     #
     ErrorCode.STORAGE_UNAVAILABLE: ErrorDetail(

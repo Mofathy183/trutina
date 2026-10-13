@@ -109,6 +109,11 @@ HINTS: HintMap = {
         "Look up existing postings for this journal entry instead of posting it again."
     ),
     #
+    # User domain
+    #
+    ErrorCode.DUPLICATE_USER_EMAIL: "Use a different email address.",
+    ErrorCode.UNKNOWN_USER: "Check the user identifier and try again.",
+    #
     # Storage
     #
     ErrorCode.STORAGE_UNAVAILABLE: (
@@ -130,4 +135,6 @@ FIELD_LABELS: dict[str, str] = {
     ErrorCode.UNKNOWN_JOURNAL_ENTRY: "journal_number",
     ErrorCode.DUPLICATE_JOURNAL_NUMBER: "journal_number",
     ErrorCode.JOURNAL_ALREADY_POSTED: "journal_number",
+    ErrorCode.DUPLICATE_USER_EMAIL: "email",
+    ErrorCode.UNKNOWN_USER: "user_id",
 }
