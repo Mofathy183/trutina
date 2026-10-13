@@ -171,6 +171,20 @@ ERROR_CATALOG: dict[ErrorCode, ErrorCatalogEntry] = {
         "Journal entry '{value}' has already been posted.",
         hint="Each journal entry can only be posted once; fetch its existing postings instead.",
     ),
+    # ── User domain ──────────────────────────────────────────────────
+    # Neither message interpolates context: DUPLICATE_USER_EMAIL's context
+    # never carries the address, and no user identifier belongs in a
+    # response body.
+    ErrorCode.DUPLICATE_USER_EMAIL: ErrorCatalogEntry(
+        status.HTTP_409_CONFLICT,
+        "A user with this email already exists.",
+        hint="Use a different email address.",
+    ),
+    ErrorCode.UNKNOWN_USER: ErrorCatalogEntry(
+        status.HTTP_404_NOT_FOUND,
+        "No user was found.",
+        hint="Verify the user identifier.",
+    ),
     # ── Storage ──────────────────────────────────────────────────────
     ErrorCode.STORAGE_UNAVAILABLE: ErrorCatalogEntry(
         status.HTTP_503_SERVICE_UNAVAILABLE,
