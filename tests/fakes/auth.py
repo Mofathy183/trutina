@@ -30,7 +30,9 @@ from trutina.authentication import (
     User,
     UserRepo,
     UserStatusChecker,
+    normalize_email,
 )
+from trutina.shared.errors import AppError, ErrorCode
 
 _TOKEN_PREFIX = "fake-access-"
 
@@ -141,8 +143,13 @@ class FakeUserStatusChecker(UserStatusChecker):
 class FakeUserRepo(UserRepo):
     """In-memory UserRepo.
 
-    ``create()`` does not reject a duplicate email: the service
-    pre-checks, and the storage unique index is the real backstop.
+    ``create()`` stores the user as given, including ``created_at``
+    (the real adapter ignores it and stamps its own), and does not
+    reject a duplicate email: the service pre-checks, and the storage
+    unique index is the real backstop.
+
+    ``update_password_hash`` and ``set_active`` raise ``UNKNOWN_USER``
+    for an unknown id, like the real adapter.
 
     Attributes:
         created_users: Every user passed to ``create``, in order.
@@ -160,15 +167,29 @@ class FakeUserRepo(UserRepo):
         return self._users.get(user_id)
 
     async def get_by_email(self, email: str) -> User | None:
-        key = email.casefold()
+        key = normalize_email(email)
         for user in self._users.values():
-            if user.email.casefold() == key:
+            if user.email == key:
                 return user
         return None
 
     async def update_password_hash(self, user_id: UUID, password_hash: str) -> None:
-        user = self._users[user_id]
+        user = self._require(user_id)
         self._users[user_id] = user.model_copy(update={"password_hash": password_hash})
+
+    async def set_active(self, user_id: UUID, is_active: bool) -> None:
+        user = self._require(user_id)
+        self._users[user_id] = user.model_copy(update={"is_active": is_active})
+
+    def _require(self, user_id: UUID) -> User:
+        user = self._users.get(user_id)
+        if user is None:
+            raise AppError.not_found(
+                code=ErrorCode.UNKNOWN_USER,
+                resource="user",
+                identifier=str(user_id),
+            )
+        return user
 
 
 class FakeLoginAttemptRepo(LoginAttemptRepo):
