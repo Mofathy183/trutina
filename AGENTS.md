@@ -26,7 +26,7 @@ documented in that package's own README.md/CONTEXT.md.
 | `trutina-observability`    | `trutina.observability`    | trutina-config                                                                | structlog, platformdirs              |
 | `trutina-authentication`   | `trutina.authentication`   | none                                                                          | pydantic                             |
 | `trutina-storage-mongo`    | `trutina.storage_mongo`    | trutina-shared, trutina-core, trutina-config                                  | beanie, pymongo                      |
-| `trutina-storage-postgres` | `trutina.storage_postgres` | trutina-shared, trutina-core, trutina-config                                  | sqlalchemy, asyncpg, alembic         |
+| `trutina-storage-postgres` | `trutina.storage_postgres` | trutina-shared, trutina-core, trutina-config, trutina-authentication          | sqlalchemy, asyncpg, alembic         |
 | `trutina-cli`              | `trutina.cli`              | trutina-core, trutina-storage-postgres, trutina-config, trutina-observability | typer, rich, anyio, prompt-toolkit   |
 | `trutina-api`              | `trutina.api`              | trutina-core, trutina-storage-postgres, trutina-config, trutina-observability | fastapi[standard], uvicorn[standard] |
 
@@ -37,8 +37,8 @@ never depends on `trutina-api`, or vice versa. `trutina-core` never depends on
 storage packages never depend on `trutina-observability` or `structlog` — only
 `trutina-cli` and `trutina-api` do, each exactly once at their own composition
 root.
-`trutina-authentication` is contracts and models only (no implementation) and is not
-declared as a dependency of any other workspace package today. `trutina-core` never
+`trutina-authentication` is contracts and models only; the only workspace package
+that declares it is `trutina-storage-postgres` (for `UserRepo`). No app depends on it. `trutina-core` never
 imports it, and no core service method takes an `Identity`.
 
 ## Import-Linter Contracts (root `pyproject.toml`, enforced in CI)
@@ -72,12 +72,13 @@ packages/core/src/trutina/core/trial_balance/{dtos,repo,service}.py, schemas/acc
 packages/observability/src/trutina/observability/
   __init__.py, configure.py, correlation.py, processors.py, asgi.py
 packages/authentication/src/trutina/authentication/
-  {identity,clock,events,password,tokens,user,status,attempts,refresh,authenticator}.py
+  {identity,credentials,tokens,shared}/   # contracts, grouped by role
 packages/storage-mongo/src/trutina/storage_mongo/
   {account,journal,posting}/{document,repository}.py, shared/, connection.py, error_translation.py
 packages/storage-postgres/src/trutina/storage_postgres/
   {account,journal,posting}/repository.py, shared/{connection.py, execution/}, models.py
 packages/storage-postgres/src/trutina/storage_postgres/trial_balance/repository.py
+packages/storage-postgres/src/trutina/storage_postgres/identity/{model,repository}.py   # users table, UserRepo
 packages/storage-postgres/alembic.ini, alembic/
 packages/config/src/trutina/config/{base,mongo,postgres,api,logging}.py
 packages/shared/src/trutina/shared/{rule,util}.py, errors/{codes,errors,translators}.py
@@ -130,6 +131,7 @@ Package/app own tests live beside their own code (e.g.
   null means written before attribution). `apps/api` and `apps/cli` each pass their
   own fixed `PRE_AUTH_ACTOR` constant (`api/shared/actor.py`,
   `cli/composition/actor.py`).
+- A `User`'s email is always stored normalized (trimmed, case-folded) by `normalize_email()`, so one unique column enforces case-insensitive uniqueness. Email format is not validated. `UserRepo.create` ignores a caller-supplied `created_at`, and `DUPLICATE_USER_EMAIL` never carries the address in its context.
 
 ## Error Model
 
