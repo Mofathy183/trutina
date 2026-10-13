@@ -409,9 +409,8 @@ before returning it.
   startup-time one.
 - **Every `ErrorCode` the domain can raise has a matching `ERROR_CATALOG` entry.** A
   new code added upstream without a matching entry degrades to a generic `500` via
-  `DEFAULT_ERROR_ENTRY` rather than crashing the handler — presentation degradation,
-  not a test failure, and must be checked manually when `trutina-shared`'s
-  `ErrorCode` enum changes.
+  `DEFAULT_ERROR_ENTRY` rather than crashing the handler — that is the runtime behavior,
+  but `shared/errors/tests/test_catalog_parity.py` fails the build when any code lacks an entry (the one documented exclusion is `REQUEST_VALIDATION_ERROR`, never looked up).
 - **`configure_logging()` has already run by the time any route serves a request.**
   Both `create_app()` and, in the `--reload` case, `main()` guarantee this; a route
   or handler must never call `configure_logging()` itself.
