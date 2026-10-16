@@ -82,7 +82,7 @@ class MongoAccountRepo(AccountRepo):
     def __init__(self, executor: MongoExecutor) -> None:
         self._executor = executor
 
-    async def create(self, account: Account) -> None:
+    async def create(self, account: Account, *, created_by: str) -> None:
         """Persist a validated account as a new MongoDB document.
 
         Args:
@@ -102,7 +102,7 @@ class MongoAccountRepo(AccountRepo):
         except DuplicateKeyError as exc:
             raise self._on_duplicate(exc, account) from exc
 
-    async def update(self, account: Account) -> None:
+    async def update(self, account: Account, *, created_by: str) -> None:
         """Replace an existing account while preserving persistence metadata.
 
         Loads the current document to preserve persistence-managed fields
@@ -151,7 +151,7 @@ class MongoAccountRepo(AccountRepo):
                 identifier=account.code,
             ) from exc
 
-    async def delete_by_code(self, code: str) -> None:
+    async def delete_by_code(self, code: str, *, created_by: str) -> None:
         """Delete an account identified by its business code.
 
         Performs a single atomic delete operation. The deletion result is
