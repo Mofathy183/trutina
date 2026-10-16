@@ -58,8 +58,11 @@ class PostgresAccountRepo(AccountRepo):
         self._session_factory = session_factory
         self._executor = executor
 
-    async def create(self, account: Account) -> None:
+    async def create(self, account: Account, *, created_by: str) -> None:
         """Persist a new account row.
+
+        ``created_by`` is accepted to satisfy the AccountRepo contract and
+        is not written by this method.
 
         Raises:
             AppError: DUPLICATE_ACCOUNT_CODE or DUPLICATE_ACCOUNT_NAME if
@@ -68,6 +71,8 @@ class PostgresAccountRepo(AccountRepo):
                 infrastructure failures.
         """
 
+        # created_by is accepted but not persisted yet; M1c.2 records it in
+        # audit_events, inside this same transaction.
         async def _create() -> None:
             async with self._session_factory() as session:
                 session.add(
@@ -85,7 +90,7 @@ class PostgresAccountRepo(AccountRepo):
         except IntegrityError as exc:
             raise self._on_duplicate(exc, account.code, account.name) from exc
 
-    async def update(self, account: Account) -> None:
+    async def update(self, account: Account, *, created_by: str) -> None:
         """Overwrite an existing account row, located by its code.
 
         Raises:
@@ -94,6 +99,8 @@ class PostgresAccountRepo(AccountRepo):
                 another account's name_key.
         """
 
+        # created_by is accepted but not persisted yet; M1c.2 records it in
+        # audit_events, inside this same transaction.
         async def _update() -> AccountModel | None:
             async with self._session_factory() as session:
                 result = await session.execute(
@@ -175,7 +182,18 @@ class PostgresAccountRepo(AccountRepo):
         models = await self._executor.run(_list())
         return [self._to_domain(model) for model in models]
 
-    async def delete_by_code(self, code: str) -> None:
+    async def delete_by_code(self, code: str, *, created_by: str) -> None:
+        """Remove the account row with this code.
+
+        ``created_by`` is accepted to satisfy the AccountRepo contract and
+        is not written by this method.
+
+        Raises:
+            AppError: UNKNOWN_ACCOUNT if no row has this code.
+        """
+
+        # created_by is accepted but not persisted yet; M1c.2 records it in
+        # audit_events, inside this same transaction.
         async def _delete() -> bool:
             async with self._session_factory() as session:
                 result = await session.execute(
