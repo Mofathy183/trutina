@@ -47,6 +47,7 @@ class ErrorCode(StrEnum):
 
     # ── Account domain ─────────────────────────────────────────────────────
     INVALID_ACCOUNT_NAME = "account.invalid_name"
+    INVALID_ACCOUNT_CODE = "account.invalid_code"
     UNKNOWN_ACCOUNT = "account.unknown"
     DUPLICATE_ACCOUNT_CODE = "account.duplicate_code"
     DUPLICATE_ACCOUNT_NAME = "account.duplicate_name"

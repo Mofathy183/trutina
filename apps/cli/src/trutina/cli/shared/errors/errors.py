@@ -111,6 +111,10 @@ ERRORS: ErrorMap = {
             "between words."
         ),
     ),
+    ErrorCode.INVALID_ACCOUNT_CODE: ErrorDetail(
+        code=ErrorCode.INVALID_ACCOUNT_CODE,
+        message="Account codes must be 4 to 6 digits, with no letters, spaces, or symbols.",
+    ),
     ErrorCode.UNKNOWN_ACCOUNT: ErrorDetail(
         code=ErrorCode.UNKNOWN_ACCOUNT,
         message="The referenced account does not exist in the chart of accounts.",
