@@ -118,6 +118,7 @@ asyncio.run(main())
 ## Attribution
 
 `journal_entries` and `postings` carry a nullable `created_by` column. `PostgresJournalRepo.save()` and `PostgresPostingRepo.save_many()` take a keyword-only `created_by` and store it as given: once on the entry row, and on every posting row in a batch. Journal lines inherit their entry's attribution and have no column of their own. A null value means the row was written before attribution existed. `created_by` is not part of any core domain model, so repository reads never return it; read it with SQL. See [CONTEXT.md](CONTEXT.md) for why.
+`PostgresAccountRepo.create()`, `update()` and `delete_by_code()` take the same keyword-only `created_by` to satisfy the account repository contract and do not store it. The `accounts` table has no attribution column, and no audit table exists yet.
 
 ## Users
 
