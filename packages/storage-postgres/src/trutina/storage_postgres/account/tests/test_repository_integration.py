@@ -7,13 +7,17 @@ that writes and reads round-trip correctly, that the unique indexes on
 `code` and `name_key` are actually enforced by the database (not just
 assumed), and that a missing row surfaces the same AppError an in-memory
 substitute would.
+
+Every write passes ``created_by=TEST_ACTOR`` because the repository
+contract requires it; the adapter does not store the value, so no test
+here asserts on it.
 """
 
 import pytest
 from trutina.core.account.schemas.account import AccountCategory
 from trutina.shared.errors import AppError, ErrorCode
 
-from tests.factories import make_account
+from tests.factories import TEST_ACTOR, make_account
 
 
 @pytest.mark.integration
@@ -21,7 +25,7 @@ class TestPostgresAccountRepoCreate:
     async def test_creates_and_retrieves_account(self, postgres_account_repo):
         account = make_account(code="1001", name="Cash", category=AccountCategory.ASSET)
 
-        await postgres_account_repo.create(account)
+        await postgres_account_repo.create(account, created_by=TEST_ACTOR)
         fetched = await postgres_account_repo.get_by_code("1001")
 
         assert fetched is not None
@@ -30,11 +34,13 @@ class TestPostgresAccountRepoCreate:
         assert fetched.category is AccountCategory.ASSET
 
     async def test_rejects_duplicate_code(self, postgres_account_repo):
-        await postgres_account_repo.create(make_account(code="1001", name="Cash"))
+        await postgres_account_repo.create(
+            make_account(code="1001", name="Cash"), created_by=TEST_ACTOR
+        )
 
         with pytest.raises(AppError) as exc_info:
             await postgres_account_repo.create(
-                make_account(code="1001", name="Petty Cash")
+                make_account(code="1001", name="Petty Cash"), created_by=TEST_ACTOR
             )
 
         assert exc_info.value.code == ErrorCode.DUPLICATE_ACCOUNT_CODE
@@ -42,10 +48,14 @@ class TestPostgresAccountRepoCreate:
     async def test_rejects_duplicate_name_case_insensitively(
         self, postgres_account_repo
     ):
-        await postgres_account_repo.create(make_account(code="1001", name="Cash"))
+        await postgres_account_repo.create(
+            make_account(code="1001", name="Cash"), created_by=TEST_ACTOR
+        )
 
         with pytest.raises(AppError) as exc_info:
-            await postgres_account_repo.create(make_account(code="2001", name="CASH"))
+            await postgres_account_repo.create(
+                make_account(code="2001", name="CASH"), created_by=TEST_ACTOR
+            )
 
         assert exc_info.value.code == ErrorCode.DUPLICATE_ACCOUNT_NAME
 
@@ -65,7 +75,9 @@ class TestPostgresAccountRepoLookups:
     async def test_finds_account_by_name_case_insensitively(
         self, postgres_account_repo
     ):
-        await postgres_account_repo.create(make_account(code="1001", name="Cash"))
+        await postgres_account_repo.create(
+            make_account(code="1001", name="Cash"), created_by=TEST_ACTOR
+        )
 
         result = await postgres_account_repo.get_by_name("cAsH")
 
@@ -73,13 +85,17 @@ class TestPostgresAccountRepoLookups:
         assert result.code == "1001"
 
     async def test_exists_by_code_true_and_false(self, postgres_account_repo):
-        await postgres_account_repo.create(make_account(code="1001", name="Cash"))
+        await postgres_account_repo.create(
+            make_account(code="1001", name="Cash"), created_by=TEST_ACTOR
+        )
 
         assert await postgres_account_repo.exists_by_code("1001") is True
         assert await postgres_account_repo.exists_by_code("9999") is False
 
     async def test_exists_by_name_true_and_false(self, postgres_account_repo):
-        await postgres_account_repo.create(make_account(code="1001", name="Cash"))
+        await postgres_account_repo.create(
+            make_account(code="1001", name="Cash"), created_by=TEST_ACTOR
+        )
 
         assert await postgres_account_repo.exists_by_name("Cash") is True
         assert await postgres_account_repo.exists_by_name("Ghost") is False
@@ -88,12 +104,14 @@ class TestPostgresAccountRepoLookups:
 @pytest.mark.integration
 class TestPostgresAccountRepoUpdate:
     async def test_updates_existing_account(self, postgres_account_repo):
-        await postgres_account_repo.create(make_account(code="1001", name="Cash"))
+        await postgres_account_repo.create(
+            make_account(code="1001", name="Cash"), created_by=TEST_ACTOR
+        )
         updated = make_account(
             code="1001", name="Main Cash", category=AccountCategory.ASSET
         )
 
-        await postgres_account_repo.update(updated)
+        await postgres_account_repo.update(updated, created_by=TEST_ACTOR)
         fetched = await postgres_account_repo.get_by_code("1001")
 
         assert fetched.name == "Main Cash"
@@ -101,8 +119,12 @@ class TestPostgresAccountRepoUpdate:
     async def test_updated_name_is_findable_by_new_name_key(
         self, postgres_account_repo
     ):
-        await postgres_account_repo.create(make_account(code="1001", name="Cash"))
-        await postgres_account_repo.update(make_account(code="1001", name="Main Cash"))
+        await postgres_account_repo.create(
+            make_account(code="1001", name="Cash"), created_by=TEST_ACTOR
+        )
+        await postgres_account_repo.update(
+            make_account(code="1001", name="Main Cash"), created_by=TEST_ACTOR
+        )
 
         old_lookup = await postgres_account_repo.get_by_name("Cash")
         new_lookup = await postgres_account_repo.get_by_name("Main Cash")
@@ -113,16 +135,24 @@ class TestPostgresAccountRepoUpdate:
 
     async def test_raises_when_updating_unknown_code(self, postgres_account_repo):
         with pytest.raises(AppError) as exc_info:
-            await postgres_account_repo.update(make_account(code="9999"))
+            await postgres_account_repo.update(
+                make_account(code="9999"), created_by=TEST_ACTOR
+            )
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
 
     async def test_raises_when_updated_name_collides(self, postgres_account_repo):
-        await postgres_account_repo.create(make_account(code="1001", name="Cash"))
-        await postgres_account_repo.create(make_account(code="2001", name="Bank"))
+        await postgres_account_repo.create(
+            make_account(code="1001", name="Cash"), created_by=TEST_ACTOR
+        )
+        await postgres_account_repo.create(
+            make_account(code="2001", name="Bank"), created_by=TEST_ACTOR
+        )
 
         with pytest.raises(AppError) as exc_info:
-            await postgres_account_repo.update(make_account(code="2001", name="Cash"))
+            await postgres_account_repo.update(
+                make_account(code="2001", name="Cash"), created_by=TEST_ACTOR
+            )
 
         assert exc_info.value.code == ErrorCode.DUPLICATE_ACCOUNT_NAME
 
@@ -130,15 +160,17 @@ class TestPostgresAccountRepoUpdate:
 @pytest.mark.integration
 class TestPostgresAccountRepoDelete:
     async def test_deletes_existing_account(self, postgres_account_repo):
-        await postgres_account_repo.create(make_account(code="1001", name="Cash"))
+        await postgres_account_repo.create(
+            make_account(code="1001", name="Cash"), created_by=TEST_ACTOR
+        )
 
-        await postgres_account_repo.delete_by_code("1001")
+        await postgres_account_repo.delete_by_code("1001", created_by=TEST_ACTOR)
 
         assert await postgres_account_repo.get_by_code("1001") is None
 
     async def test_raises_when_deleting_unknown_code(self, postgres_account_repo):
         with pytest.raises(AppError) as exc_info:
-            await postgres_account_repo.delete_by_code("9999")
+            await postgres_account_repo.delete_by_code("9999", created_by=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
 
@@ -153,9 +185,11 @@ class TestPostgresAccountRepoList:
         assert result == []
 
     async def test_returns_all_persisted_accounts(self, postgres_account_repo):
-        await postgres_account_repo.create(make_account(code="1001", name="Cash"))
         await postgres_account_repo.create(
-            make_account(code="4001", name="Sales Revenue")
+            make_account(code="1001", name="Cash"), created_by=TEST_ACTOR
+        )
+        await postgres_account_repo.create(
+            make_account(code="4001", name="Sales Revenue"), created_by=TEST_ACTOR
         )
 
         result = await postgres_account_repo.list_all()

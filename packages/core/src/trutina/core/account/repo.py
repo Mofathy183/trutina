@@ -45,7 +45,7 @@ class AccountRepo(ABC):
     """
 
     @abstractmethod
-    async def create(self, account: Account) -> None:
+    async def create(self, account: Account, *, created_by: str) -> None:
         """Persist a new account.
 
         The account must not already exist. Implementations must
@@ -54,6 +54,10 @@ class AccountRepo(ABC):
 
         Args:
             account: A fully validated domain Account.
+            created_by: Opaque identifier of the caller performing the
+                write, already checked as non-blank by AccountService.
+                Implementations must accept it; whether and where it is
+                stored is implementation-specific.
 
         Raises:
             AppError: DUPLICATE_ACCOUNT_CODE or DUPLICATE_ACCOUNT_NAME if
@@ -66,7 +70,7 @@ class AccountRepo(ABC):
         ...
 
     @abstractmethod
-    async def update(self, account: Account) -> None:
+    async def update(self, account: Account, *, created_by: str) -> None:
         """Overwrite an existing account record.
 
         Locates the record by ``account.code`` and replaces it in full.
@@ -78,6 +82,10 @@ class AccountRepo(ABC):
             account: A fully validated domain Account carrying the
                 updated field values. The code is treated as the
                 immutable lookup key.
+            created_by: Opaque identifier of the caller performing this
+                update (the writer of this change, not the account's
+                original creator), already checked as non-blank by
+                AccountService.
 
         Raises:
             AppError: UNKNOWN_ACCOUNT if no account with that code exists.
@@ -175,11 +183,13 @@ class AccountRepo(ABC):
         ...
 
     @abstractmethod
-    async def delete_by_code(self, code: str) -> None:
+    async def delete_by_code(self, code: str, *, created_by: str) -> None:
         """Remove an account by its code.
 
         Args:
             code: The account code to delete.
+            created_by: Opaque identifier of the caller performing this
+                deletion, already checked as non-blank by AccountService.
 
         Raises:
             AppError: UNKNOWN_ACCOUNT if no account with that code exists.

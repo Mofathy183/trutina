@@ -122,17 +122,11 @@ providers make narrow overrides possible.
 
 ## Why Handlers Pass A Fixed Pre-Auth Actor
 
-**Decision:** the journal `create_journal_entry` handler and the posting
-`post_journal_entry_handler` pass `PRE_AUTH_ACTOR` (`api/shared/actor.py`,
-`"system:pre-auth:api"`) as the keyword-only `actor` that `trutina-core`'s write
-services require. Handler signatures are unchanged and routers supply no actor.
+**Decision:** the journal `create_journal_entry` handler, the posting `post_journal_entry_handler`, and the account `create_account`, `update_account` and `delete_account` handlers pass `PRE_AUTH_ACTOR` (`api/shared/actor.py`, `"system:pre-auth:api"`) as the keyword-only `actor` that `trutina-core`'s write services require. Handler signatures are unchanged and routers supply no actor.
 
-**Why:** requests carry no authenticated identity today, and the actor is never
-read from a request body or DTO. Core checks only that it is non-blank. The
-`system:` prefix marks a non-user writer and the `:api` suffix records which
-application wrote.
+**Why:** requests carry no authenticated identity today, and the actor is never read from a request body or DTO. Core checks only that it is non-blank. The `system:` prefix marks a non-user writer and the `:api` suffix records which application wrote.
 
-**Current behavior:** the constant is validated by core and persisted by `trutina-storage-postgres` as `created_by` on the journal entry and on every posting row, so rows written by the API are distinguishable from rows written by the CLI.
+**Current behavior:** the constant is validated by core on every write. For journal entries and postings it is persisted by `trutina-storage-postgres` as `created_by`, so rows written by the API are distinguishable from rows written by the CLI. For account writes it reaches `AccountRepo` as `created_by` and `PostgresAccountRepo` does not store it yet.
 
 ## Why Response Envelope (`BaseResponse`/`SuccessResponse`/`ErrorResponse`) Wraps Every Body
 

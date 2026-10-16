@@ -58,14 +58,20 @@ def seeded_real_state(real_cli_state):
     )
 
     real_cli_state.portal.call(
-        account_service.create_account,
-        make_create_account_input(code="1001", name="Cash"),
+        functools.partial(
+            account_service.create_account,
+            make_create_account_input(code="1001", name="Cash"),
+            actor=TEST_ACTOR,
+        )
     )
     real_cli_state.portal.call(
-        account_service.create_account,
-        make_create_account_input(
-            code="4001", name="Sales Revenue", category=AccountCategory.REVENUE
-        ),
+        functools.partial(
+            account_service.create_account,
+            make_create_account_input(
+                code="4001", name="Sales Revenue", category=AccountCategory.REVENUE
+            ),
+            actor=TEST_ACTOR,
+        )
     )
     real_cli_state.portal.call(
         functools.partial(

@@ -11,8 +11,12 @@ for a mapper-stage domain-construction failure.
 Every function here is a plain ``async def`` callable identically from
 a router or directly from a unit test against a ``Fake*Repo``-backed
 ``AccountService`` -- mirroring the CLI's own ``handler.py`` contract.
+Every write passes ``PRE_AUTH_ACTOR`` as the service's keyword-only
+``actor``. Requests carry no authenticated identity today, and the actor is
+never read from a request body or DTO. Handler signatures take no actor.
 """
 
+from trutina.api.shared.actor import PRE_AUTH_ACTOR
 from trutina.core.account.dtos import (
     AccountViewModel,
     ChartOfAccountsViewModel,
@@ -38,7 +42,7 @@ async def create_account(
         AppError: DUPLICATE_ACCOUNT_CODE, DUPLICATE_ACCOUNT_NAME.
         ValidationAppError: VALIDATION_ERROR.
     """
-    return await service.create_account(dto)
+    return await service.create_account(dto, actor=PRE_AUTH_ACTOR)
 
 
 async def update_account(
@@ -58,7 +62,7 @@ async def update_account(
         AppError: UNKNOWN_ACCOUNT, DUPLICATE_ACCOUNT_NAME.
         ValidationAppError: VALIDATION_ERROR.
     """
-    return await service.update_account(dto)
+    return await service.update_account(dto, actor=PRE_AUTH_ACTOR)
 
 
 async def get_account(service: AccountService, code: str) -> AccountViewModel:
@@ -100,4 +104,4 @@ async def delete_account(service: AccountService, code: str) -> None:
     Raises:
         AppError: UNKNOWN_ACCOUNT.
     """
-    await service.delete_account(code)
+    await service.delete_account(code, actor=PRE_AUTH_ACTOR)

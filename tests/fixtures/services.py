@@ -30,7 +30,7 @@ from trutina.core.journal.service import JournalService
 from trutina.core.posting.service import PostingService
 from trutina.core.trial_balance import TrialBalanceService
 
-from tests.factories import make_create_account_input
+from tests.factories import TEST_ACTOR, make_create_account_input
 
 
 @pytest.fixture
@@ -83,14 +83,15 @@ async def simple_accounts(services):
     account_service, _journal_service, _posting_service = services
 
     await account_service.create_account(
-        make_create_account_input(code="1001", name="Cash")
+        make_create_account_input(code="1001", name="Cash"), actor=TEST_ACTOR
     )
     await account_service.create_account(
         make_create_account_input(
             code="4001",
             name="Sales Revenue",
             category=AccountCategory.REVENUE,
-        )
+        ),
+        actor=TEST_ACTOR,
     )
 
     return account_service

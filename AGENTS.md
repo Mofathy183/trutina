@@ -125,13 +125,14 @@ Package/app own tests live beside their own code (e.g.
   state change (or, for trial balance, on report generation) and never on a
   read or a raised `AppError`. No monetary field is ever included in these
   log events.
-- `JournalService.create_journal_entry` and `PostingService.post_journal_entry`
-  require a keyword-only, non-blank `actor: str`, checked first and never logged.
-  After the check it is passed to the repository as `created_by` and persisted by
-  `trutina-storage-postgres` (nullable column on `journal_entries` and `postings`;
-  null means written before attribution). `apps/api` and `apps/cli` each pass their
-  own fixed `PRE_AUTH_ACTOR` constant (`api/shared/actor.py`,
-  `cli/composition/actor.py`).
+- `JournalService.create_journal_entry`, `PostingService.post_journal_entry`, and
+  `AccountService.create_account`, `update_account` and `delete_account` require a
+  keyword-only, non-blank `actor: str`, checked first and never logged. After the
+  check it is passed to the repository as `created_by`. `trutina-storage-postgres`
+  persists it for journal entries and postings (nullable column on `journal_entries`
+  and `postings`; null means written before attribution) and accepts it without
+  storing it for accounts. `apps/api` and `apps/cli` each pass their own fixed
+  `PRE_AUTH_ACTOR` constant (`api/shared/actor.py`, `cli/composition/actor.py`).
 - A `User`'s email is always stored normalized (trimmed, case-folded) by `normalize_email()`, so one unique column enforces case-insensitive uniqueness. Email format is not validated. `UserRepo.create` ignores a caller-supplied `created_at`, and `DUPLICATE_USER_EMAIL` never carries the address in its context.
 
 ## Error Model
@@ -246,7 +247,7 @@ against a real PostgreSQL container; the smoke test also asserts a structured
 - `trutina-storage-mongo` is frozen: its journal and posting adapters accept
   `created_by` to satisfy the repository contracts and do not store it. Do not wire
   it into an app without first storing attribution. New features target PostgreSQL
-  only.
+  only. Its account adapter has not been changed for the account contract's `created_by`.
 - `TrialBalanceRepo` is implemented for PostgreSQL only. `trutina-storage-mongo` has
   no implementation, by decision.
 - The trial balance lists only accounts with postings; full-chart, zero-padded output

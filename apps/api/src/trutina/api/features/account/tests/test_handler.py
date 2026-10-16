@@ -17,6 +17,7 @@ from trutina.api.features.account.handler import (
     list_accounts,
     update_account,
 )
+from trutina.api.shared.actor import PRE_AUTH_ACTOR
 from trutina.core.account.dtos import AccountViewModel, ChartOfAccountsViewModel
 from trutina.core.account.service import AccountService
 from trutina.shared.errors import AppError, ErrorCode, ValidationAppError
@@ -145,3 +146,36 @@ class TestDeleteAccountHandler:
             await delete_account(service, "9999")
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
+
+
+@pytest.mark.unit
+class TestAccountWriteHandlersPassPreAuthActor:
+    async def test_create_passes_pre_auth_actor(self):
+        repo = make_fake_account_repo()
+        service = AccountService(repo)
+
+        await create_account(
+            service, make_create_account_input(code="1001", name="Cash")
+        )
+
+        assert repo.created_by_on_create == [PRE_AUTH_ACTOR]
+
+    async def test_update_passes_pre_auth_actor(self):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        await update_account(
+            service, make_update_account_input(code="1001", name="Main Cash")
+        )
+
+        assert repo.created_by_on_update == [PRE_AUTH_ACTOR]
+
+    async def test_delete_passes_pre_auth_actor(self):
+        existing = make_account(code="1001")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        await delete_account(service, "1001")
+
+        assert repo.created_by_on_delete == [PRE_AUTH_ACTOR]
