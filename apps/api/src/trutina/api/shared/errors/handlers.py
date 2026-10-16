@@ -30,8 +30,11 @@ downgrades every domain-raised ErrorCode to `ErrorCode.UNKNOWN_ERROR` on
 message here would read "An unexpected error occurred" instead of the
 real domain message (e.g. "The account name is not valid."). This is
 the same problem the CLI's own formatters/error.py must already work
-around. `_resolve_violation_entry()` below restores the real code from
-`.value` before doing the catalog lookup. If `get_field_violations()` is
+around.
+`_resolve_violation_code()` below restores the real code from `.value`.
+`_resolve_violation_entry()` uses it for the catalog lookup (message and
+hint), and `_build_field_details()` reports it as each detail's `code`.
+If `get_field_violations()` is
 ever fixed at the source, this function becomes a harmless no-op and can
 be simplified, but it should not be removed silently -- confirm the
 source fix first.
@@ -197,6 +200,22 @@ def _log_failure(
     )
 
 
+def _resolve_violation_code(violation: FieldViolation) -> ErrorCode:
+    """Recover the real ErrorCode of a field violation.
+
+    get_field_violations() downgrades domain-raised codes to
+    ErrorCode.UNKNOWN_ERROR and keeps the original code string on
+    `violation.value`. Returns that original code when it names a known
+    ErrorCode; otherwise returns `violation.code` unchanged.
+    """
+    if violation.code is ErrorCode.UNKNOWN_ERROR:
+        try:
+            return ErrorCode(violation.value)
+        except ValueError:
+            pass
+    return violation.code
+
+
 def _resolve_violation_entry(violation: FieldViolation) -> ErrorCatalogEntry:
     """Resolve the catalog entry for one field violation.
 
@@ -217,12 +236,7 @@ def _resolve_violation_entry(violation: FieldViolation) -> ErrorCatalogEntry:
     Returns:
         The most specific catalog entry available for this violation.
     """
-    if violation.code is ErrorCode.UNKNOWN_ERROR:
-        try:
-            return ERROR_CATALOG.get(ErrorCode(violation.value), DEFAULT_ERROR_ENTRY)
-        except ValueError:
-            pass
-    return ERROR_CATALOG.get(violation.code, DEFAULT_ERROR_ENTRY)
+    return ERROR_CATALOG.get(_resolve_violation_code(violation), DEFAULT_ERROR_ENTRY)
 
 
 def _build_field_details(violations: list[FieldViolation]) -> list[FieldErrorDetail]:
@@ -240,14 +254,20 @@ def _build_field_details(violations: list[FieldViolation]) -> list[FieldErrorDet
     Returns:
         One FieldErrorDetail per violation, in the same order.
     """
-    return [
-        FieldErrorDetail(
-            field=violation.field,
-            code=violation.code.value,
-            message=_resolve_violation_entry(violation).message,
+    details: list[FieldErrorDetail] = []
+
+    for violation in violations:
+        entry = _resolve_violation_entry(violation)
+        details.append(
+            FieldErrorDetail(
+                field=violation.field,
+                code=_resolve_violation_code(violation).value,
+                message=entry.message,
+                hint=entry.hint,
+            )
         )
-        for violation in violations
-    ]
+
+    return details
 
 
 def _response_headers(code: ErrorCode) -> dict[str, str] | None:
