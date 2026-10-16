@@ -74,6 +74,23 @@ class TestCreateAccountRoute:
 
         assert response.status_code == 422
 
+    async def test_returns_422_on_invalid_account_code(self, api_client):
+        response = await api_client.post(
+            "/accounts",
+            json=make_create_account_request(code="sdgi"),
+        )
+
+        body = response.json()
+        assert response.status_code == 422
+        assert body["success"] is False
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR.value
+        assert body["details"][0]["code"] == ErrorCode.INVALID_ACCOUNT_CODE.value
+        assert body["details"][0]["field"] == "code"
+        assert body["details"][0]["message"] == "The account code is not valid."
+        assert body["details"][0]["hint"] == (
+            "Account codes must be 4 to 6 digits (0-9), for example '1001'."
+        )
+
 
 @pytest.mark.unit
 class TestListAccountsRoute:
