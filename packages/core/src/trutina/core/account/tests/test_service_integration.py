@@ -17,7 +17,11 @@ counts as a duplicate.
 import pytest
 from trutina.shared.errors import AppError, ErrorCode
 
-from tests.factories import make_create_account_input, make_update_account_input
+from tests.factories import (
+    TEST_ACTOR,
+    make_create_account_input,
+    make_update_account_input,
+)
 
 
 @pytest.mark.integration
@@ -29,7 +33,7 @@ class TestAccountServiceLifecycle:
         account_service, _journal_service, _posting_service = services
 
         created = await account_service.create_account(
-            make_create_account_input(code="1001", name="Cash")
+            make_create_account_input(code="1001", name="Cash"), actor=TEST_ACTOR
         )
         fetched = await account_service.get_account("1001")
 
@@ -38,8 +42,9 @@ class TestAccountServiceLifecycle:
         assert fetched.normal_balance == "debit"
 
         await account_service.update_account(
-            make_update_account_input(code="1001", name="Main Cash")
+            make_update_account_input(code="1001", name="Main Cash"), actor=TEST_ACTOR
         )
+
         updated = await account_service.get_account("1001")
 
         assert updated.name == "Main Cash"
@@ -59,12 +64,13 @@ class TestAccountServiceDuplicateCreation:
         account_service, _journal_service, _posting_service = services
 
         await account_service.create_account(
-            make_create_account_input(code="1001", name="Cash")
+            make_create_account_input(code="1001", name="Cash"), actor=TEST_ACTOR
         )
 
         with pytest.raises(AppError) as exc_info:
             await account_service.create_account(
-                make_create_account_input(code="1001", name="Petty Cash")
+                make_create_account_input(code="1001", name="Petty Cash"),
+                actor=TEST_ACTOR,
             )
 
         assert exc_info.value.code == ErrorCode.DUPLICATE_ACCOUNT_CODE

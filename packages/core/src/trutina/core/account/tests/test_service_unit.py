@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from trutina.core.account.schemas.account import Account, AccountCategory
 from trutina.core.account.service import AccountService
@@ -8,12 +10,15 @@ from trutina.shared.errors import (
 )
 
 from tests.factories import (
+    TEST_ACTOR,
     make_account,
     make_chart_of_accounts,
     make_create_account_input,
     make_fake_account_repo,
     make_update_account_input,
 )
+
+BLANK_ACTORS = ["", "   ", "\t\n"]
 
 
 @pytest.mark.unit
@@ -24,7 +29,7 @@ class TestAccountService:
 
         dto = make_create_account_input()
 
-        result = await service.create_account(dto)
+        result = await service.create_account(dto, actor=TEST_ACTOR)
 
         assert result.code == dto.code
         assert result.name == dto.name
@@ -42,7 +47,7 @@ class TestAccountService:
             category=AccountCategory.REVENUE,
         )
 
-        result = await service.create_account(dto)
+        result = await service.create_account(dto, actor=TEST_ACTOR)
 
         assert result.category == AccountCategory.REVENUE
         assert result.normal_balance == "credit"
@@ -59,7 +64,7 @@ class TestAccountService:
         )
 
         with pytest.raises(AppError) as exc_info:
-            await service.create_account(dto)
+            await service.create_account(dto, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.DUPLICATE_ACCOUNT_CODE
         assert exc_info.value.context["field"] == "code"
@@ -80,7 +85,7 @@ class TestAccountService:
         )
 
         with pytest.raises(AppError) as exc_info:
-            await service.create_account(dto)
+            await service.create_account(dto, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.DUPLICATE_ACCOUNT_NAME
         assert exc_info.value.context["field"] == "name"
@@ -95,7 +100,7 @@ class TestAccountService:
         )
 
         with pytest.raises(ValidationAppError) as exc_info:
-            await service.create_account(dto)
+            await service.create_account(dto, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.VALIDATION_ERROR
         assert len(exc_info.value.errors) == 1
@@ -113,7 +118,7 @@ class TestAccountService:
         dto = make_create_account_input(code="sdgi")
 
         with pytest.raises(ValidationAppError) as exc_info:
-            await service.create_account(dto)
+            await service.create_account(dto, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.VALIDATION_ERROR
         assert len(exc_info.value.errors) == 1
@@ -139,7 +144,7 @@ class TestAccountService:
             name="Main Cash",
         )
 
-        result = await service.update_account(dto)
+        result = await service.update_account(dto, actor=TEST_ACTOR)
 
         assert result.code == "1001"
         assert result.name == "Main Cash"
@@ -161,7 +166,7 @@ class TestAccountService:
             category=AccountCategory.REVENUE,
         )
 
-        result = await service.update_account(dto)
+        result = await service.update_account(dto, actor=TEST_ACTOR)
 
         assert result.category == AccountCategory.REVENUE
         assert result.normal_balance == "credit"
@@ -181,7 +186,7 @@ class TestAccountService:
             name="Main Cash",
         )
 
-        result = await service.update_account(dto)
+        result = await service.update_account(dto, actor=TEST_ACTOR)
 
         assert result.name == "Main Cash"
         assert result.category == AccountCategory.ASSET
@@ -201,7 +206,7 @@ class TestAccountService:
             category=AccountCategory.REVENUE,
         )
 
-        result = await service.update_account(dto)
+        result = await service.update_account(dto, actor=TEST_ACTOR)
 
         assert result.name == "Cash"
         assert result.category == AccountCategory.REVENUE
@@ -228,7 +233,7 @@ class TestAccountService:
             name="Cash",
         )
 
-        result = await service.update_account(dto)
+        result = await service.update_account(dto, actor=TEST_ACTOR)
 
         assert result.code == "1001"
         assert result.name == "Cash"
@@ -240,7 +245,7 @@ class TestAccountService:
         dto = make_update_account_input(code="9999")
 
         with pytest.raises(AppError) as exc_info:
-            await service.update_account(dto)
+            await service.update_account(dto, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
         assert exc_info.value.context["identifier"] == "9999"
@@ -268,7 +273,7 @@ class TestAccountService:
         )
 
         with pytest.raises(AppError) as exc_info:
-            await service.update_account(dto)
+            await service.update_account(dto, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.DUPLICATE_ACCOUNT_NAME
         assert exc_info.value.context["field"] == "name"
@@ -287,7 +292,7 @@ class TestAccountService:
         )
 
         with pytest.raises(ValidationAppError) as exc_info:
-            await service.update_account(dto)
+            await service.update_account(dto, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.VALIDATION_ERROR
 
@@ -307,13 +312,15 @@ class TestAccountService:
             code="sdgi", name="Cash", category=AccountCategory.ASSET
         )
         repo = make_fake_account_repo()
-        await repo.create(legacy)
+        await repo.create(legacy, created_by=TEST_ACTOR)
+        repo.created_accounts.clear()
+        repo.created_by_on_create.clear()
         service = AccountService(repo)
 
         dto = make_update_account_input(code="sdgi", name="Main Cash")
 
         with pytest.raises(ValidationAppError) as exc_info:
-            await service.update_account(dto)
+            await service.update_account(dto, actor=TEST_ACTOR)
 
         violation = exc_info.value.errors[0]
 
@@ -451,7 +458,7 @@ class TestAccountService:
 
         service = AccountService(repo)
 
-        await service.delete_account(account.code)
+        await service.delete_account(account.code, actor=TEST_ACTOR)
 
         assert repo.deleted_codes == [account.code]
         assert await repo.get_by_code(account.code) is None
@@ -461,7 +468,7 @@ class TestAccountService:
         service = AccountService(repo)
 
         with pytest.raises(AppError) as exc_info:
-            await service.delete_account("9999")
+            await service.delete_account("9999", actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
         assert exc_info.value.context["identifier"] == "9999"
@@ -478,7 +485,7 @@ class TestAccountServiceDeleteWithPostingsCheck:
 
         service = AccountService(repo, has_postings=no_postings)
 
-        await service.delete_account(account.code)
+        await service.delete_account(account.code, actor=TEST_ACTOR)
 
         assert repo.deleted_codes == [account.code]
 
@@ -492,7 +499,7 @@ class TestAccountServiceDeleteWithPostingsCheck:
         service = AccountService(repo, has_postings=has_postings)
 
         with pytest.raises(AppError) as exc_info:
-            await service.delete_account(account.code)
+            await service.delete_account(account.code, actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.ACCOUNT_HAS_POSTINGS
         assert exc_info.value.context["value"] == account.code
@@ -507,7 +514,7 @@ class TestAccountServiceDeleteWithPostingsCheck:
         service = AccountService(repo, has_postings=has_postings)
 
         with pytest.raises(AppError):
-            await service.delete_account(account.code)
+            await service.delete_account(account.code, actor=TEST_ACTOR)
 
         assert repo.deleted_codes == []
 
@@ -522,7 +529,7 @@ class TestAccountServiceDeleteWithPostingsCheck:
 
         service = AccountService(repo, has_postings=recording_check)
 
-        await service.delete_account(account.code)
+        await service.delete_account(account.code, actor=TEST_ACTOR)
 
         assert received == ["Cash"]
 
@@ -538,7 +545,225 @@ class TestAccountServiceDeleteWithPostingsCheck:
         service = AccountService(repo, has_postings=has_postings)
 
         with pytest.raises(AppError) as exc_info:
-            await service.delete_account("9999")
+            await service.delete_account("9999", actor=TEST_ACTOR)
 
         assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
         assert checked is False
+
+
+def _assert_actor_violation(error: ValidationAppError) -> None:
+    assert error.code == ErrorCode.VALIDATION_ERROR
+    assert len(error.errors) == 1
+    assert error.errors[0].code == ErrorCode.REQUIRED_FIELD
+    assert error.errors[0].field == "actor"
+
+
+@pytest.mark.unit
+class TestAccountServiceRejectsBlankActor:
+    @pytest.mark.parametrize("actor", BLANK_ACTORS)
+    async def test_create_raises_required_field_when_actor_is_blank(self, actor):
+        repo = make_fake_account_repo()
+        service = AccountService(repo)
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.create_account(make_create_account_input(), actor=actor)
+
+        _assert_actor_violation(exc_info.value)
+
+    @pytest.mark.parametrize("actor", BLANK_ACTORS)
+    async def test_update_raises_required_field_when_actor_is_blank(self, actor):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.update_account(
+                make_update_account_input(code="1001", name="Main Cash"),
+                actor=actor,
+            )
+
+        _assert_actor_violation(exc_info.value)
+
+    @pytest.mark.parametrize("actor", BLANK_ACTORS)
+    async def test_delete_raises_required_field_when_actor_is_blank(self, actor):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.delete_account("1001", actor=actor)
+
+        _assert_actor_violation(exc_info.value)
+
+    async def test_blank_actor_on_create_records_no_repo_write(self):
+        repo = make_fake_account_repo()
+        service = AccountService(repo)
+
+        with pytest.raises(ValidationAppError):
+            await service.create_account(make_create_account_input(), actor="  ")
+
+        assert repo.created_accounts == []
+        assert repo.created_by_on_create == []
+
+    async def test_blank_actor_on_update_records_no_repo_write(self):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        with pytest.raises(ValidationAppError):
+            await service.update_account(
+                make_update_account_input(code="1001", name="Main Cash"),
+                actor="  ",
+            )
+
+        assert repo.updated_accounts == []
+        assert repo.created_by_on_update == []
+
+    async def test_blank_actor_on_delete_records_no_repo_write(self):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        with pytest.raises(ValidationAppError):
+            await service.delete_account("1001", actor="  ")
+
+        assert repo.deleted_codes == []
+        assert repo.created_by_on_delete == []
+
+    async def test_blank_actor_takes_precedence_over_duplicate_code(self):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.create_account(
+                make_create_account_input(code="1001", name="Petty Cash"),
+                actor="",
+            )
+
+        _assert_actor_violation(exc_info.value)
+
+    async def test_blank_actor_takes_precedence_over_duplicate_name(self):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.create_account(
+                make_create_account_input(code="2001", name="Cash"),
+                actor="",
+            )
+
+        _assert_actor_violation(exc_info.value)
+
+    async def test_blank_actor_takes_precedence_over_unknown_account_on_update(self):
+        repo = make_fake_account_repo()
+        service = AccountService(repo)
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.update_account(
+                make_update_account_input(code="9999", name="Ghost"),
+                actor="",
+            )
+
+        _assert_actor_violation(exc_info.value)
+
+    async def test_blank_actor_takes_precedence_over_unknown_account_on_delete(self):
+        repo = make_fake_account_repo()
+        service = AccountService(repo)
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.delete_account("9999", actor="")
+
+        _assert_actor_violation(exc_info.value)
+
+    async def test_blank_actor_takes_precedence_over_postings_check(self):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        checked = False
+
+        async def has_postings(name: str) -> bool:
+            nonlocal checked
+            checked = True
+            return True
+
+        service = AccountService(repo, has_postings=has_postings)
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.delete_account("1001", actor="")
+
+        _assert_actor_violation(exc_info.value)
+        assert checked is False
+
+
+@pytest.mark.unit
+class TestAccountServicePassesActorToRepo:
+    async def test_create_passes_actor_unchanged_as_created_by(self):
+        repo = make_fake_account_repo()
+        service = AccountService(repo)
+
+        await service.create_account(make_create_account_input(), actor=TEST_ACTOR)
+
+        assert repo.created_by_on_create == [TEST_ACTOR]
+
+    async def test_update_passes_actor_unchanged_as_created_by(self):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        await service.update_account(
+            make_update_account_input(code="1001", name="Main Cash"),
+            actor=TEST_ACTOR,
+        )
+
+        assert repo.created_by_on_update == [TEST_ACTOR]
+
+    async def test_delete_passes_actor_unchanged_as_created_by(self):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        await service.delete_account("1001", actor=TEST_ACTOR)
+
+        assert repo.created_by_on_delete == [TEST_ACTOR]
+
+    async def test_does_not_trim_the_actor_before_passing_it_on(self):
+        repo = make_fake_account_repo()
+        service = AccountService(repo)
+
+        await service.create_account(make_create_account_input(), actor=" system:x ")
+
+        assert repo.created_by_on_create == [" system:x "]
+
+    async def test_actor_is_not_recorded_when_the_write_is_rejected(self):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        with pytest.raises(AppError):
+            await service.create_account(
+                make_create_account_input(code="1001", name="Petty Cash"),
+                actor=TEST_ACTOR,
+            )
+
+        assert repo.created_by_on_create == []
+
+    async def test_actor_never_appears_in_log_records(self, caplog):
+        existing = make_account(code="1001", name="Cash")
+        repo = make_fake_account_repo(make_chart_of_accounts(accounts=[existing]))
+        service = AccountService(repo)
+
+        with caplog.at_level(logging.INFO):
+            await service.create_account(
+                make_create_account_input(code="2001", name="Bank"),
+                actor=TEST_ACTOR,
+            )
+            await service.update_account(
+                make_update_account_input(code="1001", name="Main Cash"),
+                actor=TEST_ACTOR,
+            )
+            await service.delete_account("2001", actor=TEST_ACTOR)
+
+        assert len(caplog.records) == 3
+        for record in caplog.records:
+            assert TEST_ACTOR not in str(record.__dict__)
