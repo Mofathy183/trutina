@@ -192,19 +192,11 @@ constructed.
 
 ### Write methods take an opaque actor, checked for presence only
 
-**Decision:** `JournalService.create_journal_entry` and
-`PostingService.post_journal_entry` take a required keyword-only `actor: str`.
-Each calls `is_non_blank_actor` from `trutina-shared` as its first statement and
-raises `ValidationAppError.required_field("actor", actor)` when it is blank.
+**Decision:** `JournalService.create_journal_entry`, `PostingService.post_journal_entry`, and `AccountService.create_account`, `update_account` and `delete_account` take a required keyword-only `actor: str`. Each calls `is_non_blank_actor` from `trutina-shared` as its first statement and raises `ValidationAppError.required_field("actor", actor)` when it is blank.
 
-**Why:** a write that cannot be attributed to a caller cannot be audited later.
-A required parameter turns a forgotten actor into a type error, and checking it
-first means a rejected call performs no repository or chart access and consumes
-no journal number. Core sees only an opaque string: it never imports
-`trutina.authentication`, and no service method takes an `Identity`. The format
-(UUID, `system:` prefix) is the calling application's concern.
+**Why:** a write that cannot be attributed to a caller cannot be audited later. A required parameter turns a forgotten actor into a type error, and checking it first means a rejected call performs no repository or chart access, consumes no journal number, and wins over not-found, duplicate and `ACCOUNT_HAS_POSTINGS` errors. Core sees only an opaque string: it never imports `trutina.authentication`, and no service method takes an `Identity`. The format (UUID, `system:` prefix) is the calling application's concern.
 
-**Current behavior:** after the presence check, the service passes the actor to the repository as the keyword-only `created_by` (`JournalRepo.save`, `PostingRepo.save_many`). `trutina-storage-postgres` persists it; `trutina-storage-mongo` is frozen and accepts it without storing it. It is not added to any log context, and it is not a field of any domain model, so reads never return it.
+**Current behavior:** after the presence check, the service passes the actor to the repository as the keyword-only `created_by` (`JournalRepo.save`, `PostingRepo.save_many`, `AccountRepo.create`, `AccountRepo.update`, `AccountRepo.delete_by_code`). `trutina-storage-postgres` persists it for journal entries and postings and accepts it without storing it for accounts. `trutina-storage-mongo` is frozen and does not store it. On account update and delete, `created_by` names the caller performing that write, not the account's original creator. It is not added to any log context or error context, and it is not a field of any domain model, so reads never return it.
 
 ### `AppError` / `ValidationAppError` are the only exceptions crossing the service boundary
 
@@ -339,7 +331,7 @@ rule drift the domain-validation design decision above exists to prevent.
   test pinning "core never logs on failure" as one assertion. Low risk (each
   service's own tests already cover it), tracked as a minor Phase 7 nice-to-have,
   not a blocker.
-- `created_by` is stored by `trutina-storage-postgres` only. `trutina-storage-mongo` is frozen and accepts it without storing it, so a Mongo-backed deployment would silently drop attribution. Rows written before attribution carry a null `created_by`. Account writes record no actor until M1c.
+- `created_by` is stored by `trutina-storage-postgres` for journal entries and postings only. Account writes require an actor and pass it to `AccountRepo` as `created_by`, but `PostgresAccountRepo` does not store it yet, so account changes remain unattributed in storage. `trutina-storage-mongo` is frozen: its journal and posting adapters accept `created_by` without storing it, and its account adapter has not been changed for this contract, so wiring it behind `AccountService` would fail on the new keyword. Rows written before attribution carry a null `created_by`.
 - `Account.code` format (4 to 6 ASCII digits) is enforced only on construction. Accounts persisted before it existed are not migrated, and because repositories rebuild `Account` on read, such a row fails `get_account`, `list_accounts` and `get_chart()`, not only `update_account`. The resulting `ValidationError` is not translated to `AppError` by the storage adapters.
 
 ## Common Mistakes to Avoid
