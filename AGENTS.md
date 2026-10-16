@@ -104,6 +104,7 @@ Package/app own tests live beside their own code (e.g.
 - `LedgerPosting` is frozen after creation.
 - `Account.normal_balance` is derived from `AccountCategory`, never stored
   independently.
+- `Account.code` must be 4 to 6 ASCII digits, validated as supplied (never trimmed) by `Account.validate_code`, which raises `INVALID_ACCOUNT_CODE`. Repositories rebuild `Account` on every read, so a persisted account with a non-conforming code is rejected on read and update; no cleanup or migration exists.
 - `ChartOfAccounts` enforces unique codes and unique canonical names,
   case-insensitively (`account_lookup_key()` uses Unicode `casefold()`, not `lower()`).
 - Account aliases and `ChartOfAccounts.resolve()` are **not implemented**.
