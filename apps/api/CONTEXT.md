@@ -212,12 +212,15 @@ unhandled, every field-level validation message returned by this API would read 
 unexpected error occurred" instead of the real domain message.
 
 **Why the API works around it here rather than waiting for the upstream fix:**
-`_resolve_violation_entry()` in `handlers.py` recovers the real `ErrorCode` from
-`FieldViolation.value` (which still carries the original domain code as a string)
-before doing the catalog lookup. This mirrors the CLI's own identical recovery for
-the identical reason. If `get_field_violations()` is ever fixed at the source, this
-function becomes a harmless no-op — it should not be deleted silently without
-confirming the upstream fix landed.
+`_resolve_violation_code()` in `handlers.py` recovers the real `ErrorCode` from
+`FieldViolation.value` (which still carries the original domain code as a string).
+`_resolve_violation_entry()` uses it for the catalog lookup, so each detail's
+`message` and `hint` are the real ones, and `_build_field_details()` reports it as
+the detail's `code`, so `details[].code` carries the real domain code instead of
+`error.unknown`. This mirrors the CLI's own identical recovery for the identical
+reason. If `get_field_violations()` is ever fixed at the source, these functions
+become harmless no-ops -- they should not be deleted silently without confirming
+the upstream fix landed.
 
 ## Why Logging Is Configured In `create_app()`, Not Only `main.py`
 

@@ -340,6 +340,7 @@ rule drift the domain-validation design decision above exists to prevent.
   service's own tests already cover it), tracked as a minor Phase 7 nice-to-have,
   not a blocker.
 - `created_by` is stored by `trutina-storage-postgres` only. `trutina-storage-mongo` is frozen and accepts it without storing it, so a Mongo-backed deployment would silently drop attribution. Rows written before attribution carry a null `created_by`. Account writes record no actor until M1c.
+- `Account.code` format (4 to 6 ASCII digits) is enforced only on construction. Accounts persisted before it existed are not migrated, and because repositories rebuild `Account` on read, such a row fails `get_account`, `list_accounts` and `get_chart()`, not only `update_account`. The resulting `ValidationError` is not translated to `AppError` by the storage adapters.
 
 ## Common Mistakes to Avoid
 
