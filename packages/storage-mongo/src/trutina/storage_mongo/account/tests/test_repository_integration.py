@@ -532,7 +532,7 @@ class TestAccountCategoryEnumRoundTrip:
     async def test_category_round_trips_correctly(
         self, mongo_account_repo: AccountRepo, category: AccountCategory
     ):
-        code = f"RT-{category.value}"
+        code = str(9000 + list(AccountCategory).index(category))
         name = f"Round Trip {category.value.capitalize()}"
 
         await mongo_account_repo.create(

@@ -30,7 +30,7 @@ class CreateAccountInput(BaseModel):
     code: str = Field(
         min_length=1,
         max_length=20,
-        description="Chart of accounts code, e.g. '1000', '1010-A'.",
+        description="Chart of accounts code: 4 to 6 digits, e.g. '1000'.",
     )
     name: str = Field(
         min_length=2,

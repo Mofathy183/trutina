@@ -33,16 +33,22 @@ class FieldErrorDetail(BaseModel):
 
     Attributes:
         field: Dotted field path, e.g. "lines.0.account".
-        code: Stable machine-readable code for this violation -- an
-            ErrorCode value for domain-raised violations, or a raw
+        code: Stable machine-readable code for this violation -- the real
+            ErrorCode value for domain-raised violations (recovered from
+            the downgraded violation, see handlers.py), or a raw
             Pydantic/FastAPI error type string for transport-level
             violations that never reached the domain layer.
         message: Human-readable description of this specific violation.
+        hint: Optional resolution guidance for this specific violation,
+            taken from the API error catalog. None when the catalog has
+            no hint for the violation's code, and for transport-level
+            violations that never reached the domain layer.
     """
 
     field: str
     code: str
     message: str
+    hint: str | None = None
 
 
 class ErrorResponse(BaseResponse):

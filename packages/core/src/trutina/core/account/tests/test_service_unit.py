@@ -1,5 +1,5 @@
 import pytest
-from trutina.core.account.schemas.account import AccountCategory
+from trutina.core.account.schemas.account import Account, AccountCategory
 from trutina.core.account.service import AccountService
 from trutina.shared.errors import (
     AppError,
@@ -105,6 +105,25 @@ class TestAccountService:
         assert violation.code == ErrorCode.UNKNOWN_ERROR
         assert violation.field == "name"
         assert violation.value == ErrorCode.INVALID_ACCOUNT_NAME
+
+    async def test_raises_validation_error_when_account_code_is_invalid(self):
+        repo = make_fake_account_repo()
+        service = AccountService(repo)
+
+        dto = make_create_account_input(code="sdgi")
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.create_account(dto)
+
+        assert exc_info.value.code == ErrorCode.VALIDATION_ERROR
+        assert len(exc_info.value.errors) == 1
+
+        violation = exc_info.value.errors[0]
+
+        assert violation.code == ErrorCode.UNKNOWN_ERROR
+        assert violation.field == "code"
+        assert violation.value == ErrorCode.INVALID_ACCOUNT_CODE
+        assert repo.created_accounts == []
 
     async def test_updates_account_name(self):
         existing = make_account(
@@ -277,6 +296,31 @@ class TestAccountService:
         assert violation.code == ErrorCode.UNKNOWN_ERROR
         assert violation.field == "name"
         assert violation.value == ErrorCode.INVALID_ACCOUNT_NAME
+
+    async def test_raises_validation_error_when_updating_account_with_legacy_invalid_code(
+        self,
+    ):
+        # Simulates a row persisted before the code format existed.
+        # Account.model_construct bypasses validation; the factory cannot
+        # build this object any more.
+        legacy = Account.model_construct(
+            code="sdgi", name="Cash", category=AccountCategory.ASSET
+        )
+        repo = make_fake_account_repo()
+        await repo.create(legacy)
+        service = AccountService(repo)
+
+        dto = make_update_account_input(code="sdgi", name="Main Cash")
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await service.update_account(dto)
+
+        violation = exc_info.value.errors[0]
+
+        assert violation.code == ErrorCode.UNKNOWN_ERROR
+        assert violation.field == "code"
+        assert violation.value == ErrorCode.INVALID_ACCOUNT_CODE
+        assert repo.updated_accounts == []
 
     async def test_returns_account(self):
         existing = make_account()

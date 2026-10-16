@@ -124,6 +124,11 @@ ERROR_CATALOG: dict[ErrorCode, ErrorCatalogEntry] = {
             "digits, spaces, and single & - ' . / separators."
         ),
     ),
+    ErrorCode.INVALID_ACCOUNT_CODE: ErrorCatalogEntry(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "The account code is not valid.",
+        hint="Account codes must be 4 to 6 digits (0-9), for example '1001'.",
+    ),
     ErrorCode.UNKNOWN_ACCOUNT: ErrorCatalogEntry(
         status.HTTP_404_NOT_FOUND,
         "No account was found for '{identifier}'.",

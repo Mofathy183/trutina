@@ -70,6 +70,9 @@ HINTS: HintMap = {
         "Start the name with a letter, and use only letters, digits, spaces, "
         "and single & - ' . / separators between words."
     ),
+    ErrorCode.INVALID_ACCOUNT_CODE: (
+        "Use only the digits 0-9, between 4 and 6 of them, for example 1001."
+    ),
     ErrorCode.UNKNOWN_ACCOUNT: (
         "This account does not exist in the chart of accounts. "
         "Add it to the chart of accounts first, or check for a typo in the name."

@@ -6,6 +6,7 @@ accounting domain. Depended on by account services, chart models,
 and journal validation workflows. Must not import from the CLI layer.
 """
 
+import re
 from enum import Enum
 from typing import Annotated, Literal
 
@@ -64,7 +65,10 @@ NORMAL_BALANCE_BY_CATEGORY: dict[AccountCategory, NormalBalance] = {
     AccountCategory.DIVIDEND: "credit",
 }
 
-ACCOUNT_CODE_PATTERN = r"^[0-9A-Za-z\-]+$"
+# Matched with re.fullmatch (never re.match) so a trailing newline cannot
+# slip through, and written as [0-9] rather than \d so non-ASCII Unicode
+# digits are rejected.
+ACCOUNT_CODE_PATTERN = r"[0-9]{4,6}"
 
 
 class Account(BaseModel):
@@ -77,12 +81,19 @@ class Account(BaseModel):
     Important invariants:
 
     - Account codes must be unique within the chart.
+    - Account codes are 4 to 6 ASCII digits, exactly as supplied. A code
+        is never trimmed or otherwise normalized, so the value a caller
+        checks for duplicates is the value that is stored.
     - Every account belongs to a single account category.
     - Normal balance is derived from the account category and cannot be
         set independently.
     - Account names are normalized using the same rules applied to
         journal-line account references, so they can be matched
         consistently throughout the system.
+
+    Repositories rebuild an ``Account`` on every read, so a persisted
+    account whose code predates the code format is rejected when it is
+    read or updated, not only when it is created.
     """
 
     code: Annotated[
@@ -90,8 +101,7 @@ class Account(BaseModel):
         Field(
             min_length=1,
             max_length=20,
-            pattern=ACCOUNT_CODE_PATTERN,  # digits, letters, hyphens only
-            description="Chart of accounts code, e.g. '1000', '1010-A'.",
+            description="Chart of accounts code: 4 to 6 digits, e.g. '1000'.",
         ),
     ]
 
@@ -108,6 +118,36 @@ class Account(BaseModel):
         AccountCategory,
         Field(description="The classification category of the account."),
     ]
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        """Reject account codes that do not follow the chart numbering format.
+
+        Every account is addressed by its code in the CLI, the API and
+        the chart, so a malformed code (letters, symbols, whitespace)
+        would create an account that cannot be referred to consistently.
+        The code is validated as supplied, never trimmed, so duplicate
+        checks and storage see the same value.
+
+        Length bounds enforced by the field itself (1 to 20 characters)
+        are reported as STRING_TOO_SHORT / STRING_TOO_LONG before this
+        validator runs.
+
+        Args:
+            value: Raw account code.
+
+        Returns:
+            The unchanged account code.
+
+        Raises:
+            PydanticCustomError: INVALID_ACCOUNT_CODE if the code is not
+                4 to 6 ASCII digits.
+        """
+        if re.fullmatch(ACCOUNT_CODE_PATTERN, value) is None:
+            raise pydantic_error(ErrorCode.INVALID_ACCOUNT_CODE)
+
+        return value
 
     @field_validator("name")
     @classmethod

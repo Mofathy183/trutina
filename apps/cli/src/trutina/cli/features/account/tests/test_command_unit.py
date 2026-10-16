@@ -165,6 +165,35 @@ class TestCreateCommandFlagMode:
         assert result.exit_code == 1
         assert "Validation Error" in output or "account.duplicate_code" in output
 
+    def test_invalid_code_renders_error_panel_and_exits_one(
+        self, cli_runner: CliRunner, empty_cli_state: CliState
+    ):
+        result, output = _invoke(
+            cli_runner,
+            empty_cli_state,
+            [
+                "account",
+                "create",
+                "--code",
+                "sdgi",
+                "--name",
+                "Bank",
+                "--category",
+                "asset",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "account.invalid_code" in output
+
+        service = empty_cli_state.portal.call(
+            empty_cli_state.context.get_account_service
+        )
+        with pytest.raises(AppError) as exc_info:
+            empty_cli_state.portal.call(service.get_account, "sdgi")
+
+        assert exc_info.value.code == ErrorCode.UNKNOWN_ACCOUNT
+
 
 @pytest.mark.unit
 class TestCreateCommandInteractiveMode:

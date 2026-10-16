@@ -80,7 +80,7 @@ curl "http://127.0.0.1:8000/trial-balance?as_of=2025-06-30T00:00:00"
 
 The response carries `entries` (one `{account, debit_total, credit_total}` item per account with postings in scope), `as_of_date` (`null` for all time), `total_debits`, `total_credits`, and `is_balanced`, plus the standard `success` and `timestamp`. `entries` is an empty list, not an error, when nothing is in scope. Only posted journal entries count. An unparseable `as_of` returns a 422 validation error.
 
-Account, journal, posting, and trial balance success bodies, and every error body, carry `success` and `timestamp`. Error bodies also carry `error_code`, `message`, an optional `hint`, and — on validation failures — `details`. `GET /` and `GET /health` do not use that envelope.
+Account, journal, posting, and trial balance success bodies, and every error body, carry `success` and `timestamp`. Error bodies also carry `error_code`, `message`, an optional `hint`, and — on validation failures — `details`, one item per failed field with `field`, `code`, `message` and an optional `hint`. `GET /` and `GET /health` do not use that envelope.
 
 ## Logging and Correlation
 
