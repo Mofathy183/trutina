@@ -65,16 +65,33 @@ class TestAccount:
         assert any(error["type"] == ErrorCode.INVALID_ACCOUNT_NAME for error in errors)
 
     @pytest.mark.parametrize(
+        "valid_code",
+        ["1000", "1001", "99999", "100000"],
+    )
+    def test_accepts_code_within_digit_bounds(self, valid_code):
+        account = make_account(code=valid_code)
+
+        assert account.code == valid_code
+
+    @pytest.mark.parametrize(
         "invalid_code",
         [
-            "1000!",
-            "1000@",
-            "1000#",
-            "1000$",
+            "sdgi",  # the bug from #39
+            "ABCD",
+            "1010-A",  # previously valid
+            "1000!",  # previously string_pattern_mismatch
             "1000/",
+            "100",  # one below minimum length
+            "1234567",  # one above maximum length
+            "10 01",
+            " 1001",
+            "1001 ",
+            "1001\n",  # re.fullmatch must not tolerate a trailing newline
+            "١٢٣٤",  # non-ASCII digits
+            "   ",  # passes min_length, rejected by the code validator
         ],
     )
-    def test_raises_validation_error_when_code_contains_invalid_characters(
+    def test_raises_validation_error_when_code_format_is_invalid(
         self,
         invalid_code,
     ):
@@ -83,7 +100,15 @@ class TestAccount:
 
         errors = exc_info.value.errors()
 
-        assert any(error["type"] == "string_pattern_mismatch" for error in errors)
+        assert any(error["type"] == ErrorCode.INVALID_ACCOUNT_CODE for error in errors)
+
+    def test_raises_validation_error_when_code_is_empty(self):
+        with pytest.raises(ValidationError) as exc_info:
+            make_account(code="")
+
+        errors = exc_info.value.errors()
+
+        assert any(error["type"] == ErrorCode.STRING_TOO_SHORT for error in errors)
 
     def test_returns_normalized_account_name(self):
         account = make_account(name="  Cash  ")
