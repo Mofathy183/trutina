@@ -310,21 +310,13 @@ adding safety.
 
 ## Why Handlers Pass A Fixed Pre-Auth Actor
 
-**Decision:** `create_journal_entry_handler` and `post_journal_entry_handler`
-pass `PRE_AUTH_ACTOR` (`composition/actor.py`, `"system:pre-auth:cli"`) as the
-keyword-only `actor` that `trutina-core`'s write services require. Handler
-signatures are unchanged and neither command supplies an actor.
+**Decision:** `create_journal_entry_handler`, `post_journal_entry_handler`, and the account `create_account_handler`, `update_account_handler` and `delete_account_handler` pass `PRE_AUTH_ACTOR` (`composition/actor.py`, `"system:pre-auth:cli"`) as the keyword-only `actor` that `trutina-core`'s write services require. Handler signatures are unchanged and no command supplies an actor. The keyword goes on the service call inside the async handler, so `state.call` still receives only positional arguments.
 
-**Why:** CLI commands carry no authenticated identity today. Core checks only
-that the actor is non-blank, so a constant is sufficient, and a format check in
-the handler would guard nothing. The `system:` prefix marks a non-user writer and
-the `:cli` suffix records which application wrote.
+**Why:** CLI commands carry no authenticated identity today. Core checks only that the actor is non-blank, so a constant is sufficient, and a format check in the handler would guard nothing. The `system:` prefix marks a non-user writer and the `:cli` suffix records which application wrote.
 
-**Why it lives in `composition/`, not `shared/`:** the identity the CLI writes
-as is process-level state, so it sits with the composition root beside
-`CliContext` and `CliState`. `shared/` holds only subpackages grouped by concern.
+**Why it lives in `composition/`, not `shared/`:** the identity the CLI writes as is process-level state, so it sits with the composition root beside `CliContext` and `CliState`. `shared/` holds only subpackages grouped by concern.
 
-**Current behavior:** the constant is validated by core and persisted by `trutina-storage-postgres` as `created_by` on the journal entry and on every posting row, so rows written by the CLI are distinguishable from rows written by the API.
+**Current behavior:** the constant is validated by core on every write. For journal entries and postings it is persisted by `trutina-storage-postgres` as `created_by`, so rows written by the CLI are distinguishable from rows written by the API. For account writes it reaches `AccountRepo` as `created_by` and `PostgresAccountRepo` does not store it yet.
 
 ## Why Trial Balance Is A Flat Command With No Prompt
 
