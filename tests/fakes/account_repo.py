@@ -9,6 +9,13 @@ class FakeAccountRepo(AccountRepo):
 
     This fake behaves according to the AccountRepo contract and provides
     lightweight inspection hooks for assertions.
+
+    Inspection hooks record successful writes only. Each ``created_by_on_*``
+    list is index-aligned with the hook beside it (``created_by_on_create``
+    with ``created_accounts``, and so on), holds one value per successful
+    call, and stays empty for a call that raised. The fake does not store
+    ``created_by`` anywhere else, and it does not check for duplicate
+    codes or names on ``create``.
     """
 
     def __init__(
@@ -21,15 +28,20 @@ class FakeAccountRepo(AccountRepo):
         self.updated_accounts: list[Account] = []
         self.deleted_codes: list[str] = []
 
+        self.created_by_on_create: list[str] = []
+        self.created_by_on_update: list[str] = []
+        self.created_by_on_delete: list[str] = []
+
         if chart is not None:
             for account in chart.accounts:
                 self._accounts[account.code] = account
 
-    async def create(self, account: Account) -> None:
+    async def create(self, account: Account, *, created_by: str) -> None:
         self.created_accounts.append(account)
+        self.created_by_on_create.append(created_by)
         self._accounts[account.code] = account
 
-    async def update(self, account: Account) -> None:
+    async def update(self, account: Account, *, created_by: str) -> None:
         if account.code not in self._accounts:
             raise AppError.not_found(
                 code=ErrorCode.UNKNOWN_ACCOUNT,
@@ -38,6 +50,7 @@ class FakeAccountRepo(AccountRepo):
             )
 
         self.updated_accounts.append(account)
+        self.created_by_on_update.append(created_by)
         self._accounts[account.code] = account
 
     async def exists_by_code(self, code: str) -> bool:
@@ -64,9 +77,9 @@ class FakeAccountRepo(AccountRepo):
         return None
 
     async def list_all(self) -> list[Account]:
-        return list(self._accounts.values())
+        return list[Account](self._accounts.values())
 
-    async def delete_by_code(self, code: str) -> None:
+    async def delete_by_code(self, code: str, *, created_by: str) -> None:
         if code not in self._accounts:
             raise AppError.not_found(
                 code=ErrorCode.UNKNOWN_ACCOUNT,
@@ -75,5 +88,6 @@ class FakeAccountRepo(AccountRepo):
             )
 
         self.deleted_codes.append(code)
+        self.created_by_on_delete.append(created_by)
 
         del self._accounts[code]
