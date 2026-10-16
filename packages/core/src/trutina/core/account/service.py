@@ -9,6 +9,9 @@ Responsibilities:
 
 - Construct domain Account models from service DTOs.
 - Enforce chart-level uniqueness rules.
+- Require a non-blank actor on every account write and hand it to
+    AccountRepo as ``created_by``. The actor is an opaque string supplied
+    by the caller; this module never inspects its format.
 - Coordinate persistence through AccountRepo.
 - Translate domain validation failures into ValidationAppError.
 - Return stable ViewModels to callers.
@@ -16,7 +19,8 @@ Responsibilities:
     account.deleted) through the standard library's logging module.
     Logging happens only after the underlying repository write
     succeeds -- a raised AppError/ValidationAppError never produces a
-    log line here, and no read-only method logs anything. This module
+    log line here, and no read-only method logs anything. The actor is
+    never included in a log event. This module
     imports nothing from trutina.observability or structlog; it only
     ever calls logging.getLogger(__name__), which is formatted by
     whatever the composing application configured (see
@@ -36,6 +40,7 @@ from trutina.shared.errors import (
     ErrorCode,
     ValidationAppError,
 )
+from trutina.shared.rule import is_non_blank_actor
 
 from .dtos import (
     AccountViewModel,
@@ -70,6 +75,12 @@ class AccountService:
     checks and account-resolution workflows. Persistence is delegated to the
     configured AccountRepo implementation.
 
+    Every write method (create, update, delete) requires a keyword-only
+    ``actor`` and rejects a blank one before doing any other work, so a
+    rejected call performs no repository access and a blank actor takes
+    precedence over not-found and duplicate errors. Read methods take no
+    actor.
+
     Attributes:
         _repo: The persistence boundary for individual accounts.
         _has_postings: Optional predicate used by delete_account() to
@@ -99,14 +110,18 @@ class AccountService:
         self._repo = repo
         self._has_postings = has_postings
 
-    async def create_account(self, dto: CreateAccountInput) -> AccountViewModel:
+    async def create_account(
+        self, dto: CreateAccountInput, *, actor: str
+    ) -> AccountViewModel:
         """Validate and persist a new account.
 
-        Checks for duplicate code and duplicate name via targeted
-        existence queries before constructing the domain object or
-        writing anything. If both checks pass, builds the domain Account
-        (which validates its own structural invariants) and persists it.
-        Logs "account.created" only after the repository write succeeds.
+        Checks the actor first, then checks for duplicate code and
+        duplicate name via targeted existence queries before constructing
+        the domain object or writing anything. If both checks pass,
+        builds the domain Account (which validates its own structural
+        invariants) and persists it, passing the actor to the repository
+        as ``created_by``. Logs "account.created" only after the
+        repository write succeeds.
 
         TOCTOU note: the existence checks and write are not atomic.
         Under concurrent load, two requests can both pass the existence
@@ -117,19 +132,27 @@ class AccountService:
 
         Args:
             dto: Raw account creation input.
+            actor: Opaque identifier of the caller performing the write.
+                Must contain at least one non-whitespace character; its
+                format is not inspected.
 
         Returns:
             The view model of the newly created account.
 
         Raises:
+            ValidationAppError: REQUIRED_FIELD on ``actor`` if the actor
+                is blank. Also raised, with VALIDATION_ERROR, if the
+                account fields are structurally invalid (malformed name,
+                etc.).
             AppError: DUPLICATE_ACCOUNT_CODE if an account with the same
                 code already exists, or DUPLICATE_ACCOUNT_NAME if the name
                 matches an existing account name. Also raised by the repo
                 adapter if the storage layer catches a race that slipped
                 past the existence checks above.
-            ValidationAppError: If the account fields are structurally
-                invalid (malformed name, etc.).
         """
+        if not is_non_blank_actor(actor):
+            raise ValidationAppError.required_field("actor", actor)
+
         if await self._repo.exists_by_code(dto.code):
             raise AppError.conflict(
                 code=ErrorCode.DUPLICATE_ACCOUNT_CODE,
@@ -155,7 +178,7 @@ class AccountService:
         except ValidationError as exc:
             raise ValidationAppError.validation(exc) from exc
 
-        await self._repo.create(account)
+        await self._repo.create(account, created_by=actor)
 
         logger.info(
             "account.created",
@@ -169,31 +192,41 @@ class AccountService:
 
         return self._to_view_model(account)
 
-    async def update_account(self, dto: UpdateAccountInput) -> AccountViewModel:
+    async def update_account(
+        self, dto: UpdateAccountInput, *, actor: str
+    ) -> AccountViewModel:
         """Apply a partial update to an existing account.
 
-        Loads the current account and applies only the values explicitly
-        provided by the caller.
-        then runs a uniqueness pre-check for any changed name
-        before persisting the updated record. Logs "account.updated"
-        only after the repository write succeeds.
+        Checks the actor first, then loads the current account and
+        applies only the values explicitly provided by the caller, then
+        runs a uniqueness pre-check for any changed name before
+        persisting the updated record with the actor passed to the
+        repository as ``created_by``. Logs "account.updated" only after
+        the repository write succeeds.
 
         Args:
             dto: Partial update input. Only fields explicitly set on
                 the DTO are applied; omitted fields retain their current
                 values.
+            actor: Opaque identifier of the caller performing the write.
+                Must contain at least one non-whitespace character; its
+                format is not inspected.
 
         Returns:
             The view model of the updated account.
 
         Raises:
+            ValidationAppError: REQUIRED_FIELD on ``actor`` if the actor
+                is blank. Also raised, with VALIDATION_ERROR, if the
+                merged field values fail domain validation.
             AppError: UNKNOWN_ACCOUNT if no account with dto.code exists.
                 DUPLICATE_ACCOUNT_NAME if the new name matches an existing
                 account name, or the same code if the storage layer
                 catches a race.
-            ValidationAppError: If the merged field values fail domain
-                validation.
         """
+        if not is_non_blank_actor(actor):
+            raise ValidationAppError.required_field("actor", actor)
+
         existing = await self._repo.get_by_code(dto.code)
 
         if existing is None:
@@ -224,7 +257,7 @@ class AccountService:
         except ValidationError as exc:
             raise ValidationAppError.validation(exc) from exc
 
-        await self._repo.update(updated)
+        await self._repo.update(updated, created_by=actor)
 
         logger.info(
             "account.updated",
@@ -325,24 +358,33 @@ class AccountService:
             accounts=[self._to_view_model(account) for account in accounts]
         )
 
-    async def delete_account(self, code: str) -> None:
+    async def delete_account(self, code: str, *, actor: str) -> None:
         """Remove an account by its code.
 
-        Verifies the account exists, then -- if a has_postings predicate
-        was supplied at construction -- verifies the account has no
-        associated ledger postings before removing it from persistence.
-        Without a supplied predicate, this performs an existence check
-        only, matching the previously documented behavior. Logs
-        "account.deleted" only after the repository delete succeeds.
+        Checks the actor first, then verifies the account exists and --
+        if a has_postings predicate was supplied at construction --
+        verifies the account has no associated ledger postings before
+        removing it from persistence with the actor passed to the
+        repository as ``created_by``. Without a supplied predicate, this
+        performs an existence check only. Logs "account.deleted" only
+        after the repository delete succeeds.
 
         Args:
             code: The account code to delete.
+            actor: Opaque identifier of the caller performing the write.
+                Must contain at least one non-whitespace character; its
+                format is not inspected.
 
         Raises:
+            ValidationAppError: REQUIRED_FIELD on ``actor`` if the actor
+                is blank.
             AppError: UNKNOWN_ACCOUNT if no account with that code exists.
             AppError: ACCOUNT_HAS_POSTINGS if a has_postings predicate is
                 configured and reports postings exist for this account.
         """
+        if not is_non_blank_actor(actor):
+            raise ValidationAppError.required_field("actor", actor)
+
         existing = await self._repo.get_by_code(code)
 
         if existing is None:
@@ -360,7 +402,7 @@ class AccountService:
                 value=code,
             )
 
-        await self._repo.delete_by_code(code)
+        await self._repo.delete_by_code(code, created_by=actor)
 
         logger.info(
             "account.deleted",
