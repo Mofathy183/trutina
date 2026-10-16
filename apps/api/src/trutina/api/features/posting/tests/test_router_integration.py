@@ -25,12 +25,13 @@ from tests.factories import (
 
 async def _seed_accounts(app):
     await app.state.container.account_service.create_account(
-        make_create_account_input(code="1001", name="Cash")
+        make_create_account_input(code="1001", name="Cash"), actor=TEST_ACTOR
     )
     await app.state.container.account_service.create_account(
         make_create_account_input(
             code="4001", name="Sales Revenue", category=AccountCategory.REVENUE
-        )
+        ),
+        actor=TEST_ACTOR,
     )
 
 
