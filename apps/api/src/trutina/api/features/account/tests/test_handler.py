@@ -19,7 +19,7 @@ from trutina.api.features.account.handler import (
 )
 from trutina.core.account.dtos import AccountViewModel, ChartOfAccountsViewModel
 from trutina.core.account.service import AccountService
-from trutina.shared.errors import AppError, ErrorCode
+from trutina.shared.errors import AppError, ErrorCode, ValidationAppError
 
 from tests.factories import (
     make_account,
@@ -51,6 +51,15 @@ class TestCreateAccountHandler:
             await create_account(service, dto)
 
         assert exc_info.value.code == ErrorCode.DUPLICATE_ACCOUNT_CODE
+
+    async def test_propagates_validation_error_for_invalid_code(self):
+        service = AccountService(make_fake_account_repo())
+        dto = make_create_account_input(code="sdgi")
+
+        with pytest.raises(ValidationAppError) as exc_info:
+            await create_account(service, dto)
+
+        assert exc_info.value.errors[0].value == ErrorCode.INVALID_ACCOUNT_CODE
 
 
 @pytest.mark.unit
