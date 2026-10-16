@@ -7,6 +7,7 @@ terminal presentation -- it must remain callable identically regardless
 of where the DTO came from.
 """
 
+from trutina.cli.composition.actor import PRE_AUTH_ACTOR
 from trutina.cli.composition.context import CliContext
 from trutina.core.account import (
     AccountViewModel,
@@ -47,7 +48,7 @@ async def create_account_handler(
             domain validation.
     """
     service = await ctx.get_account_service()
-    return await service.create_account(dto)
+    return await service.create_account(dto, actor=PRE_AUTH_ACTOR)
 
 
 async def get_account_handler(ctx: CliContext, identifier: str) -> AccountViewModel:
@@ -117,7 +118,7 @@ async def update_account_handler(
             fail domain validation.
     """
     service = await ctx.get_account_service()
-    return await service.update_account(dto)
+    return await service.update_account(dto, actor=PRE_AUTH_ACTOR)
 
 
 async def delete_account_handler(ctx: CliContext, code: str) -> None:
@@ -131,4 +132,4 @@ async def delete_account_handler(ctx: CliContext, code: str) -> None:
         AppError: UNKNOWN_ACCOUNT if no account with that code exists.
     """
     service = await ctx.get_account_service()
-    await service.delete_account(code)
+    await service.delete_account(code, actor=PRE_AUTH_ACTOR)
