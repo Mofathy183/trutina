@@ -1,6 +1,6 @@
 # trutina-config
 
-> Typed, environment-driven configuration for Trutina's Mongo, PostgreSQL, API, and logging layers.
+> Typed, environment-driven configuration for Trutina's PostgreSQL, API, and logging layers.
 
 ![CI](https://github.com/Mofathy183/trutina/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.14%2B-blue)
@@ -24,7 +24,7 @@ print(settings.postgres.uri)
 
 `trutina-config` (import path `trutina.config`) is the strongly typed settings
 surface every Trutina application and storage adapter reads its configuration
-from — a MongoDB connection, a PostgreSQL connection, API bind settings, and
+from — a PostgreSQL connection, API bind settings, and
 the logging pipeline's own settings — instead of each one reading `os.environ`
 directly. It sits at the root of the workspace dependency graph: every other
 package may depend on it, and it depends on nothing else in the workspace. See
@@ -36,22 +36,11 @@ package may depend on it, and it depends on nothing else in the workspace. See
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.                     |
 | `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.                           |
-| `MongoSettings`              | Nested MongoDB connection settings.                                                                          |
 | `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                                   |
 | `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                                            |
 | `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`.               |
 | `AuthSettings`               | Nested authentication settings: optional signing keys and the active key id. Skeleton; nothing reads it yet. |
 | `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                                         |
-
-### `MongoSettings` fields
-
-| Field                          | Default                     | Description                                            |
-| ------------------------------ | --------------------------- | ------------------------------------------------------ |
-| `uri`                          | `mongodb://localhost:27017` | MongoDB connection URI.                                |
-| `db`                           | `trutina`                   | Database name.                                         |
-| `server_selection_timeout_ms`  | `5000`                      | Max time (ms) to wait for MongoDB server selection.    |
-| `min_pool_size`                | `1`                         | Minimum connections maintained in the connection pool. |
-| `retry_reads` / `retry_writes` | `True`                      | Whether retryable reads/writes are enabled.            |
 
 ### `PostgresSettings` fields
 
@@ -106,7 +95,6 @@ package may depend on it, and it depends on nothing else in the workspace. See
 from trutina.config import get_settings
 
 settings = get_settings()
-settings.mongo.uri
 settings.postgres.uri
 settings.api.port
 settings.logging.level
@@ -133,7 +121,6 @@ Nested settings use a double underscore (`__`) as the delimiter:
 TRUTINA_ENVIRONMENT=development
 TRUTINA_AUTH__SIGNING_KEYS__k1=<secret>
 TRUTINA_AUTH__ACTIVE_KID=k1
-TRUTINA_MONGO__URI=mongodb://localhost:27017
 TRUTINA_POSTGRES__URI=postgresql+asyncpg://username:password@localhost:5432/trutina
 TRUTINA_API__PORT=8000
 TRUTINA_LOGGING__LEVEL=INFO
@@ -164,6 +151,9 @@ written on the test itself.
 ## See Also
 
 - [CONTEXT.md](CONTEXT.md) — design rationale, trade-offs, invariants.
-- Confirmed direct dependents (per their own `pyproject.toml`): `trutina-storage-mongo`,
-  `trutina-storage-postgres`, `trutina-cli`, `trutina-api`, `trutina-observability`.
+- Confirmed direct dependents (per their own `pyproject.toml`):
+  `trutina-storage-postgres` [README.md](../storage-postgres/README.md),
+  `trutina-cli` [README.md](../../apps/cli/README.md),
+  `trutina-api` [README.md](../../apps/api/README.md),
+  `trutina-observability` [README.md](../observability/README.md).
 - `trutina-config` depends on nothing else in the workspace.
