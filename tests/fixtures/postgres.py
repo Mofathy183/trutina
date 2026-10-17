@@ -1,14 +1,3 @@
-"""Test fixtures for PostgreSQL infrastructure integration tests.
-
-session_scoped postgres_connection is created once per test session,
-mirroring mongo_connection's shape in tests/fixtures/mongo.py. schema_init
-applies the real Alembic migration history once per session, so a
-migration that doesn't actually reproduce model.py fails here instead of
-surfacing as a surprise the first time someone runs `alembic upgrade head`
-against a real environment. clean_pg_db truncates all tables before each
-test, preserving schema and indexes.
-"""
-
 import asyncio
 import logging
 from pathlib import Path
