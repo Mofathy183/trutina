@@ -1,14 +1,14 @@
-"""Integration tests for PostingService against real MongoDB infrastructure.
+"""Integration tests for PostingService against real infrastructure.
 
 Does NOT re-verify posting derivation logic, frozen-record validation, or
-Mongo document mapping/ordering — covered respectively by
+ document mapping/ordering — covered respectively by
 ``test_service.py`` (fake-repo unit tests),
 ``modules/posting/tests/test_ledger_posting_schema.py``, and
-``infrastructure/mongo/posting/tests/test_repository_integration.py``.
+``infrastructure//posting/tests/test_repository_integration.py``.
 
 PostingService is the most valuable integration target in the project: a
 single posting workflow chains three services (Account, Journal, Posting)
-and three Mongo repositories, none of which are exercised together
+and three  repositories, none of which are exercised together
 anywhere else in the suite. These tests prove that chain behaves correctly
 as a unit, ending with one explicit cross-service workflow test that
 re-reads everything back out through the service layer to catch
@@ -48,7 +48,7 @@ class TestPostingServiceDuplicatePosting:
         self, services, simple_accounts
     ):
         """Proves the duplicate-posting guard (a check-then-save against
-        real Mongo, not an in-memory fake) still holds the
+        real DB, not an in-memory fake) still holds the
         one-posting-per-journal-entry invariant.
         """
         _account_service, journal_service, posting_service = services
@@ -97,7 +97,7 @@ class TestCrossServiceWorkflow:
         """The single end-to-end workflow test for this project.
 
         Walks Account -> Journal -> Posting creation, then re-reads every
-        result back out through the service layer (not raw Mongo), to catch
+        result back out through the service layer (not raw ), to catch
         the class of bug no single-service test can: account-name
         normalization drift between AccountService and JournalLine,
         DTO-mapping drift between JournalViewModel and the lines
