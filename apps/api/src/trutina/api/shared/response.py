@@ -8,7 +8,6 @@ status code alone.
 """
 
 from datetime import UTC, datetime
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -41,4 +40,4 @@ class SuccessResponse(BaseResponse):
     `success` to `Literal[False]`.
     """
 
-    success: Literal[True] = True
+    success: bool = True

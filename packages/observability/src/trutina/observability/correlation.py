@@ -9,7 +9,7 @@ the same id with no per-call-site plumbing required.
 
 import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
@@ -37,7 +37,7 @@ def get_correlation_id() -> str | None:
 
 
 @contextmanager
-def correlation_scope(correlation_id: str | None = None) -> Iterator[str]:
+def correlation_scope(correlation_id: str | None = None) -> Generator[str]:
     """Bind a correlation id for the duration of the with-block.
 
     Args:

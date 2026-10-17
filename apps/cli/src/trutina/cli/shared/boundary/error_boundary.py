@@ -27,7 +27,7 @@ bound for the surrounding command by `main.py::run()` or
 """
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 import typer
@@ -73,7 +73,7 @@ def _log_failure(code: ErrorCode, *, cause: BaseException | None = None) -> None
 
 
 @contextmanager
-def error_boundary() -> Iterator[None]:
+def error_boundary() -> Generator[None]:
     """Render service-layer errors as panels and exit(1) instead of propagating.
 
     Scopes exactly the one state.call(...) invocation that can raise
