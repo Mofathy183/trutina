@@ -120,7 +120,7 @@ HINTS: HintMap = {
     # Storage
     #
     ErrorCode.STORAGE_UNAVAILABLE: (
-        "Check that the MongoDB server is running and reachable, then try again."
+        "Check that the server is running and reachable, then try again."
     ),
     ErrorCode.STORAGE_TIMEOUT: (
         "The database took too long to respond. Check connectivity and try again."
