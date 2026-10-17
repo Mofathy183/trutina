@@ -45,7 +45,7 @@ class HealthResponse(BaseModel):
     """Response body for ``GET /health``.
 
     A liveness signal only — it confirms the process is running and
-    able to respond, not that its dependencies (e.g. MongoDB) are
+    able to respond, not that its dependencies are
     reachable. Add a dependency check here only by introducing a
     distinct readiness endpoint; do not overload this one.
     """

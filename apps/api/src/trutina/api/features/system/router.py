@@ -50,7 +50,6 @@ async def root(
 async def health() -> HealthResponse:
     """Liveness check: confirm the process is running and responsive.
 
-    Does not check MongoDB or any other dependency — see
     ``HealthResponse`` for why that belongs to a future readiness
     endpoint instead.
 

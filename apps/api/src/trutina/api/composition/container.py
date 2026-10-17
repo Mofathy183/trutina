@@ -7,9 +7,7 @@ the rationale: the API pays connection cost once regardless, so there's
 no benefit to laziness and a real cost to first-request latency if it
 were lazy).
 
-Container holds only feature services. It intentionally exposes no
-MongoDB-specific types — no AsyncMongoClient, no MongoExecutor, no
-Mongo*Repo — those are construction details owned entirely by
+Container holds only feature services. those are construction details owned entirely by
 bootstrap.py. Routes and dependency providers depend on Container's
 public attributes only, never on how they were built.
 """
