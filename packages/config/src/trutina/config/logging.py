@@ -23,7 +23,6 @@ _DEFAULT_LOGGER_LEVELS: dict[str, str] = {
     "sqlalchemy.engine": "WARNING",
     "sqlalchemy.pool": "WARNING",
     "uvicorn.error": "INFO",
-    "pymongo": "WARNING",
     "asyncio": "WARNING",
     "httpx": "WARNING",
     "httpcore": "WARNING",
@@ -45,7 +44,7 @@ class LoggingSettings(BaseModel):
     """Typed configuration for the application's logging pipeline.
 
     A plain BaseModel, not a BaseSettings subclass, nested inside
-    Settings/TestSettings the same way MongoSettings, PostgresSettings,
+    Settings/TestSettings the same way PostgresSettings,
     and ApiSettings already are. This model has no logging behavior of
     its own -- trutina-observability's configure_logging() is the only
     consumer.
