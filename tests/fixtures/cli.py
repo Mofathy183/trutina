@@ -28,7 +28,7 @@ def fake_cli_context(chart_of_accounts) -> CliContext:
 def fake_cli_state(fake_cli_context: CliContext) -> Iterator[CliState]:
     """Unit-tier CliState: fake_cli_context paired with a real portal.
 
-    No Mongo involved, so there's no loop-binding hazard.
+    No involved, so there's no loop-binding hazard.
     """
     with start_blocking_portal(backend="asyncio") as portal:
         state = CliState(context=fake_cli_context, portal=portal)

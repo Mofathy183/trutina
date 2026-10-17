@@ -4,7 +4,7 @@
 
 This roadmap lists work that the confirmed package/app passes (`packages/shared`,
 `packages/config`, `packages/core`, `packages/observability`,
-`packages/storage-mongo`, `packages/storage-postgres`, `apps/api`, `apps/cli`) show is
+`packages/storage-postgres`, `apps/api`, `apps/cli`) show is
 **genuinely still missing or unresolved** — not a restatement of any package's
 internal extension points, which live in that package's own README/CONTEXT.
 
@@ -48,13 +48,6 @@ internal extension points, which live in that package's own README/CONTEXT.
 
 ## Remaining Infrastructure Work
 
-- Add multi-document transaction support to `MongoPostingRepo.save_many()` — the
-  current single `insert_many()` call has no `ClientSession`, so a mid-batch
-  failure can partially persist a journal's postings, and concurrent posting
-  attempts can race past `PostingService`'s existence pre-check. Documented as
-  an accepted, not yet closed, gap in `trutina-storage-mongo`'s own CONTEXT.md.
-  This no longer blocks anything app-facing, since neither presentation app
-  depends on `trutina-storage-mongo`.
 - Wire the `ACCOUNT_HAS_POSTINGS` delete safeguard for `trutina-storage-postgres`
   — `AccountService.delete_account()` only enforces it when a composition root
   supplies the optional `has_postings` callback. Both `apps/api`'s `build_container()`
@@ -65,8 +58,6 @@ internal extension points, which live in that package's own README/CONTEXT.
 - Evaluate a faster path for the trial balance if ledgers grow large. Each call runs
   one `GROUP BY` over the postings in scope, and `posting_date` has no dedicated
   index, so the `as_of_date` filter is not index-assisted.
-- `trutina-storage-mongo` has no `TrialBalanceRepo` implementation. This is
-  deliberate: PostgreSQL is the only backend new features target.
 - Add a test forcing a real Postgres constraint violation and asserting the
   resulting exception's text contains no leaked account code/name/amount —
   `hide_parameters=True` is confirmed _set_ on the engine, but its actual
@@ -103,7 +94,6 @@ internal extension points, which live in that package's own README/CONTEXT.
   and pass it to the repository as `created_by`. `trutina-storage-postgres` persists it for journal entries and postings.
   Still missing: storing it for account writes through an audit table (M1c.2),
   and replacing the fixed pre-auth constants with real identities (M4b, M4.5).
-  Mongo is frozen and does not store `created_by`.
 - Password registration and login, with throttling and a hasher. The user store exists; email format validation does not.
 - Access and refresh tokens, auth routes, and endpoint protection.
 - A CLI `auth` group.
@@ -128,8 +118,5 @@ every service/storage layer beneath them):
 - `apps/api/README.md`'s test-tier coverage is confirmed feature-by-feature the
   way `apps/cli/README.md` already is;
 - the trial balance can list every chart account, not only accounts with activity;
-- `MongoPostingRepo.save_many()`'s transaction gap is closed or explicitly
-  re-accepted with a documented reason;
-- future features continue to leave `trutina.core` free of `beanie`/`pymongo`,
-  `sqlalchemy`/`asyncpg`, `structlog`/`trutina.observability` imports, and free
-  of CLI/API awareness.
+- future features continue to leave `trutina.core` free of `sqlalchemy`/`asyncpg`,
+  `structlog`/`trutina.observability` imports, and free of CLI/API awareness.

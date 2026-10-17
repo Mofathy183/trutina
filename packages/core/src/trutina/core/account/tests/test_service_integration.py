@@ -1,16 +1,15 @@
-"""Integration tests for AccountService against real MongoDB infrastructure.
+"""Integration tests for AccountService against real Postgres infrastructure.
 
 These tests do NOT re-verify validation branches, DTO field mapping, or
 repository-internal behavior — that is already covered by
 ``test_service.py`` (fake-repo unit tests) and
-``infrastructure/mongo/account/tests/test_repository_integration.py``
-(Mongo adapter tests).
+``infrastructure//account/tests/test_repository_integration.py``
 
 The only thing these tests exist to prove is that
 ``AccountService`` produces the same business-correct outcome when wired
-to ``MongoAccountRepo`` instead of ``FakeAccountRepo`` — i.e. that the
-DTO -> domain -> Mongo -> domain -> view-model seam holds end to end, and
-that the service's pre-check and MongoDB's unique index agree on what
+to instead of ``FakeAccountRepo`` — i.e. that the
+DTO -> domain -> Postgres -> domain -> view-model seam holds end to end, and
+that the service's pre-check and Postgres's unique index agree on what
 counts as a duplicate.
 """
 
@@ -28,7 +27,7 @@ from tests.factories import (
 class TestAccountServiceLifecycle:
     async def test_create_retrieve_update_retrieve_round_trip(self, services):
         """Proves the full create -> persist -> update -> persist round trip
-        survives a real Mongo write/read cycle, not just an in-memory dict.
+        survives a real write/read cycle, not just an in-memory dict.
         """
         account_service, _journal_service, _posting_service = services
 

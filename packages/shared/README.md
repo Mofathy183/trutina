@@ -73,5 +73,4 @@ uv run pytest -m "unit and shared"
 
 - [CONTEXT.md](CONTEXT.md) — design rationale, trade-offs, invariants, and known gaps.
 - [`trutina-core`](../core/README.md) — direct workspace consumer of the rules and error contract.
-- [`trutina-storage-mongo`](../storage-mongo/README.md) — direct workspace consumer of the error contract.
 - [`trutina-storage-postgres`](../storage-postgres/README.md) — direct workspace consumer of the error contract.

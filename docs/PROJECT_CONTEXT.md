@@ -4,16 +4,15 @@
 
 Trutina is a Python double-entry bookkeeping engine. The repository is a `uv`
 workspace, not a single application: `trutina-core` owns the accounting domain,
-`trutina-storage-mongo` and `trutina-storage-postgres` each implement its repository
-contracts against a different backend, `trutina-config`/`trutina-shared` provide
-cross-cutting settings and error/validation primitives, `trutina-observability`
-provides shared logging configuration and request/command correlation, and two
-independent presentation apps — `trutina-cli` (Typer/Rich terminal + interactive
-shell) and `trutina-api` (FastAPI) — sit on top of the same domain services. This
-document explains why the workspace is shaped this way and rolls up what each
-package's own, independently-verified `README.md`/`CONTEXT.md` confirms is actually
-implemented today. For any package's internal reasoning, see that package's own
-`CONTEXT.md` — this file does not restate it.
+`trutina-storage-postgres` implements its repository contracts against PostgreSQL,
+`trutina-config`/`trutina-shared` provide cross-cutting settings and error/validation
+primitives, `trutina-observability` provides shared logging configuration and
+request/command correlation, and two independent presentation apps — `trutina-cli`
+(Typer/Rich terminal + interactive shell) and `trutina-api` (FastAPI) — sit on top of
+the same domain services. This document explains why the workspace is shaped this way
+and rolls up what each package's own, independently-verified `README.md`/`CONTEXT.md`
+confirms is actually implemented today. For any package's internal reasoning, see that
+package's own `CONTEXT.md` — this file does not restate it.
 
 ## Why Split Into a Workspace At All
 
@@ -22,19 +21,17 @@ rules. Keeping the domain in a separate, installable package (`trutina-core`) wi
 zero storage/transport awareness — rather than folding it into whichever app was
 written first — means neither app can accidentally depend on the other's
 presentation concerns, and the domain layer never needs to know either exists.
-`trutina-storage-mongo` and `trutina-storage-postgres` each exist as their own
-package for the same reason: each is one of only two places in the workspace
-allowed to import its respective driver (`beanie`/`pymongo`, or
-`sqlalchemy`/`asyncpg`), so a repository contract's storage-agnosticism is provable
-by import-linter, not just asserted by convention. `trutina-observability` exists
-as its own package for a parallel reason: both presentation apps need the identical
-formatter chain, redaction, and correlation-id handling, and building that twice
-would have been exactly the "N independently drifting copies of the same rule"
-failure mode the rest of the workspace's architecture already avoids for business
-logic. `trutina-shared` and `trutina-config` sit at the bottom because their
-contents (validation rules, the error model, environment-driven settings) are
-needed identically by every package above them and have no accounting-specific or
-transport-specific shape of their own.
+`trutina-storage-postgres` exists as its own package for the same reason: it is the
+only place in the workspace allowed to import `sqlalchemy`/`asyncpg`, so a repository
+contract's storage-agnosticism is provable by import-linter, not just asserted by
+convention. `trutina-observability` exists as its own package for a parallel reason:
+both presentation apps need the identical formatter chain, redaction, and
+correlation-id handling, and building that twice would have been exactly the "N
+independently drifting copies of the same rule" failure mode the rest of the
+workspace's architecture already avoids for business logic. `trutina-shared` and
+`trutina-config` sit at the bottom because their contents (validation rules, the
+error model, environment-driven settings) are needed identically by every package
+above them and have no accounting-specific or transport-specific shape of their own.
 `trutina-authentication` exists as its own package so that identity and
 authentication vocabulary never enters `trutina-core`: the accounting domain sees
 only an opaque `actor: str`. It sits beside core in the import-linter layers
@@ -47,18 +44,12 @@ contract (independent siblings), so neither can import the other.
   are confirmed complete in `trutina-core`'s own README/CONTEXT, not partial.
   Each also logs one success event through stdlib `logging` after a
   state-changing write persists.
-- **Both storage backends** — concrete `Mongo*Repo` implementations
-  (`trutina-storage-mongo`) and concrete `Postgres*Repo` implementations
-  (`trutina-storage-postgres`, with Alembic migrations) are confirmed implemented
-  and tested independently. **Only PostgreSQL is actually wired into either
-  presentation app** — `apps/cli/pyproject.toml` and `apps/api/pyproject.toml` both
-  declare `trutina-storage-postgres`, not `trutina-storage-mongo`, as their storage
-  dependency. `trutina-storage-mongo` remains in the workspace with its own CI lane
-  but is not app-facing today. Both backends' `connect()`/`disconnect()` now log
-  `db.connected`/`db.disconnected` through stdlib `logging`, never the connection
+- **Storage** — concrete `Postgres*Repo` implementations
+  (`trutina-storage-postgres`, with Alembic migrations) are confirmed implemented and
+  tested. Both `apps/cli/pyproject.toml` and `apps/api/pyproject.toml` declare
+  `trutina-storage-postgres` as their storage dependency. Its `connect()`/`disconnect()`
+  log `db.connected`/`db.disconnected` through stdlib `logging`, never the connection
   URI.
-  `trutina-storage-mongo` is frozen: its journal and posting adapters accept `created_by` and do not store it,
-  and its account adapter has not been changed for the account contract's `created_by`.
 - **`trutina-observability`** — a shared package providing `configure_logging()`,
   `correlation_scope()`, and `CorrelationIdMiddleware`, consumed by exactly the two
   presentation apps. Every other package (core, shared, config, both storage
@@ -97,16 +88,13 @@ contract (independent siblings), so neither can import the other.
 ## What Is Partial or Explicitly Out of Scope
 
 - Reporting beyond the trial balance — period-range or comparative views, financial
-  statements, full-chart zero-padded trial balance output, and a MongoDB trial balance
-  implementation — are not implemented anywhere in the workspace.
+  statements, and full-chart zero-padded trial balance output — are not implemented
+  anywhere in the workspace.
 - Import/export or external integration surfaces — not implemented.
 - `modules/journal/rule.py` / `modules/posting/rule.py` scaffold status — carried
   forward from prior documentation but **not re-confirmed** against
   `trutina-core`'s current README/CONTEXT in this pass; treat as unconfirmed, not
   as verified fact, until checked directly against source.
-- `MongoPostingRepo.save_many()` has no multi-document transaction — an accepted,
-  documented gap in `trutina-storage-mongo`'s own CONTEXT.md. No longer app-facing
-  risk, since neither presentation app depends on that package today.
 - `get_field_violations()` (in `trutina-shared`) downgrades every domain-raised
   `ErrorCode` to `UNKNOWN_ERROR` on `FieldViolation.code`; the real code survives
   only as a string in `FieldViolation.value`. Both `trutina-cli` and `trutina-api`
@@ -160,10 +148,10 @@ contract (independent siblings), so neither can import the other.
    previously carried it.
 4. **Root import-linter storage-layer naming — resolved in a prior pass,
    re-confirmed here.** The root `pyproject.toml`'s `layers` contract names its
-   storage-adjacent layer as `"trutina.storage_mongo | trutina.storage_postgres |
-trutina.observability"` — all three sit at the same position, with
-   `trutina.observability` added during the logging rollout. `ARCHITECTURE.md`
-   and `AGENTS.md` both reflect this current three-member layer.
+   storage-adjacent layer as `"trutina.storage_postgres | trutina.observability"` —
+   both sit at the same position, with `trutina.observability` added during the
+   logging rollout. `ARCHITECTURE.md` and `AGENTS.md` both reflect this current
+   two-member layer.
 5. **Root compose files and PostgreSQL — resolved in M0a-C (#43).** `compose.yml`
    provisions PostgreSQL, a one-shot `migrate` service, and the API, and
    `compose.dev.yml` watches every package the API image runs, including
@@ -193,7 +181,7 @@ discipline enforced by root `conftest.py`: a hand-written speed marker
 (`unit`/`integration`), an automatically-derived layer marker
 (`core`/`infra`/`cli`/`api`/`shared`/`config`/`observability`/`authentication`, derived from file
 path — never hand-written), and, for `infra`-layer tests only, an
-automatically-derived backend marker (`mongo`/`postgres`, derived from which
+automatically-derived backend marker (`postgres`, derived from which
 storage package's directory the test lives under). This lets
 `pytest -m "unit and cli"` or `pytest -m "integration and infra and postgres"`
 remain trustworthy filters instead of decorative metadata that could silently

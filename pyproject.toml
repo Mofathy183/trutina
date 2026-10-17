@@ -45,7 +45,7 @@ name = "Layered architecture: apps -> storage -> core -> shared/config"
 type = "layers"
 layers = [
     "trutina.cli | trutina.api",
-    "trutina.storage_mongo | trutina.storage_postgres | trutina.observability",
+    "trutina.storage_postgres | trutina.observability",
     "trutina.core | trutina.authentication",
     "trutina.shared | trutina.config",
 ]
@@ -58,7 +58,6 @@ source_modules = [
     "trutina.authentication",
     "trutina.shared",
     "trutina.config",
-    "trutina.storage_mongo",
     "trutina.storage_postgres",
 ]
 forbidden_modules = ["structlog", "trutina.observability"]
@@ -69,19 +68,12 @@ type = "forbidden"
 source_modules = ["trutina.observability"]
 forbidden_modules = [
     "trutina.core",
-    "trutina.storage_mongo",
     "trutina.storage_postgres",
     "fastapi",
     "starlette",
     "typer",
     "rich",
 ]
-
-[[tool.importlinter.contracts]]
-name = "Core must have zero Mongo/Beanie awareness"
-type = "forbidden"
-source_modules = ["trutina.core"]
-forbidden_modules = ["beanie", "pymongo"]
 
 [[tool.importlinter.contracts]]
 name = "Core account -> journal -> posting layering"
@@ -111,8 +103,6 @@ source_modules = ["trutina.authentication"]
 forbidden_modules = [
     "sqlalchemy",
     "asyncpg",
-    "beanie",
-    "pymongo",
     "fastapi",
     "starlette",
     "typer",

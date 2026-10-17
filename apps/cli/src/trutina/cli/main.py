@@ -79,7 +79,7 @@ def _should_enter_shell(argv: list[str], typer_app) -> bool:
     """Decide whether argv should drop into the shell or dispatch normally.
 
     Revised from the plan's original D1: a bare invocation enters the
-    shell, matching the ``claude``/``codex``/``mongosh`` pattern. A
+    shell, matching the ``claude``/``codex`` pattern. A
     help flag (``--help``/``-h``) no longer enters the shell -- it
     dispatches straight to Typer so the top-level usage text prints
     and the process exits immediately, the same way those tools'

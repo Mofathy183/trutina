@@ -14,8 +14,6 @@ field-level to report, so it never carries a `details` array at all,
 instead of carrying one that's always None.
 """
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
 from trutina.api.shared.response import BaseResponse
 
@@ -71,7 +69,7 @@ class ErrorResponse(BaseResponse):
             next. None when the message is already self-explanatory.
     """
 
-    success: Literal[False] = False
+    success: bool = False
     error_code: str
     message: str
     hint: str | None = None

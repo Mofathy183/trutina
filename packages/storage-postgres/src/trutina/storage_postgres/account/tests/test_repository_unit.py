@@ -5,7 +5,7 @@ AccountModel row, and deciding which domain conflict a violated unique
 constraint maps to. Every method that actually issues SQL is covered
 under test_repository_integration.py instead, against a real database --
 constructing an AccountModel requires no live connection, so there is no
-stub-settings fixture needed here the way a Beanie-backed adapter would
+stub-settings fixture needed here the way an adapter would
 need.
 """
 

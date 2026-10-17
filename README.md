@@ -26,7 +26,6 @@ flowchart TD
     API[apps/api] --> STORAGE_PG
     API --> OBS
     STORAGE_PG --> CORE[trutina-core]
-    STORAGE_MONGO[trutina-storage-mongo] --> CORE
     STORAGE_PG --> AUTH
     OBS --> CONFIG[trutina-config]
     CORE --> SHARED[trutina-shared]
@@ -34,11 +33,8 @@ flowchart TD
     AUTH[trutina-authentication]
 ```
 
-`trutina-storage-mongo` still implements the account, journal, and posting repository
-contracts and has its own CI lane, but neither `apps/cli` nor `apps/api` depends on it
-today — see Packages & Apps below. `trutina-observability` is consumed only by the two
-presentation apps; every other package emits through the standard library's `logging`
-module directly.
+`trutina-observability` is consumed only by the two presentation apps; every other
+package emits through the standard library's `logging` module directly.
 `trutina-authentication` holds identity and authentication contracts and models only;
 its sole dependent is `trutina-storage-postgres`, for the `UserRepo` adapter.
 
@@ -60,16 +56,11 @@ its sole dependent is `trutina-storage-postgres`, for the `UserRepo` adapter.
   and only `trutina-storage-postgres` depends on it (for the `UserRepo` adapter). Never imported by `trutina-core`. See
   `packages/authentication/README.md` / `CONTEXT.md`.
 - **`trutina-storage-postgres`** — the storage backend `apps/cli` and `apps/api`
-  actually depend on today: SQLAlchemy async + `asyncpg` implementations of the four core repository contracts
+  depend on: SQLAlchemy async + `asyncpg` implementations of the four core repository contracts
   (including the trial balance aggregation) plus `UserRepo` plus Alembic
-  migrations. Logs connection lifecycle events and constructs its engine with`hide_parameters=True`. See `packages/storage-postgres/README.md`/`CONTEXT.md`.
-- **`trutina-storage-mongo`** — the original MongoDB/Beanie adapter. Still implements the
-  account, journal, and posting contracts and is tested independently in its own CI
-  lane, but is no longer a declared dependency of either presentation app since the
-  Postgres cutover. It has no trial balance implementation. See
-  `packages/storage-mongo/README.md` / `CONTEXT.md`.
+  migrations. Logs connection lifecycle events and constructs its engine with `hide_parameters=True`. See `packages/storage-postgres/README.md` / `CONTEXT.md`.
 - **`trutina-config`** — typed, environment-driven settings (`Settings`/`TestSettings`,
-  `MongoSettings`, `PostgresSettings`, `ApiSettings`, `LoggingSettings`, `AuthSettings`). Depends on
+  `PostgresSettings`, `ApiSettings`, `LoggingSettings`, `AuthSettings`). Depends on
   nothing else in the workspace. See `packages/config/README.md` / `CONTEXT.md`.
 - **`trutina-shared`** — the lowest-level package: reusable account-validation rules and
   the shared `ErrorCode`/`AppError`/`ValidationAppError` model. Depends only on
@@ -102,11 +93,10 @@ formatting/lint), `tools/pre-push.sh` (the fast local gate CI also runs first),
 against a real PostgreSQL container, including a check that structured JSON logging
 with a correlation id reaches the container's output).
 
-Root `compose.yml` provisions PostgreSQL (alongside the retained MongoDB service),
-applies the Alembic migration history through a one-shot `migrate` service, and starts
-the API image. `compose.dev.yml` adds `develop.watch` for that image, and
-`tools/docker-dev.sh` wraps it. `.env.example` / `.env.test.example` carry
-`TRUTINA_MONGO__*`, `TRUTINA_POSTGRES__*`, and `TRUTINA_LOGGING__*` variables.
+Root `compose.yml` provisions PostgreSQL, applies the Alembic migration history through
+a one-shot `migrate` service, and starts the API image. `compose.dev.yml` adds
+`develop.watch` for that image, and `tools/docker-dev.sh` wraps it. `.env.example` /
+`.env.test.example` carry `TRUTINA_POSTGRES__*` and `TRUTINA_LOGGING__*` variables.
 
 ## See Also
 

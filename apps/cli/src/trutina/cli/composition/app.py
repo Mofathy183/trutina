@@ -59,14 +59,15 @@ def main_callback(ctx: typer.Context) -> None:
     The guard exists as an explicit fallback and test seam: callers that
     invoke ``app`` through ``CliRunner`` without supplying ``obj=``
     (i.e. outside ``main.py``'s managed lifecycle) still get a usable
-    ``CliContext`` here. Building it here still performs no I/O --
+    ``CliContext`` here.
+    Building it here still performs no I/O --
     ``CliContext``'s own accessors remain the only place that lazily
-    open a MongoDB connection -- but a context built via this fallback
+    open a PostgreSQL connection -- but a context built via this fallback
     path is *not* wrapped in ``main.py``'s ``async with`` block, so
     nothing calls ``aclose()`` on it afterward. Only rely on this
     fallback with a context that can never open a real connection (see
     ``fake_cli_context`` / ``make_fake_cli_context``); never with a path
-    that might lazily touch MongoDB.
+    that might lazily touch PostgreSQL.
 
     Click/Typer resolves eager options such as ``--help`` before
     invoking this callback, so ``trutina --help`` never reaches this

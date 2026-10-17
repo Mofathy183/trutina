@@ -1,4 +1,4 @@
-"""Integration tests for the account router against real MongoDB.
+"""Integration tests for the account router.
 
 One happy path + one conflict path per route is enough here -- the
 unit tier (test_router_unit.py) already walks every validation branch.

@@ -4,12 +4,11 @@ For usage, see [README.md](README.md). This document explains why, not how.
 
 ## Why this architecture was chosen
 
-Trutina has multiple applications (`trutina-cli`, `trutina-api`) and storage
-adapters (`trutina-storage-mongo`, `trutina-storage-postgres`) that all need the
-same categories of configuration — a Mongo connection, a PostgreSQL connection,
-API bind settings, and (as of the logging rollout) a logging pipeline
-configuration — sourced the same way. The alternative (`os.environ` reads
-scattered across each app) would mean re-deriving env-var naming, dotenv
+Trutina has multiple applications (`trutina-cli`, `trutina-api`) and a storage
+adapter (`trutina-storage-postgres`) that all need the same categories of
+configuration — a PostgreSQL connection, API bind settings, and a logging
+pipeline configuration — sourced the same way. The alternative (`os.environ`
+reads scattered across each app) would mean re-deriving env-var naming, dotenv
 loading, and test/production isolation independently in every consumer, with
 no guarantee they'd agree on a prefix convention or a nesting delimiter.
 
@@ -23,13 +22,13 @@ that.
 
 ## Alternatives considered
 
-- **One flat `Settings` model with no nesting** (`mongo_uri`, `mongo_db`,
-  `postgres_uri`, `api_host`, `api_port`, `logging_level` as top-level fields).
-  Rejected: as the number of settings groups grows — `PostgresSettings` and
-  `LoggingSettings` both joining `MongoSettings`/`ApiSettings` are confirmed
-  examples of this happening — a flat model becomes an undifferentiated field
+- **One flat `Settings` model with no nesting** (`postgres_uri`, `api_host`,
+  `api_port`, `logging_level` as top-level fields).
+  Rejected: as the number of settings groups grows — `LoggingSettings`
+  joining `PostgresSettings` and `ApiSettings` is a confirmed example of this
+  happening — a flat model becomes an undifferentiated field
   list with no way to tell which fields belong to which subsystem at a glance.
-  Nesting (`settings.mongo.uri`, `settings.postgres.uri`, `settings.api.port`,
+  Nesting (`settings.postgres.uri`, `settings.api.port`,
   `settings.logging.level`) keeps each group's fields visibly grouped and
   independently reusable — a storage adapter only ever needs its own nested
   settings object, not the whole `Settings` object, and `trutina-observability`
@@ -58,9 +57,9 @@ that.
   explicitly clear the cache, which is why the isolation fixture exists as
   shared test infrastructure rather than being left to each test file to
   remember.
-- **Nested settings models (`MongoSettings`, `ApiSettings`,
-  `PostgresSettings`, `LoggingSettings`, `AuthSettings`) are plain `BaseModel`, not
-  `BaseSettings`.** Confirmed in source: none of the five defines a
+- **Nested settings models (`ApiSettings`, `PostgresSettings`,
+  `LoggingSettings`, `AuthSettings`) are plain `BaseModel`, not
+  `BaseSettings`.** Confirmed in source: none of the four defines a
   `model_config`/`SettingsConfigDict`. Only the root `Settings`/`TestSettings`
   classes own env-prefix and dotenv-file configuration. This means a nested
   settings object can never be constructed standalone from the environment —
@@ -71,7 +70,7 @@ that.
 
 ## Design decisions future contributors should preserve
 
-- Every settings group (`MongoSettings`, `ApiSettings`, `PostgresSettings`,
+- Every settings group (`ApiSettings`, `PostgresSettings`,
   `LoggingSettings`, `AuthSettings`, and any future addition) stays a plain `BaseModel`
   nested inside `Settings` — never its own independently-loaded
   `BaseSettings`.
@@ -130,7 +129,7 @@ leaving it `str`-only and hoping every caller remembers to convert.
 - **No I/O beyond dotenv-file reads performed by `pydantic-settings`
   itself.** This package must never open a network connection, read a
   database, or otherwise perform work beyond parsing configuration —
-  confirmed, none of `base.py`/`mongo.py`/`api.py`/`postgres.py`/`logging.py`
+  confirmed, none of `base.py`/`api.py`/`postgres.py`/`logging.py`
   perform any I/O of their own.
 - **Production and test configuration must remain namespace-isolated.**
   `TRUTINA_` vs. `TRUTINA_TEST_`, `.env` vs. `.env.test`. A change that lets
@@ -147,21 +146,21 @@ leaving it `str`-only and hoping every caller remembers to convert.
 ## Forbidden dependencies
 
 - Any other `trutina-*` workspace package (`trutina-core`,
-  `trutina-storage-mongo`, `trutina-storage-postgres`, `trutina-cli`,
-  `trutina-api`, `trutina-observability`). This package is a dependency root;
+  `trutina-storage-postgres`, `trutina-cli`, `trutina-api`,
+  `trutina-observability`). This package is a dependency root;
   nothing here may depend on anything downstream of it — including
   `trutina-observability`, which depends on this package, never the reverse.
-- Any driver or client library for a specific backend (`pymongo`, `beanie`,
-  `sqlalchemy`, `asyncpg`, an HTTP client, `structlog`, etc.) — this package
+- Any driver or client library for a specific backend (`sqlalchemy`,
+  `asyncpg`, an HTTP client, `structlog`, etc.) — this package
   describes configuration shape, it does not use the configuration to
   connect to anything or to configure a logging pipeline itself.
 
 ## Layering rules
 
 `trutina-config` has no internal layers of its own beyond five sibling files
-(`mongo.py`, `postgres.py`, `api.py`, `logging.py`, `base.py`) plus
+(`postgres.py`, `api.py`, `logging.py`, `auth.py`, `base.py`) plus
 `__init__.py`. The only ordering rule: `base.py` imports from
-`mongo.py`/`postgres.py`/`api.py`/`logging.py` (to nest them into `Settings`),
+`postgres.py`/`api.py`/`logging.py`/`auth.py` (to nest them into `Settings`),
 never the reverse — a nested settings module must never import the root
 `Settings`/`TestSettings` classes.
 
@@ -172,12 +171,12 @@ never the reverse — a nested settings module must never import the root
 2. `pydantic-settings` reads the relevant dotenv file (if present) and
    overlays matching `TRUTINA_`/`TRUTINA_TEST_`-prefixed environment
    variables.
-3. Nested fields (`mongo`, `postgres`, `api`, `logging`) are populated from
-   double-underscore-delimited variables (`TRUTINA_MONGO__URI`,
-   `TRUTINA_POSTGRES__URI`, `TRUTINA_LOGGING__LEVEL`) or fall back to each
+3. Nested fields (`postgres`, `api`, `logging`, `auth`) are populated from
+   double-underscore-delimited variables (`TRUTINA_POSTGRES__URI`,
+   `TRUTINA_LOGGING__LEVEL`) or fall back to each
    nested model's own `Field(default=...)` values if unset.
 4. The resulting `Settings`/`TestSettings` instance is handed to whatever
-   needs it (`connect(settings.mongo)`, `connect(settings.postgres)`,
+   needs it (`connect(settings.postgres)`,
    `uvicorn.run(host=settings.api.host, ...)`,
    `configure_logging(settings.logging, app=...)`), by the caller — this
    package never passes its own output anywhere itself.
@@ -191,8 +190,8 @@ persists settings, or mutates its own output after construction.
 ## Extension points
 
 `PostgresSettings` and `LoggingSettings` are both confirmed, already-realized
-examples of the pattern below (added alongside `MongoSettings`/`ApiSettings`
-during the Postgres migration and the logging rollout, respectively) —
+examples of the pattern below (added alongside `ApiSettings` during the
+Postgres migration and the logging rollout, respectively) —
 follow the same shape for anything added after them:
 
 - New settings groups: add a `BaseModel` file, nest it into `Settings` with
@@ -224,8 +223,8 @@ follow the same shape for anything added after them:
   package's source suggests otherwise; this is a genuine absence, not
   scaffolding for something partially built.
 - This package's own test coverage is confirmed present:
-  `packages/config/src/trutina/config/tests/{test_mongo,test_api,
-test_postgres,test_settings,test_logging}.py` cover each nested settings
+  `packages/config/src/trutina/config/tests/{test_api,test_postgres,
+test_settings,test_logging}.py` cover each nested settings
   group's defaults/overrides, confirm none is a `BaseSettings` subclass, and
   pin `Settings`/`TestSettings` namespace isolation, `get_settings()`'s cache
   behavior, and (as of `test_logging.py`) `LoggingSettings`'s validation
@@ -252,10 +251,10 @@ test_postgres,test_settings,test_logging}.py` cover each nested settings
   Only `Settings`/`TestSettings` should ever own environment-loading
   configuration — a nested model added as `BaseSettings` will silently
   ignore the parent's prefix rules.
-- **Assuming this package validates connectivity.** `MongoSettings`/
-  `PostgresSettings` describe a URI/DB name; neither verifies a database
-  instance is reachable at that URI — that check belongs to the respective
-  storage adapter's own `connect()`. Likewise, `LoggingSettings` describes
+- **Assuming this package validates connectivity.** `PostgresSettings`
+  describes a URI; it does not verify a database
+  instance is reachable at that URI — that check belongs to the storage
+  adapter's own `connect()`. Likewise, `LoggingSettings` describes
   shape only — it never opens a file handle or installs a logging handler
   itself; that belongs to `trutina-observability`'s `configure_logging()`.
 - **Typing a new path-like field as bare `str` without the coercion

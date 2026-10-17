@@ -57,7 +57,6 @@ class Base(DeclarativeBase):
 # multi-currency feature) is a one-line edit here, not an audit of every
 # model file. This is also the thing that makes Trial Balance a plain
 # `SUM(...) GROUP BY account`: numeric columns are natively aggregatable,
-# unlike the decimal-as-string encoding the Mongo adapter uses.
 Money = Annotated[Decimal, mapped_column(Numeric(18, 2), nullable=False)]
 
 

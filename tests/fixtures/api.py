@@ -1,9 +1,7 @@
 """Shared API-layer test fixtures.
 
-Phase 1 of the API testing foundation (see `Trutina API Testing
-Architecture`, Section 4). This module intentionally implements only
+This module intentionally implements only
 the fixtures needed to test the composition root
-(`api/composition/{container,app,dependencies,bootstrap}.py`):
 
     fake_container
     api_app
@@ -21,18 +19,6 @@ mirroring the CLI's own fake/real fixture split
 (`tests/fixtures/cli.py`):
 
     fake_container -> api_app -> api_client
-    test_settings + mongo_connection + clean_db -> real_api_app -> real_api_client
-
-Unit-tier fixtures (`fake_container`, `api_app`, `api_client`) never
-touch MongoDB — `api_app` attaches `fake_container` to
-`app.state.container` directly and never enters `create_app()`'s real
-lifespan, so no connection is ever opened.
-
-Integration-tier fixtures (`real_api_app`, `real_api_client`) enter the
-real lifespan from `bootstrap.make_lifespan()` against `test_settings`,
-backed by `clean_db` (which in turn depends on `beanie_init` and
-`mongo_connection`), mirroring `real_cli_state` in
-`tests/fixtures/cli.py`.
 
 `fake_container.trial_balance_service` is wired to an empty
 FakeTrialBalanceRepo by default — unlike `posting_service`, this fake
@@ -86,7 +72,7 @@ def fake_container() -> Container:
     JournalService depends on AccountService, PostingService depends on
     JournalService. TrialBalanceService has no peer-service dependency,
     so it is wired independently, exactly as `build_container()` does.
-    No repository here can open a MongoDB connection, so nothing built
+    No repository here can open a connection, so nothing built
     on top of this fixture can perform I/O.
     """
     account_repo = make_fake_account_repo()
@@ -123,8 +109,8 @@ def api_app(fake_container: Container) -> FastAPI:
     the app, but that lifespan is never entered here — the app object
     is used directly, and `fake_container` is attached to
     `app.state.container` by hand, exactly the way `fake_cli_context`
-    bypasses `CliContext`'s lazy connection machinery entirely. No
-    MongoDB connection is ever opened by this fixture.
+    bypasses `CliContext`'s lazy connection machinery entirely.
+    No connection is ever opened by this fixture.
     """
     app = create_app(TestSettings())
     app.state.container = fake_container

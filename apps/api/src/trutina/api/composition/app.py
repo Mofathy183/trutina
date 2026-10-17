@@ -3,7 +3,7 @@
 app.py wires the lifespan (bootstrap.py) to a FastAPI instance,
 configures process-wide logging, attaches correlation-id middleware,
 and registers routers. It performs no business logic, constructs no
-services or repositories directly, and never imports Mongo-specific
+services or repositories directly, and never imports Postgres-specific
 infrastructure types — the same rule cli/app.py already follows for the
 Typer app.
 

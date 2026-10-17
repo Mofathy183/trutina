@@ -163,10 +163,8 @@ module that imports `trutina.storage_postgres` types. First repository use
 calls `connect(self._settings.postgres)`, which verifies the connection
 and translates failures into `AppError.storage_timeout` /
 `AppError.storage_unavailable`. There is no import-linter contract
-forbidding SQLAlchemy/asyncpg (or Beanie/PyMongo) in `trutina.cli` (the
-forbidden contract applies to `trutina.core` only). Stale Mongo/Beanie
-wording remains in some CLI module docstrings (`bootstrap.py`, `app.py`);
-live construction is PostgreSQL.
+forbidding SQLAlchemy/asyncpg in `trutina.cli` (the forbidden contract
+applies to `trutina.core` only).
 
 ## Why Caller-Injected Repositories Are Never Torn Down
 
@@ -381,8 +379,8 @@ imports only `configure_logging`/`correlation_scope` from
 
 **Direction:** enforced by the workspace's root `pyproject.toml`
 import-linter `layers` contract:
-`trutina.cli | trutina.api → trutina.storage_mongo | trutina.storage_postgres
-| trutina.observability → trutina.core → trutina.shared | trutina.config`.
+`trutina.cli | trutina.api → trutina.storage_postgres | trutina.observability
+→ trutina.core → trutina.shared | trutina.config`.
 This package sits at the top; nothing downstream may import from it.
 
 ## Layering Within This Package

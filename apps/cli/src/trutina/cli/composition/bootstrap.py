@@ -3,15 +3,15 @@
 ``build_context()`` is the only function defined here. It resolves which
 ``Settings`` instance to use and constructs a ``CliContext`` from it.
 
-Constructing a ``CliContext`` performs no I/O of its own -- no MongoDB
-connection, no Beanie initialization -- regardless of what gets imported
-to define the types involved. Importing this module transitively imports
-``trutina.cli.context``, which in turn imports the concrete MongoDB
-repository and document classes it may later construct; those imports
-happen at module load time and are not I/O. The actual network
-connection is only opened the first time a command calls one of
-``CliContext``'s ``get_*_repo()``/``get_*_service()`` accessors -- see
-``context.py`` for that boundary.
+Constructing a ``CliContext`` performs no I/O of its own -- no
+PostgreSQL connection is opened -- regardless of what gets imported to
+define the types involved. Importing this module transitively imports
+``trutina.cli.context``, which in turn imports the concrete PostgreSQL
+repository classes it may later construct; those imports happen at
+module load time and are not I/O. The actual network connection is only
+opened the first time a command calls one of ``CliContext``'s
+``get_*_repo()``/``get_*_service()`` accessors -- see ``context.py`` for
+that boundary.
 
 Callers decide which ``Settings`` subclass to use and pass it in
 explicitly. In production, ``main.py`` calls ``build_context()`` with no
@@ -30,9 +30,9 @@ def build_context(settings: Settings | None = None) -> CliContext:
     """Construct a fresh ``CliContext`` for one CLI invocation.
 
     Performs no I/O. The entire body is construction only -- opening a
-    MongoDB connection, initializing Beanie, and building repositories or
-    services are all deferred to ``CliContext``'s own lazy accessors and
-    happen only on first use, never here.
+    PostgreSQL connection and building repositories or services are all
+    deferred to ``CliContext``'s own lazy accessors and happen only on
+    first use, never here.
 
     Args:
         settings: Configuration to use for this invocation. If ``None``,

@@ -1,4 +1,4 @@
-"""Integration tests for the posting router against real MongoDB.
+"""Integration tests for the posting router.
 
 DEVIATION FROM STANDARD GUIDANCE: the testing prompt's usual pattern is
 to seed integration tests "through the real endpoint, not a repo
@@ -6,7 +6,7 @@ shortcut." That isn't possible here -- there is no account or
 journal-entry HTTP route mounted anywhere in this API yet (only
 `system` and this `posting` feature exist), so a journal entry cannot
 be created over HTTP at all. Seeding therefore goes through
-real_api_app.state.container's real, Mongo-backed account_service and
+real_api_app.state.container's real, account_service and
 journal_service directly -- the same services the HTTP routes under
 test ultimately call -- rather than bypassing the stack entirely with
 a raw repo. Once account/journal-entry routes exist, this seeding
@@ -66,7 +66,7 @@ class TestPostJournalEntryRoute:
 
 @pytest.mark.integration
 class TestGetPostingsByAccountRoute:
-    async def test_returns_postings_persisted_via_real_mongo(
+    async def test_returns_postings_persisted_via_real_postgres(
         self, real_api_client, real_api_app
     ):
         await _seed_accounts(real_api_app)
@@ -85,7 +85,7 @@ class TestGetPostingsByAccountRoute:
 
 @pytest.mark.integration
 class TestGetPostingsByJournalNumberRoute:
-    async def test_returns_postings_persisted_via_real_mongo(
+    async def test_returns_postings_persisted_via_real_postgres(
         self, real_api_client, real_api_app
     ):
         await _seed_accounts(real_api_app)

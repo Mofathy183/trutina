@@ -287,10 +287,9 @@ the one module permitted to see `PostgresConnection`/`PostgresExecutor`/
 (`configure_logging`, `CorrelationIdMiddleware`).
 
 **Direction:** enforced by the workspace's root `pyproject.toml` import-linter
-`layers` contract (`trutina.cli | trutina.api → trutina.storage_mongo |
+`layers` contract (`trutina.cli | trutina.api →
 trutina.storage_postgres | trutina.observability → trutina.core →
-trutina.shared | trutina.config`). This package sits at the top beside
-the CLI; nothing downstream may import from it.
+trutina.shared | trutina.config`).
 
 ## Layering Within This Package
 

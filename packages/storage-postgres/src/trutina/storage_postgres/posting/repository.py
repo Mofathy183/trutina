@@ -37,8 +37,7 @@ class PostgresPostingRepo(PostingRepo):
     """PostingRepo implementation backed by a PostgreSQL postings table.
 
     save_many() writes an entire batch in one transaction, one commit --
-    the real transactional guarantee the original Mongo adapter's
-    single insert_many() (no ClientSession) never had.
+    the real transactional guarantee
 
     Attributes:
         _session_factory: Produces a new AsyncSession bound to the

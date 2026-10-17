@@ -15,7 +15,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from .api import ApiSettings
 from .auth import AuthSettings
 from .logging import LoggingSettings
-from .mongo import MongoSettings
 from .postgres import PostgresSettings
 
 Environment = Literal["production", "development", "test"]
@@ -46,7 +45,6 @@ class Settings(BaseSettings):
     )
 
     environment: Environment = Field(default="production")
-    mongo: MongoSettings = Field(default_factory=MongoSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)

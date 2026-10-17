@@ -1,19 +1,18 @@
-"""Integration tests for JournalService against real MongoDB infrastructure.
+"""Integration tests for JournalService against real infrastructure.
 
 Does NOT re-verify balance/line-count/date validation (covered by
-``test_service.py`` against ``FakeAccountRepo``/``FakeJournalRepo``) or
-Mongo document mapping (covered by
-``infrastructure/mongo/journal/tests/test_repository_integration.py``).
+``test_service.py`` against ``FakeAccountRepo``/``FakeJournalRepo``) or document mapping (covered by
+``infrastructure/journal/tests/test_repository_integration.py``).
 
 These tests exist to prove three seams the unit tests cannot reach because
 they use fakes:
 
 1. Account references resolve against a chart built from a *real*
     ``AccountService`` snapshot, not an in-memory ``FakeAccountRepo`` dict.
-2. Journal-number allocation goes through MongoDB's real atomic counter
+2. Journal-number allocation goes through real atomic counter
     (``findOneAndUpdate`` / ``$inc``) rather than ``FakeJournalRepo``'s
     plain incrementing int.
-3. A journal entry built, persisted, and re-fetched through real Mongo
+3. A journal entry built, persisted, and re-fetched through real
     still reports as balanced and matches what was submitted.
 """
 

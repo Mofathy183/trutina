@@ -41,11 +41,6 @@ packages/
 │       ├── __init__.py
 │       ├── {identity,credentials,tokens,shared}/   # contracts grouped by role
 │       └── tests/
-├── storage-mongo/       trutina-storage-mongo
-│   └── src/trutina/storage_mongo/
-│       ├── {account,journal,posting}/   # document.py, repository.py
-│       ├── shared/                       # MongoExecutor, TimestampedDocument
-│       └── connection.py, error_translation.py
 ├── storage-postgres/    trutina-storage-postgres
 │   └── src/trutina/storage_postgres/
 │       ├── {account,journal,posting,trial_balance}/   # repository.py
@@ -54,7 +49,7 @@ packages/
 │       ├── models.py
 │       └── alembic.ini, alembic/
 ├── config/              trutina-config
-│   └── src/trutina/config/   # base.py, mongo.py, postgres.py, api.py, logging.py
+│   └── src/trutina/config/   # base.py, postgres.py, api.py, logging.py
 └── shared/              trutina-shared
     └── src/trutina/shared/   # rule.py, util.py, errors/{codes,errors,translators}.py
 
@@ -62,7 +57,7 @@ tests/                   # root-level shared fixtures/factories/fakes only — n
 ```
 
 Package/app ownership: `apps/cli/pyproject.toml`, `apps/api/pyproject.toml`,
-`packages/{core,storage-mongo,storage-postgres,config,shared,observability,authentication}/pyproject.toml`
+`packages/{core,storage-postgres,config,shared,observability,authentication}/pyproject.toml`
 each declare that package's own dependencies independently; the root
 `pyproject.toml` declares the workspace
 (`tool.uv.workspace.members = ["apps/*", "packages/*"]`) and the import-linter
@@ -77,7 +72,7 @@ CI (`uv run lint-imports`), not just documented convention:
 trutina.cli | trutina.api
         │
         ▼
-trutina.storage_mongo | trutina.storage_postgres | trutina.observability
+trutina.storage_postgres | trutina.observability
         │
         ▼
 trutina.core | trutina.authentication
@@ -87,20 +82,19 @@ trutina.shared | trutina.config
 ```
 
 - **`type = "layers"`**, root packages `["trutina"]`: the four-tier chain above.
-  Both storage backends and `trutina.observability` sit at the same layer
-  position — the contract permits all three, not just the storage pair.
-- **`type = "forbidden"`** (two contracts, storage-specific): `trutina.core` may
-  never import `beanie` or `pymongo`, and separately may never import
+  `trutina.storage_postgres` and `trutina.observability` sit at the same layer
+  position.
+- **`type = "forbidden"`** (storage-specific): `trutina.core` may never import
   `sqlalchemy` or `asyncpg`, anywhere, at all. Stronger than "core sits above
-  storage in the layer chain" — it asserts core has zero awareness that either
-  backend exists.
+  storage in the layer chain" — it asserts core has zero awareness that the
+  storage backend exists.
 - **`type = "forbidden"` ("Emitters use stdlib logging only")**: `trutina.core`,
-  `trutina.shared`, `trutina.config`, `trutina.authentication`, `trutina.storage_mongo`, and
+  `trutina.shared`, `trutina.config`, `trutina.authentication`, and
   `trutina.storage_postgres` may never import `structlog` or
   `trutina.observability`. Every emitter outside the two presentation apps uses
   the standard library's `logging` module exclusively.
 - **`type = "forbidden"` ("Observability stays generic")**: `trutina.observability`
-  may never import `trutina.core`, either storage package, `fastapi`,
+  may never import `trutina.core`, the storage package, `fastapi`,
   `starlette`, `typer`, or `rich`. It has no domain vocabulary and no
   presentation-framework awareness — the mirror image of the previous contract.
 - **`type = "layers"`**, scoped inside core: `trutina.core.posting → trutina.core.journal
@@ -112,8 +106,8 @@ trutina.shared | trutina.config
 - `trutina.core` and `trutina.authentication` are independent siblings in the
   `layers` contract: neither may import the other. A separate `forbidden`
   contract states core has zero authentication awareness, and another keeps
-  `trutina.authentication` free of `sqlalchemy`, `asyncpg`, `beanie`, `pymongo`,
-  `fastapi`, `starlette`, `typer` and `rich`.
+  `trutina.authentication` free of `sqlalchemy`, `asyncpg`, `fastapi`,
+  `starlette`, `typer` and `rich`.
 
 Confirmed per-package dependency facts (from each package's own `pyproject.toml`,
 cross-checked against its README/CONTEXT):
@@ -125,16 +119,11 @@ cross-checked against its README/CONTEXT):
 | `trutina-core`             | `trutina-shared`                                                                      | `pydantic`                                 |
 | `trutina-observability`    | `trutina-config`                                                                      | `structlog`, `platformdirs`                |
 | `trutina-authentication`   | _(none)_                                                                              | `pydantic`                                 |
-| `trutina-storage-mongo`    | `trutina-shared`, `trutina-core`, `trutina-config`                                    | `beanie`, `pymongo`                        |
 | `trutina-storage-postgres` | `trutina-shared`, `trutina-core`, `trutina-config`, `trutina-authentication`          | `sqlalchemy`, `asyncpg`, `alembic`         |
 | `trutina-cli`              | `trutina-core`, `trutina-storage-postgres`, `trutina-config`, `trutina-observability` | `typer`, `rich`, `anyio`, `prompt-toolkit` |
 | `trutina-api`              | `trutina-core`, `trutina-storage-postgres`, `trutina-config`, `trutina-observability` | `fastapi[standard]`, `uvicorn[standard]`   |
 
-Neither `trutina-cli` nor `trutina-api` declares a dependency on `trutina-storage-mongo`
-today — both migrated to `trutina-storage-postgres`. `trutina-storage-mongo` remains a
-workspace member implementing the same three repository contracts, with its own CI lane
-(`_test-layer-mongo.yml`), but is not consumed by either presentation app. `trutina-cli`
-and `trutina-api` never depend on each other. `trutina-core` never depends on
+`trutina-cli` and `trutina-api` never depend on each other. `trutina-core` never depends on
 `trutina-config`. Only `trutina-cli` and `trutina-api` depend on
 `trutina-observability` — every other workspace package emits through the
 standard library alone.
@@ -154,8 +143,8 @@ adapter (CLI, API) owns its own message/hint catalog keyed by `ErrorCode`. See
 ### `trutina.config`
 
 Typed settings loaded from environment variables and dotenv files
-(`TRUTINA_`/`TRUTINA_TEST_` prefixes), including `MongoSettings`, `PostgresSettings`,
-`ApiSettings`, and `LoggingSettings`, `AuthSettings`. No I/O beyond dotenv reads; no awareness of
+(`TRUTINA_`/`TRUTINA_TEST_` prefixes), including `PostgresSettings`,
+`ApiSettings`, `LoggingSettings` and `AuthSettings`. No I/O beyond dotenv reads; no awareness of
 what consumes the settings it produces — `LoggingSettings` describes shape only
 and performs no logging setup of its own. See `packages/config/README.md` /
 `CONTEXT.md`.
@@ -169,7 +158,7 @@ services (`AccountService`, `JournalService`, `PostingService`,
 contracts plus the read-only `TrialBalanceRepo`. `trial_balance` is a read model: it
 aggregates already-posted ledger data and writes nothing. Storage- and
 transport-agnostic by construction (see the forbidden-imports contracts above,
-which now also cover `structlog`/`trutina.observability`). Each service logs one
+which also cover `structlog`/`trutina.observability`). Each service logs one
 success event through the standard library's `logging` module after a
 state-changing write actually persists, and never on a read or a raised
 `AppError`/`ValidationAppError`. See `packages/core/README.md` / `CONTEXT.md` for
@@ -181,7 +170,7 @@ the full API surface, service maturity table, and internal
 The single place a process configures _where_ its logs go and _what they look
 like_ — `configure_logging()`, `correlation_scope()`, `CorrelationIdMiddleware`.
 Depends only on `trutina.config` (for `LoggingSettings`) and third-party
-`structlog`/`platformdirs`. Never imports `trutina.core`, either storage package,
+`structlog`/`platformdirs`. Never imports `trutina.core`, the storage package,
 or any presentation framework — enforced by the "Observability stays generic"
 contract. Consumed by exactly `trutina.cli` and `trutina.api`, each once at its
 own composition root; every other package emits through plain
@@ -200,33 +189,21 @@ The one storage adapter, `PostgresUserRepo`, lives in `trutina.storage_postgres`
 refresh-token contracts and `LoginAttemptRepo` are provisional until the M3 ADR and
 M2. See `packages/authentication/README.md` / `CONTEXT.md`.
 
-### `trutina.storage_mongo`
-
-One of two packages permitted to implement the core repository contracts against a real
-backend; the only one permitted to import `beanie`/`pymongo`. Implements the account,
-journal, and posting repository contracts against MongoDB, plus `connect()`/
-`disconnect()`/`MongoConnection` and `MongoExecutor` (routes every Beanie call through
-`translate_mongo_errors()`). It has no `TrialBalanceRepo` implementation, by decision:
-new features target PostgreSQL only. Contains no business rules. `connect()`/
-`disconnect()` each log one `db.connected`/`db.disconnected` line via stdlib
-`logging`, never including the connection URI. Not currently depended on by
-`apps/cli` or `apps/api`. See `packages/storage-mongo/README.md` / `CONTEXT.md`.
-Frozen: its journal and posting adapters accept the keyword-only `created_by` from the repository contracts and do not store it, so it records no attribution. Its account adapter has not been changed for the account contract's `created_by`.
-
 ### `trutina.storage_postgres`
 
-The storage backend `apps/cli` and `apps/api` actually construct today. Implements the
-four core repository contracts with SQLAlchemy async + `asyncpg`, plus a
-`PostgresConnection`/`connect()`/`disconnect()` lifecycle, `PostgresExecutor` (storage
-error translation), and its own Alembic migration history. `PostgresTrialBalanceRepo`
-runs one `GROUP BY` aggregation over the existing `postings` table and adds no table or
-migration. Contains no business rules. `connect()`/`disconnect()` each log one
-`db.connected`/`db.disconnected` line via stdlib `logging` (never the connection URI),
-and the engine is constructed with `hide_parameters=True` so a future exception's text
-never includes bound parameter values. Alembic's `env.py` explicitly passes
-`disable_existing_loggers=False` to its `fileConfig()` call, after a confirmed bug
-where the default value silently disabled every non-Alembic-declared Python logger
-mid-process — see `packages/storage-postgres/README.md` / `CONTEXT.md`.
+The storage backend `apps/cli` and `apps/api` construct, and the only package permitted
+to import `sqlalchemy`/`asyncpg`. Implements the four core repository contracts with
+SQLAlchemy async + `asyncpg`, plus a `PostgresConnection`/`connect()`/`disconnect()`
+lifecycle, `PostgresExecutor` (storage error translation), and its own Alembic migration
+history. `PostgresTrialBalanceRepo` runs one `GROUP BY` aggregation over the existing
+`postings` table and adds no table or migration. Contains no business rules.
+`connect()`/`disconnect()` each log one `db.connected`/`db.disconnected` line via stdlib
+`logging` (never the connection URI), and the engine is constructed with
+`hide_parameters=True` so a future exception's text never includes bound parameter
+values. Alembic's `env.py` explicitly passes `disable_existing_loggers=False` to its
+`fileConfig()` call, after a confirmed bug where the default value silently disabled
+every non-Alembic-declared Python logger mid-process — see
+`packages/storage-postgres/README.md` / `CONTEXT.md`.
 `journal_entries` and `postings` carry a nullable `created_by` column recording the actor passed by the services;
 it is not part of any domain model and is never returned by a repository read.
 The account repository's write methods accept `created_by` and do not store it.
@@ -271,10 +248,10 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   keyed by `ErrorCode`.
 - `AppError`/`ValidationAppError` are the only exception types permitted to cross
   any service boundary, in both the CLI and API.
-- Repository adapters (`trutina.storage_mongo`, `trutina.storage_postgres`) never
-  contain business rules; uniqueness checks, cross-aggregate validation, and posting
-  derivation all live in `trutina.core` services.
-- Domain models (`trutina.core`) never import from either storage package,
+- The repository adapter (`trutina.storage_postgres`) never contains business
+  rules; uniqueness checks, cross-aggregate validation, and posting derivation all
+  live in `trutina.core` services.
+- Domain models (`trutina.core`) never import from the storage package,
   `trutina.cli`, `trutina.api`, `trutina.observability`, `trutina.authentication`,
   or `structlog`.
 - Neither presentation app (`cli`, `api`) may import the other.
@@ -290,10 +267,10 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
 
 - `pytest.ini` (root) sets `testpaths = tests apps packages`, `asyncio_mode = auto`,
   and registers markers `unit`, `integration` (speed axis); `core`, `infra`, `cli`,
-  `api`, `shared`, `config`, `observability`, `authentication` (layer axis); `mongo`, `postgres`
+  `api`, `shared`, `config`, `observability`, `authentication` (layer axis); `postgres`
   (backend axis, meaningful only for `infra`-layer tests).
 - Root `conftest.py` registers the shared fixture plugins
-  (`tests.fixtures.{account,posting,journal,mongo,postgres,settings,services,cli,api,logging}`)
+  (`tests.fixtures.{account,posting,journal,postgres,settings,services,cli,api,logging}`)
   and mechanically enforces the marker discipline: every test must declare exactly one
   speed marker by hand; the layer marker is derived automatically from the test file's
   path; an `infra`-layer test must additionally resolve to exactly one backend marker
@@ -313,8 +290,7 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   active workflow, but is imported and called from `apps/cli`'s journal parser —
   unresolved; not re-confirmed against live source in this pass. See
   `PROJECT_CONTEXT.md`.
-- The trial balance covers only accounts with postings and only PostgreSQL. Full-chart
-  output and a MongoDB implementation are not built. See `ROADMAP.md`.
+- The trial balance covers only accounts with postings and only PostgreSQL.
 - Alembic's `fileConfig()` call for `trutina-storage-postgres` migrations now
   explicitly passes `disable_existing_loggers=False`, closing a confirmed bug
   where the default behavior silently disabled every non-Alembic-declared Python

@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 
 class ApiSettings(BaseModel):
-    """API-layer configuration, independent of Mongo/domain settings."""
+    """API-layer configuration, independent of DB/domain settings."""
 
     title: str = Field(
         default="Trutina API",

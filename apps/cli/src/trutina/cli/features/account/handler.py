@@ -24,9 +24,7 @@ async def create_account_handler(
 ) -> AccountViewModel:
     """Create a new account through ``AccountService``.
 
-    Resolves ``AccountService`` from the supplied ``CliContext`` (lazily
-    triggering Mongo connection + Beanie initialization on first use, if
-    not already resolved this invocation) and delegates account creation
+    Resolves ``AccountService`` from the supplied ``CliContext` and delegates account creation
     to it.
 
     Args:

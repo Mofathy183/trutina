@@ -1,4 +1,4 @@
-"""Integration tests for the journal router against real MongoDB.
+"""Integration tests for the journal router.
 
 One happy path + one conflict/error path per route is enough here --
 the unit tier (test_router_unit.py) already walks every validation

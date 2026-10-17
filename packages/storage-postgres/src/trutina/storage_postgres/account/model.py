@@ -23,9 +23,7 @@ guaranteed to agree on every input. Having the database compute its
 own version of the key would let the pre-check in `AccountService` and
 the unique index that actually enforces uniqueness disagree on what
 counts as a duplicate. Computing the key once, in Python, and writing
-it explicitly removes that entire class of bug — mirroring how
-`trutina-storage-mongo`'s `AccountDocument.name_key` already works,
-since Mongo has no generated-column equivalent either.
+it explicitly removes that entire class of bug
 """
 
 from sqlalchemy import BigInteger, CheckConstraint, Text

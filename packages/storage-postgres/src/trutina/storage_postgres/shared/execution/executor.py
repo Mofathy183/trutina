@@ -2,7 +2,7 @@
 
 PostgresExecutor provides the single execution path for all SQLAlchemy
 operations performed by repository implementations, once repository
-implementations exist (Phase 5). Ensures SQLAlchemy/asyncpg-specific
+implementations exist. Ensures SQLAlchemy/asyncpg-specific
 exceptions are translated into AppError before they cross the storage
 boundary, allowing repositories to remain focused on query construction,
 persistence mapping, and repository contract semantics.
@@ -28,10 +28,8 @@ Not responsibilities
 
 Future evolution
 ----------------
-Once repository implementations exist (Phase 5), this class's shape may
-need to change: SQLAlchemy's unit-of-work is session-scoped, unlike
-Beanie's global Document registration, so run() may eventually need to
-accept or hold an AsyncSession rather than only a bare coroutine. That
+Once repository implementations exist, this class's shape may
+need to change: SQLAlchemy's unit-of-work is session-scoped, That
 shape is deliberately left open rather than guessed at here.
 """
 

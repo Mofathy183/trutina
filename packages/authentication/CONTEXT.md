@@ -81,7 +81,7 @@ These may change before they are implemented:
 
 **Allowed:** `pydantic` and the standard library. May also depend on `trutina-shared` and `trutina-config` (the layers below it) if a later change needs them.
 
-**Forbidden:** `trutina.core`; `trutina.storage_mongo`, `trutina.storage_postgres`, `trutina.observability`, `structlog`; `sqlalchemy`, `asyncpg`, `beanie`, `pymongo`, `fastapi`, `starlette`, `typer`, `rich`. Enforced by the workspace import-linter: core and authentication are independent siblings in the layers contract, and dedicated forbidden contracts cover the rest. Like every package outside the two apps, it emits through stdlib `logging` only.
+**Forbidden:** `trutina.core`; `trutina.storage_postgres`, `trutina.observability`, `structlog`; `sqlalchemy`, `asyncpg`, `fastapi`, `starlette`, `typer`, `rich`. Enforced by the workspace import-linter: core and authentication are independent siblings in the layers contract, and dedicated forbidden contracts cover the rest. Like every package outside the two apps, it emits through stdlib `logging` only.
 
 **Direction:** storage packages and the apps may import this package; it imports nothing above `shared`/`config`.
 `trutina-storage-postgres` imports it, forUserRepo.
