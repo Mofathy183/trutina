@@ -59,7 +59,7 @@ class TestCreateApp:
         assert first is not second
 
     def test_independent_apps_do_not_share_state_container(self, test_settings):
-        """Guards the Beanie global-registration isolation concern named
+        """Guards the global-registration isolation concern named
         in create_app()'s own docstring: two app instances must not leak
         mutable state (e.g. app.state.container) between each other.
         """
