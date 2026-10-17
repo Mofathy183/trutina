@@ -8,16 +8,16 @@ CLI and API both need the same formatter chain, redaction, correlation handling,
 
 ## Why Emit Side and Configure Side Are Split
 
-Every other package (`trutina-core`, `trutina-shared`, `trutina-config`, both storage packages) emits through plain `logging.getLogger(__name__)` calls and imports nothing from this package or from `structlog`. Two forbidden import-linter contracts make this structural, not conventional:
+Every other package (`trutina-core`, `trutina-shared`, `trutina-config`, `trutina-storage-postgres`) emits through plain `logging.getLogger(__name__)` calls and imports nothing from this package or from `structlog`. Two forbidden import-linter contracts make this structural, not conventional:
 
-- **"Emitters use stdlib logging only"** — `trutina.core`, `trutina.shared`, `trutina.config`, `trutina.storage_mongo`, `trutina.storage_postgres` may never import `structlog` or `trutina.observability`.
-- **"Observability stays generic"** — `trutina.observability` may never import `trutina.core`, either storage package, `fastapi`, `starlette`, `typer`, or `rich`.
+- **"Emitters use stdlib logging only"** — `trutina.core`, `trutina.shared`, `trutina.config`, `trutina.storage_postgres` may never import `structlog` or `trutina.observability`.
+- **"Observability stays generic"** — `trutina.observability` may never import `trutina.core`, `trutina.storage_postgres`, `fastapi`, `starlette`, `typer`, or `rich`
 
 This is what lets `trutina-core` change its logging output format without every service file changing, and what keeps this package honest about being domain-agnostic — it has no `ErrorCode` awareness, no accounting vocabulary, nothing that would tie it to Trutina's business domain specifically.
 
 ## Why `structlog.configure()` Is Never Called
 
-`configure_logging()` attaches a `structlog.stdlib.ProcessorFormatter` to a stdlib `logging.Handler`. `structlog.configure()` itself is never invoked. This means every `logging.getLogger(__name__).info(...)` call anywhere in the codebase — including from third-party libraries like uvicorn and SQLAlchemy — is formatted by the same pipeline with zero per-caller `structlog` import. The alternative (calling `structlog.configure()` and having callers use `structlog.get_logger()`) would have required every emitting module across five packages to add a `structlog` dependency and would have made third-party library output a second-class citizen, formatted differently from first-party output.
+`configure_logging()` attaches a `structlog.stdlib.ProcessorFormatter` to a stdlib `logging.Handler`. `structlog.configure()` itself is never invoked. This means every `logging.getLogger(__name__).info(...)` call anywhere in the codebase — including from third-party libraries like uvicorn and SQLAlchemy — is formatted by the same pipeline with zero per-caller `structlog` import. The alternative (calling `structlog.configure()` and having callers use `structlog.get_logger()`) would have required every emitting module across every emitting package to add a `structlog` dependency and would have made third-party library output a second-class citizen, formatted differently from first-party output.
 
 ## Why Idempotency Matters
 
@@ -27,13 +27,13 @@ This is what lets `trutina-core` change its logging output format without every 
 
 Lifecycle and transport events, fixed names:
 
-| Event                              | Emitted by                             | When                                                                                                                                                      |
-| ---------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app.started` / `app.stopped`      | API lifespan (`bootstrap.py`)          | Once per process, at startup/shutdown.                                                                                                                    |
-| `db.connected` / `db.disconnected` | Both storage packages' `connection.py` | Once per connection open/close. Context never includes the URI.                                                                                           |
-| `request.completed`                | `CorrelationIdMiddleware`              | Once per HTTP request, even if the handler raised.                                                                                                        |
-| `request.failed`                   | API exception handlers                 | Once per request that ended in a translated error. INFO under HTTP 500, ERROR (with traceback) at or above it.                                            |
-| `command.failed`                   | CLI `error_boundary()`                 | Once per caught CLI command failure. INFO for expected domain errors; ERROR (with traceback) for `STORAGE_UNAVAILABLE`/`STORAGE_TIMEOUT`/`UNKNOWN_ERROR`. |
+| Event                              | Emitted by                                   | When                                                                                                                                                      |
+| ---------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app.started` / `app.stopped`      | API lifespan (`bootstrap.py`)                | Once per process, at startup/shutdown.                                                                                                                    |
+| `db.connected` / `db.disconnected` | `trutina-storage-postgres`'s `connection.py` | Once per connection open/close. Context never includes the URI.                                                                                           |
+| `request.completed`                | `CorrelationIdMiddleware`                    | Once per HTTP request, even if the handler raised.                                                                                                        |
+| `request.failed`                   | API exception handlers                       | Once per request that ended in a translated error. INFO under HTTP 500, ERROR (with traceback) at or above it.                                            |
+| `command.failed`                   | CLI `error_boundary()`                       | Once per caught CLI command failure. INFO for expected domain errors; ERROR (with traceback) for `STORAGE_UNAVAILABLE`/`STORAGE_TIMEOUT`/`UNKNOWN_ERROR`. |
 
 Business events, added in Phase 5, success-only:
 
@@ -74,11 +74,11 @@ Which `ErrorCode`s count as an incident worth a traceback is defined independent
 
 **Allowed** (per `packages/observability/pyproject.toml`): `trutina-config`, `structlog`, `platformdirs`.
 
-**Forbidden:** `trutina-core`, either storage package, `fastapi`, `starlette`, `typer`, `rich` — enforced by the "Observability stays generic" import-linter contract.
+**Forbidden:** `trutina-core`, `trutina-storage-postgres`, `fastapi`, `starlette`, `typer`, `rich` — enforced by the "Observability stays generic" import-linter contract.
 
 ## Common Mistakes to Avoid
 
-- Importing `trutina.observability` or `structlog` from `trutina-core`, `trutina-shared`, `trutina-config`, or either storage package — caught immediately by `lint-imports`.
+- Importing `trutina.observability` or `structlog` from `trutina-core`, `trutina-shared`, `trutina-config`, or `trutina-storage-postgres` — caught immediately by `lint-imports`.
 - Calling `structlog.configure()` anywhere. This package's entire design assumes it is never called.
 - Logging an amount (`debit_amount`, `credit_amount`, `balance`, etc.) at INFO or above — the redaction processor drops known monetary keys above DEBUG, but a new field name that doesn't match `_MONETARY_KEYS` won't be caught automatically; add it to that set if a service starts logging a new monetary-shaped field.
 - Adding a second `configure_logging()` call site without checking whether it's actually needed — see the `--reload` caveat above for the one case where a second call site is intentional, not redundant.
