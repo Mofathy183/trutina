@@ -5,7 +5,7 @@ For usage, see README.md. This document explains why, not how.
 ## Why This Package Exists
 
 Trutina is organized as a workspace of independent packages (`core`, `cli`,
-`api`, `storage-mongo`, `storage-postgres`, and others), each of which needs two things that
+`api`, `storage-postgres`, and others), each of which needs two things that
 must behave identically everywhere they're used: a handful of
 accounting-adjacent normalization/validation rules that don't belong to any
 single feature (account name cleaning, lookup-key folding, single-sided line
@@ -18,8 +18,8 @@ schema modules just to reach a validation helper — coupling adapters to
 domain internals they have no business knowing about.
 
 `trutina-shared` is deliberately the _lowest_ dependency in the workspace.
-Everything can depend on it; it depends on nothing Trutina-specific. In
-practice today only `trutina-core` and `trutina-storage-mongo` and `trutina-storage-postgres` list it as a
+Everything can depend on it; it depends on nothing Trutina-specific.
+In practice today only `trutina-core` and `trutina-storage-postgres` list it as a
 direct dependency in their own `pyproject.toml` — every other package or app
 reaches it transitively through one of those two, and `trutina-config`
 reaches it not at all, since configuration parsing has no accounting
@@ -51,8 +51,8 @@ mechanism, not `except` clauses.
 ### `AppError` is the only exception type permitted to cross a service boundary
 
 **Invariant — must never be broken:** No package outside `shared` should let
-a raw `pydantic.ValidationError`, a driver-specific exception (PyMongo,
-etc.), or any other framework exception escape a service method. Everything
+a raw `pydantic.ValidationError`, a driver-specific exception (SQLAlchemy,
+asyncpg, etc.), or any other framework exception escape a service method. Everything
 crossing a service boundary is `AppError` or `ValidationAppError`.
 
 **Why:** This is what makes every adapter's error-handling code uniform and
@@ -154,12 +154,12 @@ strictly missing; no dedicated blank-value code exists.
 
 **Forbidden (this package must never depend on):**
 
-- `trutina.core`, `trutina.cli`, `trutina.api`, `trutina-storage-postgres`, `trutina.storage_mongo`,
+- `trutina.core`, `trutina.cli`, `trutina.api`, `trutina.storage_postgres`,
   `trutina.config`, or any other workspace package. `shared` sits below all
   of them; if a helper here ever needs something from one of those
   packages, the helper is in the wrong package.
-- `typer`, `rich`, `fastapi`, `pymongo`, `beanie`, or any presentation or
-  storage-driver library. `shared` has no I/O and no terminal/HTTP
+- `typer`, `rich`, `fastapi`, `sqlalchemy`, `asyncpg`, or any presentation or storage-driver library.
+  `shared` has no I/O and no terminal/HTTP
   awareness.
 
 **Direction:** every other workspace package may depend on `trutina-shared`,
