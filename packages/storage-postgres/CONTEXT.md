@@ -26,13 +26,13 @@ Journal number reservation advances the identity column's backing PostgreSQL seq
 
 The trial balance is a report, not a stored resource, so `PostgresTrialBalanceRepo` owns no table and needs no migration. It runs one aggregation over `postings`: `SUM(debit_amount)` and `SUM(credit_amount)` grouped by `account_key`. Grouping on the lookup key merges postings recorded under different casings of one account name into a single row, and `MIN(account)` supplies a deterministic display name (the alphabetically-first recorded spelling). When an `as_of_date` is supplied, a `posting_date <= as_of_date` predicate scopes the rows; when it is `None`, every posting is included. Results are ordered ascending by display name. Every call recomputes from current rows; nothing is cached or materialized.
 
-Only PostgreSQL implements the trial balance contract. `trutina-storage-mongo` has no `TrialBalanceRepo`, by decision: new features target PostgreSQL only.
+Only PostgreSQL implements the trial balance contract.
 
 ## Logging
 
 `connect()` and `disconnect()` (`shared/connection.py`) each emit exactly one INFO line through `logging.getLogger(__name__)` — `db.connected` and `db.disconnected` — via the standard library only. This module imports nothing from `trutina.observability` or `structlog`, consistent with every emitter across the workspace: this package decides _that_ something happened, never _how_ it's formatted or _where_ it's routed.
 
-`db.connected`'s context is deliberately narrow: `backend`, `pool_size`, `max_overflow`, `pool_pre_ping`. `postgres.uri` is never logged, because it can embed credentials directly (`postgresql+asyncpg://user:pass@host/db`). This mirrors `trutina-storage-mongo`'s identical rule for `mongo.uri`.
+`db.connected`'s context is deliberately narrow: `backend`, `pool_size`, `max_overflow`, `pool_pre_ping`. `postgres.uri` is never logged, because it can embed credentials directly (`postgresql+asyncpg://user:pass@host/db`).
 
 The engine is constructed with `hide_parameters=True`. SQLAlchemy then omits bound parameter values from the text of any exception it raises, so a future query failure's exception text never includes an account name, code, or amount — a property of the engine itself, independent of whatever a caller later does with that exception (log it, wrap it, discard it).
 
@@ -104,4 +104,4 @@ No test yet forces a real constraint-violation exception (e.g. a duplicate accou
 
 **Allowed** (per `pyproject.toml`): `trutina-shared`, `trutina-core`, `trutina-config`, `trutina-authentication`, `sqlalchemy`, `asyncpg`, `alembic`.
 
-**Forbidden:** `trutina-cli`, `trutina-api`, `trutina-storage-mongo`, `trutina-observability`, `structlog`, or any presentation library. This package emits through `logging.getLogger(__name__)` only, enforced by the "Emitters use stdlib logging only" import-linter contract — it must never import `trutina.observability` or `structlog` directly.
+**Forbidden:** `trutina-cli`, `trutina-api`, `trutina-observability`, `structlog`, or any presentation library. This package emits through `logging.getLogger(__name__)` only, enforced by the "Emitters use stdlib logging only" import-linter contract — it must never import `trutina.observability` or `structlog` directly.
