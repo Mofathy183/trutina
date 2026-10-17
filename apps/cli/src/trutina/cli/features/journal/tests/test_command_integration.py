@@ -20,7 +20,7 @@ def _seed_accounts(runner: CliRunner, state: CliState) -> None:
     """Seed the Cash/Sales Revenue accounts every journal test in this
     file depends on, through the real CLI `account create` command --
     not by reaching into a repo directly, since this file tests the
-    CLI surface end to end against real MongoDB.
+    CLI surface end to end.
     """
     runner.invoke(
         app,
@@ -69,7 +69,7 @@ def _create_entry(runner: CliRunner, state: CliState):
 
 @pytest.mark.integration
 class TestCreateCommand:
-    async def test_creates_entry_and_persists_to_mongo(
+    async def test_creates_entry_and_persists_to_postgres(
         self, cli_runner: CliRunner, real_cli_state: CliState
     ):
         _seed_accounts(cli_runner, real_cli_state)
@@ -91,7 +91,7 @@ class TestCreateCommand:
     ):
         """No accounts seeded here -- every account reference is
         unresolvable against the real chart, proving JournalService's
-        account validation runs against a real AccountService/Mongo
+        account validation runs against a real AccountService/postgres
         chart, not a fake.
         """
         result, output = _invoke(
@@ -180,7 +180,7 @@ class TestListCommand:
 
 @pytest.mark.integration
 class TestCrossCommandWorkflow:
-    async def test_create_get_list_round_trip_through_real_mongo(
+    async def test_create_get_list_round_trip_through_real_postgres(
         self, cli_runner: CliRunner, real_cli_state: CliState
     ):
         _seed_accounts(cli_runner, real_cli_state)

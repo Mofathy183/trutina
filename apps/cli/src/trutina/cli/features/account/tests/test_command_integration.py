@@ -32,7 +32,7 @@ def _create(runner: CliRunner, state: CliState, code: str, name: str, category: 
 
 @pytest.mark.integration
 class TestCreateCommand:
-    async def test_creates_account_and_persists_to_mongo(
+    async def test_creates_account_and_persists_to_postgres(
         self, cli_runner: CliRunner, real_cli_state: CliState
     ):
         result, output = _create(cli_runner, real_cli_state, "1001", "Cash", "asset")
@@ -47,7 +47,7 @@ class TestCreateCommand:
         assert verify_result.exit_code == 0
         assert "Cash" in verify_output
 
-    async def test_duplicate_code_raises_through_real_mongo_unique_index(
+    async def test_duplicate_code_raises_through_real_postgres_unique_index(
         self, cli_runner: CliRunner, real_cli_state: CliState
     ):
         _create(cli_runner, real_cli_state, "1001", "Cash", "asset")
@@ -144,7 +144,7 @@ class TestUpdateCommand:
 
 @pytest.mark.integration
 class TestDeleteCommand:
-    async def test_deletes_and_removes_from_mongo(
+    async def test_deletes_and_removes_from_postgres(
         self, cli_runner: CliRunner, real_cli_state: CliState
     ):
         _create(cli_runner, real_cli_state, "1001", "Cash", "asset")
@@ -175,7 +175,7 @@ class TestDeleteCommand:
 
 @pytest.mark.integration
 class TestCrossCommandWorkflow:
-    async def test_create_get_update_delete_round_trip_through_real_mongo(
+    async def test_create_get_update_delete_round_trip_through_real_postgres(
         self, cli_runner: CliRunner, real_cli_state: CliState
     ):
         create_result, _ = _create(cli_runner, real_cli_state, "1001", "Cash", "asset")

@@ -1,4 +1,4 @@
-"""Integration tests for the posting CLI commands against real MongoDB.
+"""Integration tests for the posting CLI commands against real Postgres.
 
 portal.call(...) is synchronous -- it blocks the calling thread until
 the portal's own event loop completes the work and returns the plain
@@ -13,7 +13,7 @@ service call that needs the keyword-only ``actor`` is wrapped in
 functools.partial.
 
 Assumption flagged: state.portal.call(state.context.get_journal_service)
-/ get_posting_service() is assumed to resolve real Mongo-backed services
+/ get_posting_service() is assumed to resolve real Postgres-backed services
 identically whether the CliContext was built for fake or real repos --
 this mirrors the confirmed lazy-accessor contract in CliContext but the
 exact accessor names on CliContext were not directly confirmed in the
@@ -43,7 +43,7 @@ def _invoke(runner, state, args, input=None):
 @pytest.fixture
 def seeded_real_state(real_cli_state):
     """Seeds two accounts and one unposted journal entry through the
-    real, Mongo-backed services -- not through the CLI -- so posting
+    real, Postgres-backed services -- not through the CLI -- so posting
     commands under test have real persisted data to act on.
 
     Plain (non-async) fixture: every service resolution and service
@@ -86,7 +86,7 @@ def seeded_real_state(real_cli_state):
 
 @pytest.mark.integration
 class TestPostCommandIntegration:
-    def test_posts_journal_entry_against_real_mongo(
+    def test_posts_journal_entry_against_real_postgres(
         self, cli_runner, seeded_real_state
     ):
         result, output = _invoke(cli_runner, seeded_real_state, ["post", "1"])
