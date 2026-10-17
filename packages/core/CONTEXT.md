@@ -1,6 +1,6 @@
 # trutina-core — Context
 
-For usage, see README.md. This document explains why, not how.
+For usage, see [README.md](README.md). This document explains why, not how.
 
 Audience: maintainers, reviewers, and future contributors deciding whether a change
 belongs in this package and whether it preserves the guarantees the rest of the
@@ -18,7 +18,7 @@ can accidentally depend on the other's presentation concerns.
 
 This is also what makes the domain layer fast to test. A `JournalService` test
 substitutes a `Fake*Repo` and runs in-process with no I/O; that would not be possible
-if the service were entangled with Mongo document classes or Typer command objects.
+if the service were entangled with database models or Typer command objects
 
 ## Layering: What's Allowed, What's Forbidden
 
@@ -28,7 +28,7 @@ Enforced mechanically by `import-linter` at the workspace root
 ```text
 apps.cli | apps.api
         ▼
-trutina.storage_mongo | trutina.storage_postgres | trutina.observability
+trutina.storage_postgres | trutina.observability
         ▼
 trutina.core            ← this package
         ▼
@@ -37,12 +37,12 @@ trutina.shared | trutina.config
 
 Three contracts apply directly to this package:
 
-1. **`trutina.core` may not import `beanie` or `pymongo`**, at all, anywhere. This
-   is checked as a `forbidden` contract, not a `layers` contract — it's stronger than
-   "core is above infrastructure," it's "core has zero awareness that Mongo exists."
-   A repository contract (`AccountRepo`, `JournalRepo`, `PostingRepo`) is defined
-   entirely in terms of domain types; nothing about its shape may leak a storage
-   detail.
+1. **`trutina.core` may not import `sqlalchemy` or `asyncpg`**, at all, anywhere.
+   This is checked as a `forbidden` contract, not a `layers` contract — it's
+   stronger than "core is above infrastructure," it's "core has zero awareness
+   that a storage backend exists." A repository contract (`AccountRepo`,
+   `JournalRepo`, `PostingRepo`) is defined entirely in terms of domain types;
+   nothing about its shape may leak a storage detail.
 2. **`trutina.core` may not import `sqlalchemy` or `asyncpg`**, at all, anywhere —
    the same rule, applied to the second storage backend once it existed.
 3. **Internal ordering: `posting → journal → account`**, one-directional. `posting`
@@ -60,7 +60,7 @@ a bug fix in one module could silently change behavior in a module that has no t
 coverage for that interaction. The one-directional rule keeps the blast radius of any
 change legible from the import statements alone.
 
-A fourth workspace-level rule applies here too, though it has no dedicated
+third workspace-level rule applies here too, though it has no dedicated
 `forbidden` contract of its own the way the two storage bans do: this package emits
 through `logging.getLogger(__name__)` exclusively, never through `structlog` or
 `trutina.observability`. This is covered by the "Emitters use stdlib logging only"
@@ -76,9 +76,9 @@ independence from `posting` is a property of the current source, not an enforced
 ### Repository contracts live in core; implementations do not
 
 `AccountRepo`, `JournalRepo`, and `PostingRepo` are abstract (`abc.ABC`) classes
-defined here. Concrete adapters (`MongoAccountRepo`, `PostgresAccountRepo`, etc.) live
-in the two storage packages — separate, lower-level-of-abstraction-but-higher-in-the-
-dependency-graph packages. This is the Dependency Inversion Principle applied
+defined here. Concrete adapters (`PostgresAccountRepo`, etc.) live in
+`trutina-storage-postgres` — a separate package that sits lower in abstraction
+but higher in the dependency graph. This is the Dependency Inversion Principle applied
 literally: the domain defines the contract; storage conforms to it, not the other
 way around.
 
@@ -196,7 +196,7 @@ constructed.
 
 **Why:** a write that cannot be attributed to a caller cannot be audited later. A required parameter turns a forgotten actor into a type error, and checking it first means a rejected call performs no repository or chart access, consumes no journal number, and wins over not-found, duplicate and `ACCOUNT_HAS_POSTINGS` errors. Core sees only an opaque string: it never imports `trutina.authentication`, and no service method takes an `Identity`. The format (UUID, `system:` prefix) is the calling application's concern.
 
-**Current behavior:** after the presence check, the service passes the actor to the repository as the keyword-only `created_by` (`JournalRepo.save`, `PostingRepo.save_many`, `AccountRepo.create`, `AccountRepo.update`, `AccountRepo.delete_by_code`). `trutina-storage-postgres` persists it for journal entries and postings and accepts it without storing it for accounts. `trutina-storage-mongo` is frozen and does not store it. On account update and delete, `created_by` names the caller performing that write, not the account's original creator. It is not added to any log context or error context, and it is not a field of any domain model, so reads never return it.
+**Current behavior:** after the presence check, the service passes the actor to the repository as the keyword-only `created_by` (`JournalRepo.save`, `PostingRepo.save_many`, `AccountRepo.create`, `AccountRepo.update`, `AccountRepo.delete_by_code`). `trutina-storage-postgres` persists it for journal entries and postings and accepts it without storing it for accounts. `created_by` names the caller performing that write, not the account's original creator. It is not added to any log context or error context, and it is not a field of any domain model, so reads never return it.
 
 ### `AppError` / `ValidationAppError` are the only exceptions crossing the service boundary
 
@@ -237,9 +237,9 @@ processor, which drops any key matching a known monetary name above `DEBUG` — 
 the primary control is simply never emitting the value from the source in the
 first place.
 
-**Why this module only imports `logging`, never `trutina.observability` or
-`structlog`:** the same reasoning that keeps `beanie`/`pymongo`/`sqlalchemy`/
-`asyncpg` out of this package applies here — `trutina-core` must remain usable,
+**Why this module only imports `logging`, never `trutina.observability` or `structlog`:**
+the same reasoning that keeps `sqlalchemy`/`asyncpg` out of this package applies here —
+`trutina-core` must remain usable,
 testable, and importable with zero knowledge of how or where its log lines end up
 formatted or routed. Any application composing this package's services decides
 that, once, at its own composition root; this package only ever decides _that_
@@ -331,8 +331,17 @@ rule drift the domain-validation design decision above exists to prevent.
   test pinning "core never logs on failure" as one assertion. Low risk (each
   service's own tests already cover it), tracked as a minor Phase 7 nice-to-have,
   not a blocker.
-- `created_by` is stored by `trutina-storage-postgres` for journal entries and postings only. Account writes require an actor and pass it to `AccountRepo` as `created_by`, but `PostgresAccountRepo` does not store it yet, so account changes remain unattributed in storage. `trutina-storage-mongo` is frozen: its journal and posting adapters accept `created_by` without storing it, and its account adapter has not been changed for this contract, so wiring it behind `AccountService` would fail on the new keyword. Rows written before attribution carry a null `created_by`.
-- `Account.code` format (4 to 6 ASCII digits) is enforced only on construction. Accounts persisted before it existed are not migrated, and because repositories rebuild `Account` on read, such a row fails `get_account`, `list_accounts` and `get_chart()`, not only `update_account`. The resulting `ValidationError` is not translated to `AppError` by the storage adapters.
+- `created_by` is stored by `trutina-storage-postgres` for journal entries and postings only.
+  Account writes require an actor and pass it to `AccountRepo` as `created_by`,
+  but `PostgresAccountRepo` does not store it yet, so account changes remain unattributed in storage.
+  its journal and posting adapters accept `created_by` without storing it,
+  and its account adapter has not been changed for this contract,
+  so wiring it behind `AccountService` would fail on the new keyword.
+  Rows written before attribution carry a null `created_by`.
+- `Account.code` format (4 to 6 ASCII digits) is enforced only on construction.
+  Accounts persisted before it existed are not migrated, and because repositories rebuild `Account` on read,
+  such a row fails `get_account`, `list_accounts` and `get_chart()`, not only `update_account`.
+  The resulting `ValidationError` is not translated to `AppError` by the storage adapters.
 
 ## Common Mistakes to Avoid
 
@@ -345,7 +354,7 @@ rule drift the domain-validation design decision above exists to prevent.
   constructed. If it doesn't need a repository or another service, it belongs on the
   schema.
 - Introducing an import from `account` into `journal` or `posting` that goes the
-  wrong direction, or any import of `beanie`/`pymongo`/`sqlalchemy`/`asyncpg`
+  wrong direction, or any import of `sqlalchemy`/`asyncpg`
   anywhere in this package. All are caught by CI's import-linter step, but catching
   it locally (`uv run lint-imports`) before pushing is faster than waiting on CI to
   reject it.
