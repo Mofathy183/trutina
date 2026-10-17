@@ -65,8 +65,7 @@ class PostgresConnection:
 def _is_timeout(exc: OperationalError) -> bool:
     """Return True when an OperationalError's cause chain is a timeout.
 
-    SQLAlchemy's async engine does not raise a distinct timeout exception
-    type the way PyMongo raises ServerSelectionTimeoutError -- a
+    SQLAlchemy's async engine does not raise a distinct timeout exception type
     connect_args={"timeout": ...} expiry surfaces as a plain
     asyncio.TimeoutError (a subclass of builtins.TimeoutError since
     Python 3.11) chained onto OperationalError via __cause__. Walking the
