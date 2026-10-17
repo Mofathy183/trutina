@@ -21,7 +21,6 @@ pytest_plugins = [
     "tests.fixtures.account",
     "tests.fixtures.posting",
     "tests.fixtures.journal",
-    "tests.fixtures.mongo",
     "tests.fixtures.postgres",
     "tests.fixtures.settings",
     "tests.fixtures.services",
@@ -41,9 +40,9 @@ pytest_plugins = [
 #                 (cli|api -> infra -> core -> shared|config), not a specific
 #                 package.
 #
-#   Backend axis  {"mongo", "postgres"} -- derived from location, and only
-#                 for "infra" tests. Storage adapters need different real
-#                 services in CI, which the layer axis cannot express.
+#   Backend axis  {"postgres"} -- derived from location, and only for
+#                 "infra" tests. It lets a storage adapter's tests be
+#                 selected independently of the layer axis.
 #
 # Derivation uses ONE table keyed by the first two segments of the test's
 # path RELATIVE TO THE REPO ROOT ("apps/cli", "packages/storage-postgres").
@@ -64,7 +63,6 @@ _PACKAGE_MARKERS: dict[str, tuple[str, str | None]] = {
     "packages/config": ("config", None),
     "packages/observability": ("observability", None),
     "packages/authentication": ("authentication", None),
-    "packages/storage-mongo": ("infra", "mongo"),
     "packages/storage-postgres": ("infra", "postgres"),
 }
 

@@ -7,11 +7,6 @@ name: Test Layer (Postgres-backed)
 # migration). This file has no `backend` input: unlike the infra layer,
 # these three only ever mean Postgres today, so there's nothing to
 # select between.
-#
-# trutina-storage-mongo's own adapter tests run through
-# _test-layer-mongo.yml instead — that package is retained but no
-# longer load-bearing for any app-facing layer, so it gets its own
-# dedicated file rather than sharing this one.
 
 on:
   workflow_call:

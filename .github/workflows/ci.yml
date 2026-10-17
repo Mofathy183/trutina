@@ -54,7 +54,7 @@ jobs:
 
   # ── Quality Gate 2: Foundation Packages (shared, config, observability,
   #    authentication) ──
-  # Not folded into _test-layer.yml: no Mongo/Postgres service. The
+  # Not folded into _test-layer.yml: no  Postgres service. The
   # integration step is --allow-empty because no foundation package has an
   # integration tier today; if one appears and needs a service, it will
   # fail here and should be reclassified or given its own lane.
@@ -88,25 +88,15 @@ jobs:
           "integration and (shared or config or observability or authentication)"
 
   # ── Quality Gates 3–5: Storage-backed layers ─────────────────────
-  # core/cli/api all depend on PostgreSQL today (_test-layer.yml).
-  # trutina-storage-mongo and trutina-storage-postgres each get their
-  # own dedicated file to test their adapter in isolation, since a
-  # single reusable workflow can't conditionally bring up mongo:8 vs.
-  # postgres:16 depending on an input (GitHub Actions `services:`
-  # blocks don't support `if:`).
+  # core/cli/api depend on PostgreSQL (_test-layer.yml).
+  # trutina-storage-postgres has its own file (_test-layer-postgres.yml)
+  # because it selects the "postgres" backend marker.
   core:
     name: "QG3 · Core"
     needs: foundation
     uses: ./.github/workflows/_test-layer.yml
     with:
       marker: core
-
-  storage_mongo:
-    name: "QG4 · Storage · Mongo"
-    needs: core
-    uses: ./.github/workflows/_test-layer-mongo.yml
-    with:
-      marker: infra
 
   storage_postgres:
     name: "QG4 · Storage · Postgres"

@@ -1,15 +1,8 @@
 name: Test Layer (Postgres-backed)
 
-# Reusable workflow for the Postgres-backed infra layer. Mirrors
-# _test-layer.yml's shape for Mongo, kept as a separate file rather than
-# an `if:` branch inside it because GitHub Actions `services:` blocks
-# don't support `if:` — a single reusable workflow can't conditionally
-# bring up mongo:8 vs. postgres:16 depending on an input.
-#
 # Runs `alembic -x db=test upgrade head` before the test steps, since
 # schema_init's pytest fixture expects migration history to already be
 # applied — matching how production is expected to be deployed
-# (migration-gated, no create_all()/init_beanie()-style startup DDL).
 
 on:
   workflow_call:

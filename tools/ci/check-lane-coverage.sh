@@ -19,8 +19,6 @@ lanes=(
     "unit and core"
     "integration and core"
     # QG4 storage
-    "unit and infra and mongo"
-    "integration and infra and mongo"
     "unit and infra and postgres"
     "integration and infra and postgres"
     # QG5 apps
