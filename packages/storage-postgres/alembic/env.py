@@ -21,6 +21,9 @@ from trutina.config import Settings, TestSettings
 from trutina.storage_postgres.account import (
     AccountModel,  # noqa: F401
 )
+from trutina.storage_postgres.audit import (
+    AuditEventModel,  # noqa: F401
+)
 from trutina.storage_postgres.identity import (
     UserModel,  # noqa: F401
 )

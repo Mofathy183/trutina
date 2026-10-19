@@ -20,12 +20,25 @@ from trutina.core.account.repo import AccountRepo
 from trutina.core.account.schemas.account import Account, AccountCategory
 from trutina.shared.errors import AppError, ErrorCode
 from trutina.shared.rule import account_lookup_key
+from trutina.storage_postgres.audit import AuditAction, AuditEventModel
 from trutina.storage_postgres.shared.execution import (
     PostgresExecutor,
     violated_constraint,
 )
 
 from .model import AccountModel
+
+_AUDIT_ENTITY = "account"
+
+
+def _audit_row(action: AuditAction, code: str, actor: str) -> AuditEventModel:
+    """Build the audit row recorded alongside one account write."""
+    return AuditEventModel(
+        entity=_AUDIT_ENTITY,
+        entity_key=code,
+        action=action.value,
+        actor=actor,
+    )
 
 
 class PostgresAccountRepo(AccountRepo):
@@ -59,20 +72,20 @@ class PostgresAccountRepo(AccountRepo):
         self._executor = executor
 
     async def create(self, account: Account, *, created_by: str) -> None:
-        """Persist a new account row.
+        """Persist a new account row and its audit row in one transaction.
 
-        ``created_by`` is accepted to satisfy the AccountRepo contract and
-        is not written by this method.
+        ``created_by`` is stored as the actor of one ``audit_events`` row
+        written in the same transaction, so the account and its audit
+        row either both persist or neither does.
 
         Raises:
             AppError: DUPLICATE_ACCOUNT_CODE or DUPLICATE_ACCOUNT_NAME if
-                the unique index on `code` or `name_key` rejects the
-                insert. STORAGE_UNAVAILABLE/STORAGE_TIMEOUT for
-                infrastructure failures.
+                the unique constraint on `code` or `name_key` rejects the
+                insert. UNKNOWN_ERROR if the audit insert is rejected.
+                STORAGE_UNAVAILABLE/STORAGE_TIMEOUT for infrastructure
+                failures.
         """
 
-        # created_by is accepted but not persisted yet; M1c.2 records it in
-        # audit_events, inside this same transaction.
         async def _create() -> None:
             async with self._session_factory() as session:
                 session.add(
@@ -83,6 +96,7 @@ class PostgresAccountRepo(AccountRepo):
                         category=account.category.value,
                     )
                 )
+                session.add(_audit_row(AuditAction.CREATE, account.code, created_by))
                 await session.commit()
 
         try:
@@ -91,16 +105,20 @@ class PostgresAccountRepo(AccountRepo):
             raise self._on_duplicate(exc, account.code, account.name) from exc
 
     async def update(self, account: Account, *, created_by: str) -> None:
-        """Overwrite an existing account row, located by its code.
+        """Overwrite an existing account row and record the change.
+
+        Writes one ``audit_events`` row for every successful call, even
+        when the submitted values equal the stored ones, in the same
+        transaction. A call that raises writes none. ``created_by`` is
+        the writer of this change, not the account's original creator.
 
         Raises:
             AppError: UNKNOWN_ACCOUNT if no row has this code.
                 DUPLICATE_ACCOUNT_NAME if the updated name collides with
-                another account's name_key.
+                another account's name_key. UNKNOWN_ERROR if the audit
+                insert is rejected.
         """
 
-        # created_by is accepted but not persisted yet; M1c.2 records it in
-        # audit_events, inside this same transaction.
         async def _update() -> AccountModel | None:
             async with self._session_factory() as session:
                 result = await session.execute(
@@ -112,6 +130,7 @@ class PostgresAccountRepo(AccountRepo):
                 existing.name = account.name
                 existing.name_key = account_lookup_key(account.name)
                 existing.category = account.category.value
+                session.add(_audit_row(AuditAction.UPDATE, account.code, created_by))
                 await session.commit()
                 return existing
 
@@ -183,17 +202,17 @@ class PostgresAccountRepo(AccountRepo):
         return [self._to_domain(model) for model in models]
 
     async def delete_by_code(self, code: str, *, created_by: str) -> None:
-        """Remove the account row with this code.
+        """Remove the account row with this code and record the deletion.
 
-        ``created_by`` is accepted to satisfy the AccountRepo contract and
-        is not written by this method.
+        The ``audit_events`` row is written in the same transaction as
+        the delete, so a failed audit insert leaves the account in place.
+        ``created_by`` is the caller performing the deletion.
 
         Raises:
             AppError: UNKNOWN_ACCOUNT if no row has this code.
+                UNKNOWN_ERROR if the audit insert is rejected.
         """
 
-        # created_by is accepted but not persisted yet; M1c.2 records it in
-        # audit_events, inside this same transaction.
         async def _delete() -> bool:
             async with self._session_factory() as session:
                 result = await session.execute(
@@ -203,10 +222,15 @@ class PostgresAccountRepo(AccountRepo):
                 if existing is None:
                     return False
                 await session.delete(existing)
+                session.add(_audit_row(AuditAction.DELETE, code, created_by))
                 await session.commit()
                 return True
 
-        deleted = await self._executor.run(_delete())
+        try:
+            deleted = await self._executor.run(_delete())
+        except IntegrityError as exc:
+            raise AppError.unknown(cause=exc) from exc
+
         if not deleted:
             raise AppError.not_found(
                 code=ErrorCode.UNKNOWN_ACCOUNT,
@@ -216,19 +240,13 @@ class PostgresAccountRepo(AccountRepo):
 
     @staticmethod
     def _on_duplicate(exc: IntegrityError, code: str, name: str) -> AppError:
-        """Translate a unique-index violation into a domain conflict.
+        """Translate a unique-constraint violation into a domain conflict.
 
         AccountModel.code and AccountModel.name_key are declared with
-        Column-level unique=True, which SQLAlchemy realizes as a unique
-        Index, not a named UNIQUE CONSTRAINT -- so the shared naming
-        convention's "uq" token never applies to either column; its "ix"
-        token does, producing ix_accounts_code and ix_accounts_name_key.
-        PostgreSQL still reports a violation of a plain unique index
-        through the same CONSTRAINT_NAME wire-protocol field a real
-        named constraint would use, carrying the index's name -- so the
-        names checked here are deliberately the "ix_" forms actually
-        emitted at runtime, not the "uq_" forms a named UniqueConstraint
-        would have produced.
+        unique=True. Under the shared naming convention SQLAlchemy realizes each
+        as a named UNIQUE constraint, uq_accounts_code and uq_accounts_name_key,
+        and PostgreSQL reports a violation through the constraint_name field
+        that violated_constraint() reads.
 
         Args:
             exc: The IntegrityError raised by the failed insert/update.
@@ -237,10 +255,10 @@ class PostgresAccountRepo(AccountRepo):
 
         Returns:
             AppError.conflict() with DUPLICATE_ACCOUNT_CODE or
-            DUPLICATE_ACCOUNT_NAME when the violated index is
-            recognized; AppError.unknown() otherwise, so an unrecognized
-            index name fails loudly as a genuine unknown rather than
-            silently misreporting which field conflicted.
+            DUPLICATE_ACCOUNT_NAME when the violated constraint is recognized;
+            AppError.unknown() otherwise, which is also what a rejected
+            audit_events insert produces, so an unrecognized constraint fails
+            loudly instead of misreporting which field conflicted.
         """
         constraint = violated_constraint(exc)
 

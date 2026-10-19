@@ -9,8 +9,8 @@ assumed), and that a missing row surfaces the same AppError an in-memory
 substitute would.
 
 Every write passes ``created_by=TEST_ACTOR`` because the repository
-contract requires it; the adapter does not store the value, so no test
-here asserts on it.
+contract requires it. The adapter records it in ``audit_events``, which
+is asserted in test_audit_integration.py, not here.
 """
 
 import pytest

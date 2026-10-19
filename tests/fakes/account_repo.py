@@ -16,6 +16,9 @@ class FakeAccountRepo(AccountRepo):
     call, and stays empty for a call that raised. The fake does not store
     ``created_by`` anywhere else, and it does not check for duplicate
     codes or names on ``create``.
+
+    It does not simulate ``audit_events``; the audit row is a PostgreSQL
+    adapter behavior, covered in ``account/tests/test_audit_integration.py``.
     """
 
     def __init__(

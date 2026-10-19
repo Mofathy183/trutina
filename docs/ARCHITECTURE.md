@@ -44,6 +44,7 @@ packages/
 ├── storage-postgres/    trutina-storage-postgres
 │   └── src/trutina/storage_postgres/
 │       ├── {account,journal,posting,trial_balance}/   # repository.py
+│       ├── audit/                        # model.py (audit_events)
 │       ├── identity/                     # model.py, repository.py (users)
 │       ├── shared/                       # PostgresExecutor, connect()/disconnect()
 │       ├── models.py
@@ -206,7 +207,8 @@ every non-Alembic-declared Python logger mid-process — see
 `packages/storage-postgres/README.md` / `CONTEXT.md`.
 `journal_entries` and `postings` carry a nullable `created_by` column recording the actor passed by the services;
 it is not part of any domain model and is never returned by a repository read.
-The account repository's write methods accept `created_by` and do not store it.
+The account repository's write methods take `created_by` and record it as the actor of an append-only `audit_events` row,
+written in the same transaction as the write.
 It also implements `UserRepo` (defined in `trutina.authentication`) against a users table.
 
 ### `trutina.cli`

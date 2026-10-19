@@ -104,7 +104,7 @@ async def clean_pg_db(schema_init, postgres_connection):
     async with postgres_connection.engine.begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE accounts, journal_entries, journal_lines, postings, users "
+                "TRUNCATE accounts, journal_entries, journal_lines, postings, users, audit_events "
                 "RESTART IDENTITY CASCADE"
             )
         )

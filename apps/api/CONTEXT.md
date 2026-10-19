@@ -126,7 +126,11 @@ providers make narrow overrides possible.
 
 **Why:** requests carry no authenticated identity today, and the actor is never read from a request body or DTO. Core checks only that it is non-blank. The `system:` prefix marks a non-user writer and the `:api` suffix records which application wrote.
 
-**Current behavior:** the constant is validated by core on every write. For journal entries and postings it is persisted by `trutina-storage-postgres` as `created_by`, so rows written by the API are distinguishable from rows written by the CLI. For account writes it reaches `AccountRepo` as `created_by` and `PostgresAccountRepo` does not store it yet.
+**Current behavior:** the constant is validated by core on every write.
+For journal entries and postings it is persisted by `trutina-storage-postgres` as `created_by`,
+so rows written by the API are distinguishable from rows written by the CLI.
+For account writes it reaches `AccountRepo` as `created_by` and `PostgresAccountRepo` records it in `audit_events`,
+so account changes made through this app are attributed to `PRE_AUTH_ACTOR`.
 
 ## Why Response Envelope (`BaseResponse`/`SuccessResponse`/`ErrorResponse`) Wraps Every Body
 

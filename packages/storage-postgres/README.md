@@ -22,17 +22,18 @@ uv run pytest -m "unit and infra and postgres"
 
 ## API at a Glance
 
-| Symbol                     | Purpose                                                                           |
-| -------------------------- | --------------------------------------------------------------------------------- |
-| `connect()`                | Creates a verified PostgreSQL engine and session factory. Logs `db.connected`.    |
-| `disconnect()`             | Disposes a connection bundle's engine and pool. Logs `db.disconnected`.           |
-| `PostgresConnection`       | Immutable bundle of an async engine and session factory.                          |
-| `PostgresExecutor`         | Runs database work with infrastructure-error translation.                         |
-| `PostgresAccountRepo`      | Implements the core account repository contract.                                  |
-| `PostgresJournalRepo`      | Implements the core journal repository contract.                                  |
-| `PostgresPostingRepo`      | Implements the core posting repository contract.                                  |
-| `PostgresTrialBalanceRepo` | Implements the core trial balance contract by aggregating the `postings` table.   |
-| `PostgresUserRepo`         | Implements the authentication user repository contract. `UserModel` is its table. |
+| Symbol                     | Purpose                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `connect()`                | Creates a verified PostgreSQL engine and session factory. Logs `db.connected`.                    |
+| `disconnect()`             | Disposes a connection bundle's engine and pool. Logs `db.disconnected`.                           |
+| `PostgresConnection`       | Immutable bundle of an async engine and session factory.                                          |
+| `PostgresExecutor`         | Runs database work with infrastructure-error translation.                                         |
+| `PostgresAccountRepo`      | Implements the core account repository contract.                                                  |
+| `PostgresJournalRepo`      | Implements the core journal repository contract.                                                  |
+| `PostgresPostingRepo`      | Implements the core posting repository contract.                                                  |
+| `PostgresTrialBalanceRepo` | Implements the core trial balance contract by aggregating the `postings` table.                   |
+| `PostgresUserRepo`         | Implements the authentication user repository contract. `UserModel` is its table.                 |
+| `AuditEventModel`          | The `audit_events` table written by `PostgresAccountRepo`. `AuditAction` names its action values. |
 
 ## Usage
 
@@ -118,7 +119,11 @@ asyncio.run(main())
 ## Attribution
 
 `journal_entries` and `postings` carry a nullable `created_by` column. `PostgresJournalRepo.save()` and `PostgresPostingRepo.save_many()` take a keyword-only `created_by` and store it as given: once on the entry row, and on every posting row in a batch. Journal lines inherit their entry's attribution and have no column of their own. A null value means the row was written before attribution existed. `created_by` is not part of any core domain model, so repository reads never return it; read it with SQL. See [CONTEXT.md](CONTEXT.md) for why.
-`PostgresAccountRepo.create()`, `update()` and `delete_by_code()` take the same keyword-only `created_by` to satisfy the account repository contract and do not store it. The `accounts` table has no attribution column, and no audit table exists yet.
+`PostgresAccountRepo.create()`, `update()` and `delete_by_code()` take the same keyword-only `created_by` and record it in `audit_events`,
+an append-only table with one row per successful account write (entity, key, action, actor, time),
+written in the same transaction as the write. A failed audit insert rolls the account write back.
+The `accounts` table has no attribution column, and `audit_events` has no read API. Append-only is a convention of the repositories,
+not enforced by the database. See [CONTEXT.md](CONTEXT.md).
 
 ## Users
 

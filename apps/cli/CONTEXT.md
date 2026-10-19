@@ -314,7 +314,11 @@ adding safety.
 
 **Why it lives in `composition/`, not `shared/`:** the identity the CLI writes as is process-level state, so it sits with the composition root beside `CliContext` and `CliState`. `shared/` holds only subpackages grouped by concern.
 
-**Current behavior:** the constant is validated by core on every write. For journal entries and postings it is persisted by `trutina-storage-postgres` as `created_by`, so rows written by the CLI are distinguishable from rows written by the API. For account writes it reaches `AccountRepo` as `created_by` and `PostgresAccountRepo` does not store it yet.
+**Current behavior:** the constant is validated by core on every write.
+For journal entries and postings it is persisted by `trutina-storage-postgres` as `created_by`,
+o rows written by the CLI are distinguishable from rows written by the API.
+For account writes it reaches `AccountRepo` as `created_by` and `PostgresAccountRepo` records it in `audit_events`,
+so account changes made through this app are attributed to `PRE_AUTH_ACTOR`.
 
 ## Why Trial Balance Is A Flat Command With No Prompt
 

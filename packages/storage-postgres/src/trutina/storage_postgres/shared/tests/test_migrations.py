@@ -17,6 +17,7 @@ from sqlalchemy import inspect
 
 PREVIOUS_REVISION = "7e1b970f05a7"
 REVISION_BEFORE_USERS = "a3f1c9d2b7e4"
+REVISION_BEFORE_AUDIT = "373da73ec0bb"
 
 
 def _config() -> Config:
@@ -90,6 +91,34 @@ class TestUsersMigration:
             await loop.run_in_executor(None, lambda: command.upgrade(cfg, "head"))
 
         after_upgrade = await _users_table_exists(engine)
+
+        assert after_downgrade is False
+        assert after_upgrade is True
+
+
+async def _table_exists(engine, name: str) -> bool:
+    async with engine.connect() as conn:
+        return await conn.run_sync(lambda sync_conn: inspect(sync_conn).has_table(name))
+
+
+@pytest.mark.integration
+class TestAuditEventsMigration:
+    async def test_downgrade_removes_and_upgrade_restores_audit_events_table(
+        self, schema_init, postgres_connection
+    ):
+        cfg = _config()
+        loop = asyncio.get_event_loop()
+        engine = postgres_connection.engine
+
+        try:
+            await loop.run_in_executor(
+                None, lambda: command.downgrade(cfg, REVISION_BEFORE_AUDIT)
+            )
+            after_downgrade = await _table_exists(engine, "audit_events")
+        finally:
+            await loop.run_in_executor(None, lambda: command.upgrade(cfg, "head"))
+
+        after_upgrade = await _table_exists(engine, "audit_events")
 
         assert after_downgrade is False
         assert after_upgrade is True
