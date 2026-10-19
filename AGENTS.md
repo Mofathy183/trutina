@@ -69,9 +69,10 @@ packages/observability/src/trutina/observability/
 packages/authentication/src/trutina/authentication/
   {identity,credentials,tokens,shared}/   # contracts, grouped by role
 packages/storage-postgres/src/trutina/storage_postgres/
-  {account,journal,posting}/repository.py, shared/{connection.py, execution/}, models.py
+  {account,journal,posting}/repository.py, shared/{connection.py, execution/, model.py}
 packages/storage-postgres/src/trutina/storage_postgres/trial_balance/repository.py
 packages/storage-postgres/src/trutina/storage_postgres/identity/{model,repository}.py   # users table, UserRepo
+packages/storage-postgres/src/trutina/storage_postgres/audit/model.py                   # audit_events table, written by PostgresAccountRepo
 packages/storage-postgres/alembic.ini, alembic/
 packages/config/src/trutina/config/{base,postgres,api,logging}.py
 packages/shared/src/trutina/shared/{rule,util}.py, errors/{codes,errors,translators}.py
@@ -125,7 +126,13 @@ Package/app own tests live beside their own code (e.g.
   null means written before attribution). `apps/api` and `apps/cli` each pass their
   own fixed `PRE_AUTH_ACTOR` constant (`api/shared/actor.py`,
   `cli/composition/actor.py`).
-- A `User`'s email is always stored normalized (trimmed, case-folded) by `normalize_email()`, so one unique column enforces case-insensitive uniqueness. Email format is not validated. `UserRepo.create` ignores a caller-supplied `created_at`, and `DUPLICATE_USER_EMAIL` never carries the address in its context.
+  `AccountService.create_account`, `update_account` and `delete_account` take the same actor,
+  and `PostgresAccountRepo` records it as the actor of an append-only `audit_events`
+  row written in the same transaction as the account write.
+- A `User`'s email is always stored normalized (trimmed, case-folded) by `normalize_email()`,
+  so one unique column enforces case-insensitive uniqueness. Email format is not validated.
+  `UserRepo.create` ignores a caller-supplied `created_at`,
+  and `DUPLICATE_USER_EMAIL` never carries the address in its context.
 
 ## Error Model
 
