@@ -80,5 +80,13 @@ Which `ErrorCode`s count as an incident worth a traceback is defined independent
 
 - Importing `trutina.observability` or `structlog` from `trutina-core`, `trutina-shared`, `trutina-config`, or `trutina-storage-postgres` — caught immediately by `lint-imports`.
 - Calling `structlog.configure()` anywhere. This package's entire design assumes it is never called.
-- Logging an amount (`debit_amount`, `credit_amount`, `balance`, etc.) at INFO or above — the redaction processor drops known monetary keys above DEBUG, but a new field name that doesn't match `_MONETARY_KEYS` won't be caught automatically; add it to that set if a service starts logging a new monetary-shaped field.
-- Adding a second `configure_logging()` call site without checking whether it's actually needed — see the `--reload` caveat above for the one case where a second call site is intentional, not redundant.
+- Logging an amount (`debit_amount`, `credit_amount`, `balance`, etc.)
+  at INFO or above — the redaction processor drops known monetary keys above DEBUG,
+  but a new field name that doesn't match `_MONETARY_KEYS` won't be caught automatically;
+  add it to that set if a service starts logging a new monetary-shaped field.
+- Adding a second `configure_logging()` call site without checking whether it's actually needed —
+  see the `--reload` caveat above for the one case where a second call site is intentional, not redundant.
+- Adding a credential-shaped key without checking `_FULL_REDACT_MARKERS`.
+  Matching is by substring on the lower-cased key and recurses through nested dicts and lists,
+  so `refresh_token` and `Authorization` are already covered;
+  extend the marker tuple only for a name that doesn’t contain an existing marker.
