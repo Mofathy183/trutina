@@ -99,8 +99,20 @@ def _mask_uri_credentials(value: str) -> str:
 
 
 def _redact_value(key: str, value: Any) -> Any:
+    """Redact a value by its key, recursing into nested containers.
+
+    A key matching _FULL_REDACT_MARKERS is masked outright, whatever the
+    value's type. Otherwise dicts are walked with their own keys, so a
+    secret one level down (``{"headers": {"Authorization": ...}}``) is
+    masked even though its parent key looks harmless. List and tuple
+    items are checked under the parent key.
+    """
     if _matches_any(key, _FULL_REDACT_MARKERS):
         return _REDACTED
+    if isinstance(value, dict):
+        return {k: _redact_value(str(k), v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_redact_value(key, v) for v in value]
     if isinstance(value, str) and (
         _matches_any(key, _URI_LIKE_MARKERS) or "://" in value
     ):
