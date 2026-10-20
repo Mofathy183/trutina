@@ -90,3 +90,6 @@ Which `ErrorCode`s count as an incident worth a traceback is defined independent
   Matching is by substring on the lower-cased key and recurses through nested dicts and lists,
   so `refresh_token` and `Authorization` are already covered;
   extend the marker tuple only for a name that doesn’t contain an existing marker.
+- Changing `_FULL_REDACT_MARKERS` without checking `trutina.shared.secret.SECRET_FIELD_MARKERS`.
+  Validation errors mask credential-shaped fields using that separate list,
+  and this package cannot import it. Keep the two lists identical.
