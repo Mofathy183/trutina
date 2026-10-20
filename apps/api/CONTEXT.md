@@ -220,6 +220,16 @@ reason. If `get_field_violations()` is ever fixed at the source, these functions
 become harmless no-ops -- they should not be deleted silently without confirming
 the upstream fix landed.
 
+## Why Validation Failures Never Carry A Credential
+
+**Decision:** no response body or log record produced by an exception handler contains a rejected credential. The guarantee has two sources, and both are tested in `shared/errors/tests/test_secret_safety.py` against test-only routes for the three ways a validation failure reaches a handler (`RequestValidationError`, a mapper-stage `pydantic.ValidationError`, `ValidationAppError`).
+
+**Why it holds:** `FieldViolation.value` is masked at the source by `trutina-shared`. `_handle_request_validation_error` builds each detail from `error["type"]` and `error["msg"]` only and never reads `error["input"]`. `_log_failure()` records the status, route and code, never a violation value.
+
+**What a credential schema must do:** use `SecretStr`, use a marked field name (`password`, `token`, ...), set `ConfigDict(hide_input_in_errors=True)`, and raise validator failures through `pydantic_error()`. A validator that interpolates the value into its message would put it into `msg`, which this handler does return.
+
+**Known gap:** only a test-only model proves this today. The first real credential route (M3.7) must repeat the check against its own schema.
+
 ## Why Logging Is Configured In `create_app()`, Not Only `main.py`
 
 **Decision:** `configure_logging(settings.logging, app="api")` and
