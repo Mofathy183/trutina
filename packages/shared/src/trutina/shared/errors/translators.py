@@ -9,10 +9,17 @@ FieldViolation records rather than framework-specific exceptions.
 Depended on by shared/errors/errors.py and domain schemas throughout
 the application. This module isolates Pydantic-specific behavior from
 the rest of the error architecture.
+
+Credential safety: FieldViolation.value never carries a credential.
+The Pydantic input is rendered through trutina.shared.secret, which
+masks it when the error's location is credential-shaped and masks
+credential-keyed entries when the input is a container (Pydantic
+reports the whole parent object as the input of a `missing` error).
 """
 
 from pydantic import ValidationError as PydanticValidationError
 from pydantic_core import PydanticCustomError
+from trutina.shared.secret import safe_input_text
 
 from .codes import ErrorCode
 from .errors import FieldViolation
@@ -24,7 +31,9 @@ def pydantic_error(code: ErrorCode) -> PydanticCustomError:
     Wraps a domain error code in a PydanticCustomError so validators
     can raise it directly. The error message is intentionally empty
     because user-facing messages are resolved from ERRORS at the
-    presentation layer rather than embedded in the exception.
+    presentation layer rather than embedded in the exception. The empty
+    message also means a validator that uses this helper cannot echo
+    the rejected value into the error text.
 
     Args:
         code: The domain error code identifying the validation failure.
@@ -68,9 +77,13 @@ def get_field_violations(exc: PydanticValidationError) -> list[FieldViolation]:
     ErrorCode values and FieldViolation records.
 
     Pydantic-native error types listed in PYDANTIC_CODES are mapped directly
-    to equivalent ErrorCode values. All other types are downgraded to
+    to equivalent ErrorCode values, with the rejected input stringified
+    into `value` through `safe_input_text` so a credential is never
+    carried (it is masked, not omitted: the violation still names the
+    field and the rule). All other types are downgraded to
     UNKNOWN_ERROR rather than exposing framework-specific failures outside
-    the translation layer; their raw Pydantic type is retained in value.
+    the translation layer; their raw Pydantic type is retained in value,
+    which is a code string and never user input.
 
     Args:
         exc: The Pydantic ValidationError raised by a domain schema.
@@ -85,7 +98,7 @@ def get_field_violations(exc: PydanticValidationError) -> list[FieldViolation]:
 
         if raw_type in PYDANTIC_CODES:
             code = ErrorCode(raw_type)
-            value = str(e.get("input", ""))
+            value = safe_input_text(e["loc"], e.get("input", ""))
         else:
             code = ErrorCode.UNKNOWN_ERROR
             value = raw_type
