@@ -52,7 +52,7 @@ packages/
 ├── config/              trutina-config
 │   └── src/trutina/config/   # base.py, postgres.py, api.py, logging.py
 └── shared/              trutina-shared
-    └── src/trutina/shared/   # rule.py, util.py, errors/{codes,errors,translators}.py
+    └── src/trutina/shared/   # rule.py, secret.py, util.py, errors/{codes,errors,translators}.py
 
 tests/                   # root-level shared fixtures/factories/fakes only — no test cases
 ```

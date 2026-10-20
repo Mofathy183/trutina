@@ -97,6 +97,9 @@ internal extension points, which live in that package's own README/CONTEXT.
 - Access and refresh tokens, auth routes, and endpoint protection.
 - A CLI `auth` group.
 - Authorization (roles and a permission matrix).
+- Secret-safe validation errors (M2.1) are done for `FieldViolation.value`,
+  the API 422 body and CLI rendering, proven with a test-only model. Still to do:
+  re-verify on the real credential routes (M3.7). Credential detection is name-based and the marker list exists in two packages.
 
 The milestone order, locked decisions and open question (JWT versus one opaque
 session mechanism) are in the identity and authentication plan.

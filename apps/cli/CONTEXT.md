@@ -200,6 +200,14 @@ entirely in `cli/shared/errors/` means the API is free to build its own
 catalog with zero coordination cost or risk of CLI-specific phrasing
 leaking into JSON responses.
 
+## Why Error Rendering Never Shows A Rejected Credential
+
+**Decision:** `format_validation_errors()` and `format_validation_app_error()` read a violation's field, code and the catalog text, never its input, and `FieldViolation.value` is masked at the source by `trutina-shared` in any case. `shared/boundary/tests/test_secret_safety.py` proves the sentinel is absent from the rendered panels, `repr(FormattedError)`, the `command.failed` log record and the console output of `error_boundary()`.
+
+**Constraint for contributors:** the only use of `FieldViolation.value` in this package is domain-code recovery. Do not render it.
+
+**Known gap:** this covers service and Pydantic errors. Click's own usage errors can echo a bad option value, which is why the `auth login` design never accepts a password as a flag (M4.5.2).
+
 ## Why `error_boundary()` Is A Single, Narrow Seam
 
 **Decision:** `error_boundary()` in `shared/boundary/error_boundary.py` is

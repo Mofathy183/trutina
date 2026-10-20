@@ -75,7 +75,7 @@ packages/storage-postgres/src/trutina/storage_postgres/identity/{model,repositor
 packages/storage-postgres/src/trutina/storage_postgres/audit/model.py                   # audit_events table, written by PostgresAccountRepo
 packages/storage-postgres/alembic.ini, alembic/
 packages/config/src/trutina/config/{base,postgres,api,logging}.py
-packages/shared/src/trutina/shared/{rule,util}.py, errors/{codes,errors,translators}.py
+packages/shared/src/trutina/shared/{rule,secret,util}.py, errors/{codes,errors,translators}.py.
 
 tests/{fixtures,factories,fakes}/     # shared test infra only, no test cases
 tests/fixtures/logging.py             # autouse reset of trutina-observability's installed handler
@@ -151,6 +151,11 @@ Package/app own tests live beside their own code (e.g.
   app (`_ERROR_LEVEL_CODES` in the CLI, the HTTP-status threshold in the API) —
   deliberately not shared, for the same reason CLI/API error wording isn't
   shared. See `trutina-observability`'s own CONTEXT.md for the full rationale.
+- `FieldViolation.value` never carries a credential.
+  `get_field_violations()` masks the input of any field whose location contains a marker from
+  `trutina.shared.secret.SECRET_FIELD_MARKERS` and masks credential-keyed entries inside container inputs.
+  Credential models use `SecretStr`, a marked field name and `hide_input_in_errors=True`.
+  `trutina.observability` keeps its own marker list; change both together.
 
 ## Logging and Correlation
 
