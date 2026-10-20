@@ -20,17 +20,18 @@ uv run --package trutina-shared python -c "from trutina.shared.rule import clean
 
 ## API at a Glance
 
-| Symbol                                          | Purpose                                                                                                                                          |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `clean_account_name()`                          | Trims and validates an account name, returning `None` when it is invalid.                                                                        |
-| `account_lookup_key()`                          | Produces a case-insensitive key for a validated account name.                                                                                    |
-| `is_valid_line_amounts()`                       | Checks that exactly one of a line's debit and credit amounts is positive.                                                                        |
-| `ErrorCode`                                     | Stable identifiers for domain and infrastructure failures.                                                                                       |
-| `AppError`                                      | Structured application exception, including constructors for common failures.                                                                    |
-| `is_non_blank_actor()`                          | Checks that an actor string is not empty or whitespace-only. Presence only, never format.                                                        |
-| `ValidationAppError` and `FieldViolation`       | Error records for one or more invalid fields. `ValidationAppError.required_field()` builds the single-violation form for a blank required value. |
-| `pydantic_error()` and `get_field_violations()` | Bridge Pydantic validation errors to the shared error contract.                                                                                  |
-| `default_posting_date()`                        | Returns today's local date at midnight.                                                                                                          |
+| Symbol                                                                | Purpose                                                                                                                                                                         |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clean_account_name()`                                                | Trims and validates an account name, returning `None` when it is invalid.                                                                                                       |
+| `account_lookup_key()`                                                | Produces a case-insensitive key for a validated account name.                                                                                                                   |
+| `is_valid_line_amounts()`                                             | Checks that exactly one of a line's debit and credit amounts is positive.                                                                                                       |
+| `ErrorCode`                                                           | Stable identifiers for domain and infrastructure failures.                                                                                                                      |
+| `AppError`                                                            | Structured application exception, including constructors for common failures.                                                                                                   |
+| `is_non_blank_actor()`                                                | Checks that an actor string is not empty or whitespace-only. Presence only, never format.                                                                                       |
+| `is_secret_name()`, `redact_input()`, `safe_input_text()`, `REDACTED` | Credential-shaped name detection and input redaction (`trutina.shared.secret`). Used by `get_field_violations()` so a rejected credential never reaches `FieldViolation.value`. |
+| `ValidationAppError` and `FieldViolation`                             | Error records for one or more invalid fields. `ValidationAppError.required_field()` builds the single-violation form for a blank required value.                                |
+| `pydantic_error()` and `get_field_violations()`                       | Bridge Pydantic validation errors to the shared error contract. `FieldViolation.value` is masked for credential-shaped fields.                                                  |
+| `default_posting_date()`                                              | Returns today's local date at midnight.                                                                                                                                         |
 
 ## Usage
 
@@ -61,6 +62,27 @@ from trutina.shared.errors import AppError, ErrorCode
 
 error = AppError.not_found(ErrorCode.UNKNOWN_ACCOUNT, "account", "1000")
 assert error.context["identifier"] == "1000"
+```
+
+Rejected credentials are masked, not echoed:
+
+```python
+from pydantic import BaseModel, SecretStr, ValidationError
+from trutina.shared.errors import get_field_violations
+
+
+class Login(BaseModel):
+    email: str
+    password: SecretStr
+
+
+try:
+    Login.model_validate({"password": "hunter2"})
+except ValidationError as exc:
+    violation = get_field_violations(exc)[0]
+
+assert violation.field == "email"
+assert "hunter2" not in violation.value
 ```
 
 ## Testing

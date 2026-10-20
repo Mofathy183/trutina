@@ -108,6 +108,18 @@ an invariant, not an implementation detail. `packages/shared/tests/test_rule.py`
 exercises this directly (`"Straße"` → `"strasse"`), so a regression here
 should fail loudly.
 
+### `FieldViolation.value` never carries a credential
+
+**Decision:** `get_field_violations()` renders a Pydantic error's `input` through `trutina.shared.secret.safe_input_text()`. When any segment of the error's location contains a marker from `SECRET_FIELD_MARKERS` (`password`, `secret`, `token`, `authorization`, `credential`, `api_key`, matched as a substring of the lower-cased name), `value` is `"***REDACTED***"`. Otherwise the input is stringified with every credential-keyed dict entry masked, recursing through dicts, lists and tuples. The input is never mutated.
+
+**Why the location check alone is not enough:** Pydantic reports the whole parent object as the `input` of a `missing` error. A payload that supplies `password` but omits `email` produces an error on `email` whose input contains the password. The container pass is what closes that path.
+
+**Why key-based:** the exception carries no model type, so the translator cannot ask whether a field is a `SecretStr`. Matching names is the only signal available at this choke point. Over-matching is accepted: a masked harmless value costs a diagnostic, a leaked credential costs far more.
+
+**What is not masked:** domain-raised codes. A violation raised through `pydantic_error()` keeps the code string in `value`, because that string is a code, never user input.
+
+**Why it lives in `trutina-shared`:** the translator is the single place every presentation layer's field violations come from, and this package depends on nothing above it.
+
 ## Known Gaps
 
 `get_field_violations()` currently maps only the Pydantic-native error
@@ -144,6 +156,12 @@ it never passes through `get_field_violations()` and is not affected by the
 `UNKNOWN_ERROR` downgrade above: its violation keeps `ErrorCode.REQUIRED_FIELD`
 on `.code`. `REQUIRED_FIELD` is Pydantic's `"missing"`, and a blank string is not
 strictly missing; no dedicated blank-value code exists.
+
+Credential detection is name-based. A credential field whose name contains none of `SECRET_FIELD_MARKERS` (for example `pwd`) is not masked,
+so credential models must use a name that matches. `trutina-observability` keeps its own marker list for log redaction;
+a marker added to one list must be added to the other, and no test enforces that,
+because a test here cannot import `trutina.observability` without breaking the "Emitters use stdlib logging only" contract.
+`redact_input()` does not look inside sets.
 
 ## Allowed and Forbidden Dependencies
 
@@ -238,6 +256,8 @@ adapter (CLI, future API)
   downgrade issue described above — that requires a real design decision
   about how domain codes should survive translation, not a one-line
   allow-list addition.
+- **`secret.py`**: add a marker to `SECRET_FIELD_MARKERS` only for a name that does not already contain an existing marker,
+  and add it to observability's list in the same change.
 
 ## Assumptions This Package Relies On
 
@@ -276,3 +296,6 @@ adapter (CLI, future API)
   check only. Whether an actor is a UUID or carries a `system:` prefix is decided
   by the calling application, so the accounting layers never learn what an
   identity looks like.
+- **Naming a credential field without a marker.** A field called `pwd` is stored in `FieldViolation.value` as typed.
+  Use `password`, `secret`, `token` or another marked name,
+  and set `hide_input_in_errors=True` on the model so `str(ValidationError)` omits the input too.
