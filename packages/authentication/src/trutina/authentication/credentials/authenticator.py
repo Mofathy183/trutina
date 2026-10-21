@@ -32,9 +32,10 @@ class Authenticator(ABC):
             The authenticated identity.
 
         Raises:
-            AppError: for wrong credentials, unknown or disabled accounts
-                (all indistinguishable to the caller) and for throttling.
-                The ``ErrorCode`` members are added with the first
-                implementation; they do not exist in ``shared/errors``
-                yet.
+            AppError: AUTH_INVALID_CREDENTIALS for wrong credentials, an
+                unknown account or a disabled account (all
+                indistinguishable to the caller). AUTH_THROTTLED when
+                too many attempts have been made; its context may carry
+                ``retry_after_seconds`` in seconds. Both codes exist in
+                ``shared/errors``; no implementation raises them yet.
         """

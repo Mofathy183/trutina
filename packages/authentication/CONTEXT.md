@@ -89,7 +89,9 @@ These may change before they are implemented:
 ## Known Gaps
 
 - Only `UserRepo` has an implementation (`PostgresUserRepo`, in `trutina-storage-postgres`, which declares the dependency on this package). No hasher, token module, route or command exists, and no app depends on this package.
-- No `AUTH_*` `ErrorCode` members exist yet. `Authenticator.authenticate` documents that it will raise `AppError` but cannot name a code until the first implementation adds them. The user codes `DUPLICATE_USER_EMAIL` and `UNKNOWN_USER` do exist.
+- Only two `AUTH_*` `ErrorCode` members exist, `AUTH_INVALID_CREDENTIALS` and `AUTH_THROTTLED`,
+  with API and CLI catalog entries, and nothing raises them yet (M2.6, M2.7).
+  The token codes and `AUTH_USER_DISABLED` land with M3. The user codes `DUPLICATE_USER_EMAIL` and `UNKNOWN_USER` also exist.
 - Once password login ships there is no self-service recovery for a locked-out user until password reset is built (deferred past core authentication).
 - `FakeUserRepo.create` does not reject duplicate emails; the service pre-check and the storage unique index are the real guards.
 - Email format is not validated, and normalization is a case fold only.
