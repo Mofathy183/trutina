@@ -127,6 +127,27 @@ class TestFormatAppError:
         assert formatted.message == ERRORS[ErrorCode.UNKNOWN_ERROR].message
         assert formatted.hint == HINTS[ErrorCode.UNKNOWN_ERROR]
 
+    def test_invalid_credentials_names_no_single_field(self):
+        error = AppError(code=ErrorCode.AUTH_INVALID_CREDENTIALS)
+
+        formatted = format_app_error(error)
+
+        assert formatted.field == FIELD_LABELS[ErrorCode.AUTH_INVALID_CREDENTIALS]
+        assert formatted.field not in {"email", "password"}
+        assert formatted.message == ERRORS[ErrorCode.AUTH_INVALID_CREDENTIALS].message
+        assert formatted.hint == HINTS[ErrorCode.AUTH_INVALID_CREDENTIALS]
+
+    def test_throttled_renders_catalog_text_and_ignores_retry_context(self):
+        error = AppError(
+            code=ErrorCode.AUTH_THROTTLED, context={"retry_after_seconds": "42"}
+        )
+
+        formatted = format_app_error(error)
+
+        assert formatted.field == "unknown"
+        assert formatted.message == ERRORS[ErrorCode.AUTH_THROTTLED].message
+        assert "42" not in formatted.message + formatted.hint
+
 
 @pytest.mark.unit
 class TestFormatValidationAppError:
