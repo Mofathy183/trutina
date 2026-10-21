@@ -111,7 +111,8 @@ contract (independent siblings), so neither can import the other.
   directly exercised by a test.
 - Identity and authentication — `trutina-authentication` provides contracts and test
   fakes only. No password hasher, token implementation, storage adapter, route or
-  command exists, no `AUTH_*` `ErrorCode` exists, and no app depends on the package.
+  command exists, two `AUTH_*` `ErrorCode` members exist (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`) with catalog entries,
+  and nothing raises them yet, and no app depends on the package.
   The token, refresh-token and login-attempt contracts are provisional.
   Separately from that package, `trutina-core`'s journal, posting and account write services require a non-blank `actor: str` and pass it to the repository as `created_by`. `trutina-storage-postgres` persists it as `created_by` for journal entries and postings, and as the actor of an
   `audit_events` row for account writes. The actor is not yet a real identity: both apps pass a fixed pre-auth constant until M4b and M4.5.
