@@ -258,3 +258,21 @@ class TestErrorBoundaryUnrelatedExceptions:
                 raise KeyError("boom")
 
         printed.assert_not_called()
+
+
+@pytest.mark.unit
+class TestErrorBoundaryAuthFailureLogging:
+    @pytest.mark.parametrize(
+        "code", [ErrorCode.AUTH_INVALID_CREDENTIALS, ErrorCode.AUTH_THROTTLED]
+    )
+    def test_logs_one_info_line_not_an_incident(self, code, monkeypatch, caplog):
+        monkeypatch.setattr(error_boundary_module.console, "print", MagicMock())
+
+        with caplog.at_level("INFO"):
+            with pytest.raises(typer.Exit):
+                with error_boundary():
+                    raise AppError(code=code)
+
+        records = [r for r in caplog.records if r.message == "command.failed"]
+        assert len(records) == 1
+        assert records[0].levelname == "INFO"

@@ -236,7 +236,7 @@ adapter (CLI, future API)
   docstring naming the accounting fact it protects). Do not add a class or
   introduce state — every function here is expected to be pure.
 - **`codes.py`**: add new `ErrorCode` members inside the correct grouped
-  section (Generic, Pydantic built-in types, Shared date rules, Account, Journal, Posting, User, Storage),
+  section (Generic, Pydantic built-in types, Shared date rules, Account, Journal, Posting, User, Auth, Storage).
   using the `"domain.specific_name"`
   string-value convention already established (e.g.
   `"account.invalid_name"`, `"journal.unbalanced"`). Never reuse an
@@ -250,6 +250,7 @@ adapter (CLI, future API)
   (translates a Pydantic error) and `required_field()` (a single
   `REQUIRED_FIELD` violation for a blank required value). Keep every new
   constructor's `context` JSON-primitive-only.
+  `AUTH_THROTTLED` may carry `context["retry_after_seconds"]` (digits-only seconds); the API turns it into a `Retry-After` header.
 - **`translators.py`**: extend `PYDANTIC_CODES` only when adding support for
   a genuinely new Pydantic-native error type that should pass through
   as-is. Do not use this set as a workaround for the `UNKNOWN_ERROR`

@@ -117,6 +117,11 @@ HINTS: HintMap = {
     ErrorCode.DUPLICATE_USER_EMAIL: "Use a different email address.",
     ErrorCode.UNKNOWN_USER: "Check the user identifier and try again.",
     #
+    # Auth domain
+    #
+    ErrorCode.AUTH_INVALID_CREDENTIALS: ("Check the email and password and try again."),
+    ErrorCode.AUTH_THROTTLED: "Wait before trying again.",
+    #
     # Storage
     #
     ErrorCode.STORAGE_UNAVAILABLE: (
@@ -140,4 +145,5 @@ FIELD_LABELS: dict[str, str] = {
     ErrorCode.JOURNAL_ALREADY_POSTED: "journal_number",
     ErrorCode.DUPLICATE_USER_EMAIL: "email",
     ErrorCode.UNKNOWN_USER: "user_id",
+    ErrorCode.AUTH_INVALID_CREDENTIALS: "credentials",
 }

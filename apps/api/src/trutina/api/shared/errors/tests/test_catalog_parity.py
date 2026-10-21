@@ -6,6 +6,8 @@ from trutina.shared.errors import ErrorCode
 # (see handlers.py); never looked up in the catalog.
 _NOT_CATALOGED = {ErrorCode.REQUEST_VALIDATION_ERROR}
 
+_AUTH_CODES = [ErrorCode.AUTH_INVALID_CREDENTIALS, ErrorCode.AUTH_THROTTLED]
+
 
 @pytest.mark.unit
 class TestErrorCatalogParity:
@@ -31,6 +33,24 @@ class TestErrorCatalogParity:
         "code", [ErrorCode.DUPLICATE_USER_EMAIL, ErrorCode.UNKNOWN_USER]
     )
     def test_user_entries_interpolate_no_context(self, code):
+        entry = ERROR_CATALOG[code]
+
+        assert "{" not in entry.message
+        assert entry.hint is not None
+        assert "{" not in entry.hint
+
+    @pytest.mark.parametrize(
+        ("code", "status_code"),
+        [
+            (ErrorCode.AUTH_INVALID_CREDENTIALS, 401),
+            (ErrorCode.AUTH_THROTTLED, 429),
+        ],
+    )
+    def test_auth_codes_map_to_the_decided_status(self, code, status_code):
+        assert ERROR_CATALOG[code].status_code == status_code
+
+    @pytest.mark.parametrize("code", _AUTH_CODES)
+    def test_auth_entries_interpolate_no_context(self, code):
         entry = ERROR_CATALOG[code]
 
         assert "{" not in entry.message

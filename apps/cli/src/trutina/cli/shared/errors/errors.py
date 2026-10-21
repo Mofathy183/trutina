@@ -172,6 +172,17 @@ ERRORS: ErrorMap = {
         message="No user exists with that identifier.",
     ),
     #
+    # Auth domain
+    #
+    ErrorCode.AUTH_INVALID_CREDENTIALS: ErrorDetail(
+        code=ErrorCode.AUTH_INVALID_CREDENTIALS,
+        message="The email or password is incorrect.",
+    ),
+    ErrorCode.AUTH_THROTTLED: ErrorDetail(
+        code=ErrorCode.AUTH_THROTTLED,
+        message="Too many sign-in attempts.",
+    ),
+    #
     # Storage
     #
     ErrorCode.STORAGE_UNAVAILABLE: ErrorDetail(
