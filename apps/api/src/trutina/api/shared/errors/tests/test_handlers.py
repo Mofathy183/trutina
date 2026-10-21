@@ -147,6 +147,110 @@ class TestHandleAppError:
 
 
 @pytest.mark.unit
+class TestHandleAuthErrors:
+    async def test_invalid_credentials_is_401_without_retry_after(self):
+        exc = AppError(code=ErrorCode.AUTH_INVALID_CREDENTIALS)
+
+        response = await _handle_app_error(_make_request(), exc)
+
+        body = _body(response)
+        assert response.status_code == 401
+        assert body["error_code"] == ErrorCode.AUTH_INVALID_CREDENTIALS.value
+        assert body["success"] is False
+        assert "retry-after" not in response.headers
+
+    async def test_invalid_credentials_response_ignores_context(self):
+        bare = AppError(code=ErrorCode.AUTH_INVALID_CREDENTIALS)
+        noisy = AppError(
+            code=ErrorCode.AUTH_INVALID_CREDENTIALS,
+            context={"identifier": "someone@example.com"},
+        )
+
+        bare_body = _body(await _handle_app_error(_make_request(), bare))
+        noisy_body = _body(await _handle_app_error(_make_request(), noisy))
+
+        assert noisy_body["message"] == bare_body["message"]
+        assert noisy_body["hint"] == bare_body["hint"]
+        assert "someone@example.com" not in json.dumps(noisy_body)
+
+    async def test_throttled_is_429_with_retry_after_from_context(self):
+        exc = AppError(
+            code=ErrorCode.AUTH_THROTTLED, context={"retry_after_seconds": "30"}
+        )
+
+        response = await _handle_app_error(_make_request(), exc)
+
+        assert response.status_code == 429
+        assert response.headers["retry-after"] == "30"
+        assert _body(response)["error_code"] == ErrorCode.AUTH_THROTTLED.value
+
+    async def test_throttled_message_does_not_expose_the_delay(self):
+        exc = AppError(
+            code=ErrorCode.AUTH_THROTTLED, context={"retry_after_seconds": "42"}
+        )
+
+        response = await _handle_app_error(_make_request(), exc)
+
+        assert "42" not in _body(response)["message"]
+
+    async def test_throttled_without_retry_after_is_429_with_no_header(self):
+        exc = AppError(code=ErrorCode.AUTH_THROTTLED)
+
+        response = await _handle_app_error(_make_request(), exc)
+
+        assert response.status_code == 429
+        assert "retry-after" not in response.headers
+
+    @pytest.mark.parametrize(
+        "bad_value",
+        ["", "-5", "abc", "1.5", "5\r\nX-Injected: 1", "١٢"],
+    )
+    async def test_throttled_with_invalid_retry_after_is_429_with_no_header(
+        self, bad_value
+    ):
+        exc = AppError(
+            code=ErrorCode.AUTH_THROTTLED,
+            context={"retry_after_seconds": bad_value},
+        )
+
+        response = await _handle_app_error(_make_request(), exc)
+
+        assert response.status_code == 429
+        assert "retry-after" not in response.headers
+
+    async def test_throttled_accepts_zero_as_delta_seconds(self):
+        exc = AppError(
+            code=ErrorCode.AUTH_THROTTLED, context={"retry_after_seconds": "0"}
+        )
+
+        response = await _handle_app_error(_make_request(), exc)
+
+        assert response.headers["retry-after"] == "0"
+
+    async def test_throttled_normalizes_leading_zeros(self):
+        exc = AppError(
+            code=ErrorCode.AUTH_THROTTLED, context={"retry_after_seconds": "007"}
+        )
+
+        response = await _handle_app_error(_make_request(), exc)
+
+        assert response.headers["retry-after"] == "7"
+
+    @pytest.mark.parametrize(
+        "code", [ErrorCode.AUTH_INVALID_CREDENTIALS, ErrorCode.AUTH_THROTTLED]
+    )
+    async def test_auth_failures_log_one_info_line(self, code, caplog):
+        exc = AppError(code=code)
+
+        with caplog.at_level("INFO"):
+            await _handle_app_error(_make_request(), exc)
+
+        records = [r for r in caplog.records if r.message == "request.failed"]
+        assert len(records) == 1
+        assert records[0].levelname == "INFO"
+
+
+@pytest.mark.unit
 class TestHandleValidationAppError:
     async def test_returns_422_for_unbalanced_entry(self):
         from decimal import Decimal
