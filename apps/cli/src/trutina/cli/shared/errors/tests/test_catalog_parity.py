@@ -30,3 +30,11 @@ class TestCliCatalogParity:
     )
     def test_user_codes_have_a_field_label(self, code):
         assert code in FIELD_LABELS
+
+    def test_invalid_credentials_label_does_not_name_a_single_field(self):
+        label = FIELD_LABELS[ErrorCode.AUTH_INVALID_CREDENTIALS]
+
+        assert label not in {"email", "password"}
+
+    def test_throttled_has_no_field_label(self):
+        assert ErrorCode.AUTH_THROTTLED not in FIELD_LABELS
