@@ -52,7 +52,8 @@ Exception Contract
     populated from ValidationAppError.errors (list[FieldViolation]).
 - AppError (every other subclass, and the base class itself): status,
     message, and hint resolved from ERROR_CATALOG by `.code`, with
-    `exc.context` interpolated into both templates.
+    `exc.context` interpolated into both templates. Storage failures and
+    AUTH_THROTTLED also attach a Retry-After header.
 - pydantic.ValidationError: raised when a mapper constructs a domain
     object or Input DTO directly from already-schema-valid request data
     and a domain validator rejects it. Uses the same recovery path as
@@ -90,6 +91,7 @@ runs inside the middleware, which adds the header for them.
 """
 
 import logging
+from collections.abc import Mapping
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -120,6 +122,12 @@ _REQUEST_LOCATION_PREFIXES = {"body", "query", "path", "header"}
 # only reading "retry later" in prose.
 _RETRYABLE_CODES = {ErrorCode.STORAGE_UNAVAILABLE, ErrorCode.STORAGE_TIMEOUT}
 _RETRY_AFTER_SECONDS = "5"
+
+# AUTH_THROTTLED carries its delay in AppError.context["retry_after_seconds"],
+# a digits-only string set by the throttling use case. A missing or
+# malformed value omits the header and keeps the 429: a bad value must
+# never turn a throttled response into a handler failure.
+_THROTTLE_RETRY_AFTER_KEY = "retry_after_seconds"
 
 # Status at or above which a translated failure is an incident (ERROR
 # with traceback) rather than an expected outcome (INFO).
@@ -270,14 +278,39 @@ def _build_field_details(violations: list[FieldViolation]) -> list[FieldErrorDet
     return details
 
 
-def _response_headers(code: ErrorCode) -> dict[str, str] | None:
+def _throttle_retry_after(context: Mapping[str, str] | None) -> str | None:
+    """Resolve the Retry-After delta-seconds for an AUTH_THROTTLED response.
+
+    Args:
+        context: The raised AppError's context, or None.
+
+    Returns:
+        The seconds in `context["retry_after_seconds"]` when it is an
+        ASCII, non-negative integer string, normalized without leading
+        zeros; otherwise None. Anything else is never echoed into a
+        header.
+    """
+    value = (context or {}).get(_THROTTLE_RETRY_AFTER_KEY, "")
+    if value.isascii() and value.isdigit():
+        return str(int(value))
+    return None
+
+
+def _response_headers(
+    code: ErrorCode, context: Mapping[str, str] | None = None
+) -> dict[str, str] | None:
     """Return extra headers to attach for a given ErrorCode, if any.
 
-    Currently only used to attach `Retry-After` on storage failures.
-    Returns None (no extra headers) for every other code.
+    Storage failures get a fixed `Retry-After`; AUTH_THROTTLED gets one
+    only when its context carries a valid `retry_after_seconds`.
+    Returns None (no extra headers) for every other case.
     """
     if code in _RETRYABLE_CODES:
         return {"Retry-After": _RETRY_AFTER_SECONDS}
+    if code is ErrorCode.AUTH_THROTTLED:
+        retry_after = _throttle_retry_after(context)
+        if retry_after is not None:
+            return {"Retry-After": retry_after}
     return None
 
 
@@ -339,7 +372,7 @@ async def _handle_app_error(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=entry.status_code,
         content=body.model_dump(mode="json"),
-        headers=_response_headers(exc.code),
+        headers=_response_headers(exc.code, exc.context),
     )
 
 
