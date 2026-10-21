@@ -190,6 +190,20 @@ ERROR_CATALOG: dict[ErrorCode, ErrorCatalogEntry] = {
         "No user was found.",
         hint="Verify the user identifier.",
     ),
+    # ── Auth domain ──────────────────────────────────────────────────
+    # No message interpolates context: unknown email, wrong password and
+    # a disabled account must produce the same response, and the retry
+    # delay travels in the Retry-After header, not the body.
+    ErrorCode.AUTH_INVALID_CREDENTIALS: ErrorCatalogEntry(
+        status.HTTP_401_UNAUTHORIZED,
+        "The email or password is incorrect.",
+        hint="Check your email and password and try again.",
+    ),
+    ErrorCode.AUTH_THROTTLED: ErrorCatalogEntry(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        "Too many sign-in attempts.",
+        hint="Wait before trying again.",
+    ),
     # ── Storage ──────────────────────────────────────────────────────
     ErrorCode.STORAGE_UNAVAILABLE: ErrorCatalogEntry(
         status.HTTP_503_SERVICE_UNAVAILABLE,

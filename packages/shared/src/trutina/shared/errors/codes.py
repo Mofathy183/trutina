@@ -69,3 +69,12 @@ class ErrorCode(StrEnum):
     # ── User domain ────────────────────────────────────────────────────────
     DUPLICATE_USER_EMAIL = "user.duplicate_email"
     UNKNOWN_USER = "user.unknown"
+
+    # ── Auth domain ────────────────────────────────────────────────────────
+    # AUTH_INVALID_CREDENTIALS covers wrong password, unknown email and a
+    # disabled account alike: all three must be indistinguishable to the
+    # caller, so there is one code and its context carries no identifier.
+    # AUTH_THROTTLED may carry context["retry_after_seconds"], a digits-only
+    # string, which an adapter may turn into a Retry-After value.
+    AUTH_INVALID_CREDENTIALS = "auth.invalid_credentials"
+    AUTH_THROTTLED = "auth.throttled"
