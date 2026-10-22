@@ -32,15 +32,15 @@ package may depend on it, and it depends on nothing else in the workspace. See
 
 ## API at a Glance
 
-| Symbol                       | Purpose                                                                                                      |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.                     |
-| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.                           |
-| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                                   |
-| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                                            |
-| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`.               |
-| `AuthSettings`               | Nested authentication settings: optional signing keys and the active key id. Skeleton; nothing reads it yet. |
-| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                                         |
+| Symbol                       | Purpose                                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.                                                   |
+| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.                                                         |
+| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                                                                 |
+| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                                                                          |
+| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`.                                             |
+| `AuthSettings`               | Nested authentication settings: optional signing keys, the active key id, and password-hashing cost and concurrency. Nothing reads it yet. |
+| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                                                                       |
 
 ### `PostgresSettings` fields
 
@@ -78,12 +78,18 @@ package may depend on it, and it depends on nothing else in the workspace. See
 
 ### `AuthSettings` fields
 
-| Field          | Default | Description                                                                                      |
-| -------------- | ------- | ------------------------------------------------------------------------------------------------ |
-| `signing_keys` | `{}`    | Key id to signing secret (`SecretStr`). Empty means no keys configured. Key ids are case-folded. |
-| `active_kid`   | `None`  | Key id used to sign new tokens. Case-folded to match `signing_keys`.                             |
+| Field                       | Default | Description                                                                                                                    |
+| --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `signing_keys`              | `{}`    | Key id to signing secret (`SecretStr`). Empty means no keys configured. Key ids are case-folded.                               |
+| `active_kid`                | `None`  | Key id used to sign new tokens. Case-folded to match `signing_keys`.                                                           |
+| `password_time_cost`        | `3`     | Argon2id iterations. Minimum 1.                                                                                                |
+| `password_memory_cost_kib`  | `65536` | Argon2id memory per hash in KiB (64 MiB). Minimum 8, and at least 8 times `password_parallelism`.                              |
+| `password_parallelism`      | `1`     | Argon2id lanes per hash. Minimum 1.                                                                                            |
+| `password_hash_concurrency` | `4`     | Maximum concurrent password hashes per process. Minimum 1. Peak hashing memory is about this times `password_memory_cost_kib`. |
 
 `AuthSettings` only describes shape. It does not check that keys exist, are long enough, or that `active_kid` names a configured key; that is validated at API startup in a later milestone.
+The hashing fields are checked only for what Argon2 itself requires;
+whether they are strong enough for production is also an API-startup concern.
 
 ### `environment`
 
@@ -124,6 +130,8 @@ TRUTINA_AUTH__ACTIVE_KID=k1
 TRUTINA_POSTGRES__URI=postgresql+asyncpg://username:password@localhost:5432/trutina
 TRUTINA_API__PORT=8000
 TRUTINA_LOGGING__LEVEL=INFO
+TRUTINA_AUTH__PASSWORD_TIME_COST=3
+TRUTINA_AUTH__PASSWORD_MEMORY_COST_KIB=65536
 ```
 
 `logger_levels` is overridden as a single JSON object, since the `__` nested

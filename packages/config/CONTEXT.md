@@ -84,6 +84,12 @@ that.
   `get_settings()`, not `Settings()`, so there's exactly one cached instance
   per process.
 
+### Password-hashing fields validate shape, not strength
+
+**Decision:** `AuthSettings` validates only what Argon2 itself requires: every value at least 1, memory at least 8 KiB, and memory at least 8 KiB per lane. It does not enforce a production minimum.
+
+**Why:** a floor in settings would make cheap parameters impossible for tests and tooling, and "strong enough" is a deployment decision. Rejecting weak values in production belongs to API startup validation (D6), alongside signing keys.
+
 ### `LoggingSettings.file_path` coerces `pathlib.Path` to `str`
 
 **Decision:** `file_path` is typed `str | None`, but carries a
@@ -234,7 +240,10 @@ test_settings,test_logging}.py` cover each nested settings
   pass — `PostgresSettings`' docstring names it as the consumer of these
   fields, but the package's own manifest wasn't available to check. Confirm
   before stating it as fact elsewhere.
-- `AuthSettings` and `Settings.environment` are skeletons. Nothing reads them yet, and key presence, length and `active_kid` validity are not checked here; that is API startup's job in a later milestone.
+- `AuthSettings` and `Settings.environment` have no readers yet. Key presence,
+  length and `active_kid` validity are not checked here,
+  and neither is whether the password-hashing parameters are strong enough;
+  that is API startup's job in a later milestone.
 
 ## Common mistakes to avoid
 
