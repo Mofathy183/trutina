@@ -33,7 +33,7 @@ depends on `trutina-config`. `trutina-core`, `trutina-shared`, `trutina-config`,
 `trutina-storage-postgres` never depend on `trutina-observability` or `structlog` — only
 `trutina-cli` and `trutina-api` do, each exactly once at their own composition
 root.
-`trutina-authentication` is contracts and models only; the only workspace package
+`trutina-authentication` is contracts, models and one concrete hasher (`Argon2PasswordHasher`); the only workspace package
 that declares it is `trutina-storage-postgres` (for `UserRepo`). No app depends on it. `trutina-core` never
 imports it, and no core service method takes an `Identity`.
 

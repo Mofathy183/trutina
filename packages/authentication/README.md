@@ -1,6 +1,7 @@
 # trutina-authentication
 
-> Identity and authentication contracts for Trutina: ports and models, with a PostgreSQL user store as the only implementation so far.
+> Identity and authentication contracts for Trutina: ports and models,
+> with an Argon2id password hasher and a PostgreSQL user store as the only implementations so far.
 
 ![CI](https://github.com/Mofathy183/trutina/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.14%2B-blue)
@@ -16,7 +17,14 @@ uv run pytest -m "unit and authentication"
 
 ## What This Is
 
-`trutina-authentication` (import path `trutina.authentication`) defines the abstract contracts and small models that identity and authentication will be built on: who an authenticated caller is, how passwords and tokens are hashed and verified, and what a user, refresh-token or login-attempt store must provide. It contains **contracts and models only**. There is no password hasher, no token implementation and no route or command. The one implementation of any contract is `PostgresUserRepo` in `trutina-storage-postgres`, the only workspace package that depends on this one; no app does. Its only dependency is `pydantic`. See [CONTEXT.md](CONTEXT.md) for why it is shaped this way and which contracts are provisional.
+`trutina-authentication` (import path `trutina.authentication`) defines the abstract contracts and small models that identity and authentication
+will be built on: who an authenticated caller is, how passwords and tokens are hashed and verified,
+and what a user, refresh-token or login-attempt store must provide. It contains contracts and models,
+plus one concrete implementation, `Argon2PasswordHasher`. There is no token implementation,
+no refresh-token hasher and no route or command, and nothing outside tests uses the hasher yet.
+The one storage implementation of any contract is `PostgresUserRepo` in `trutina-storage-postgres`,
+the only workspace package that depends on this one; no app does. Its dependencies are `pydantic` and `argon2-cffi`.
+See [CONTEXT.md](CONTEXT.md) for why it is shaped this way and which contracts are provisional.
 
 ## API at a Glance
 
@@ -28,6 +36,7 @@ uv run pytest -m "unit and authentication"
 | `Clock`                                             | Source of timezone-aware UTC time.                                                                                                                    |
 | `AuthEvent` / `AuthEventSink` / `NoOpAuthEventSink` | Secret-free structured events and their receiver.                                                                                                     |
 | `PasswordHasher`                                    | Async hash, verify and rehash-check for passwords.                                                                                                    |
+| `Argon2PasswordHasher`                              | Argon2id `PasswordHasher`. Hashing and verifying run on worker threads, with a bound on concurrent work. Cost parameters are constructor arguments.   |
 | `RefreshTokenHasher`                                | Deterministic hash for refresh-token lookup, separate from password hashing.                                                                          |
 | `TokenIssuer` / `TokenVerifier` / `AccessToken`     | Access-token issue and verify. **Provisional.**                                                                                                       |
 | `User` / `UserRepo`                                 | Minimal user model (email always stored normalized) and its persistence contract: create, lookup by id and email, password-hash update, `set_active`. |
@@ -53,7 +62,21 @@ NoOpAuthEventSink().emit(
 )
 ```
 
-Implementations of the repository contracts belong in a storage package; `UserRepo` has one (`PostgresUserRepo`). Implementations of the hashers and token contracts belong in a later milestone of this package, and none exist yet.
+Implementations of the repository contracts belong in a storage package; `UserRepo` has one (`PostgresUserRepo`).
+password hasher is implemented here by Argon2PasswordHasher; the refresh-token hasher and the token contracts have no implementation yet.
+
+Hash and verify a password (cost parameters come from the caller, normally `AuthSettings`):
+
+```python
+from pydantic import SecretStr
+from trutina.authentication import Argon2PasswordHasher
+
+hasher = Argon2PasswordHasher(
+    time_cost=3, memory_cost_kib=65536, parallelism=1, max_concurrency=4
+)
+stored = await hasher.hash(SecretStr("example-password"))
+assert await hasher.verify(SecretStr("example-password"), stored)
+```
 
 ## Testing
 

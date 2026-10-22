@@ -88,12 +88,14 @@ internal extension points, which live in that package's own README/CONTEXT.
 
 ## Identity and Authentication
 
-`trutina-authentication` contains contracts and fakes, and its `UserRepo` has a PostgreSQL adapter (`users` table). Still missing:
+`trutina-authentication` contains contracts and fakes and a concrete Argon2id `PasswordHasher`,
+and its `UserRepo` has a PostgreSQL adapter (`users` table). Still missing:
 
 - Actor attribution: journal, posting and account writes validate a required `actor` and pass it to the repository as `created_by`.
   `trutina-storage-postgres` persists it as a column for journal entries and postings and as an `audit_events` row for account writes.
   Still missing: replacing the fixed pre-auth constants with real identities (M4b, M4.5).
-- Password registration and login, with throttling and a hasher. The user store exists; email format validation does not.
+- Password registration and login, with throttling. The hasher and user store exist;
+  email format validation and a password length limit do not.
 - Access and refresh tokens, auth routes, and endpoint protection.
 - A CLI `auth` group.
 - Authorization (roles and a permission matrix).

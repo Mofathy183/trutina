@@ -119,7 +119,7 @@ cross-checked against its README/CONTEXT):
 | `trutina-config`           | _(none)_                                                                              | `pydantic`, `pydantic-settings`            |
 | `trutina-core`             | `trutina-shared`                                                                      | `pydantic`                                 |
 | `trutina-observability`    | `trutina-config`                                                                      | `structlog`, `platformdirs`                |
-| `trutina-authentication`   | _(none)_                                                                              | `pydantic`                                 |
+| `trutina-authentication`   | _(none)_                                                                              | `pydantic`, `argon2-cffi`                  |
 | `trutina-storage-postgres` | `trutina-shared`, `trutina-core`, `trutina-config`, `trutina-authentication`          | `sqlalchemy`, `asyncpg`, `alembic`         |
 | `trutina-cli`              | `trutina-core`, `trutina-storage-postgres`, `trutina-config`, `trutina-observability` | `typer`, `rich`, `anyio`, `prompt-toolkit` |
 | `trutina-api`              | `trutina-core`, `trutina-storage-postgres`, `trutina-config`, `trutina-observability` | `fastapi[standard]`, `uvicorn[standard]`   |
@@ -185,7 +185,8 @@ and abstract ports for password and refresh-token hashing, access-token issue an
 verify, user, refresh-token and login-attempt stores, a clock, an event sink, a
 per-write status checker, and the `Authenticator` use case. A peer of
 `trutina.core`, never above or below it: core sees only an opaque `actor: str`
-supplied by its caller. Contracts and models only: no hasher, token module, route or command exists, and no app depends on it.
+supplied by its caller. Contracts and models plus one concrete `Argon2PasswordHasher`:
+no token module, route or command exists, and no app depends on it.
 The one storage adapter, `PostgresUserRepo`, lives in `trutina.storage_postgres`. The token and
 refresh-token contracts and `LoginAttemptRepo` are provisional until the M3 ADR and
 M2. See `packages/authentication/README.md` / `CONTEXT.md`.
@@ -299,6 +300,7 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   logger for the rest of a process — see `packages/storage-postgres/CONTEXT.md`
   for the full account, including the belt-and-braces re-enable step in
   `tests/fixtures/postgres.py`'s `schema_init`.
-- `trutina-authentication` has contracts and test fakes only. No hasher, token module, route or command exists,
+- `trutina-authentication` has contracts, test fakes and one concrete `Argon2PasswordHasher`.
+  No token module, route or command exists,
   and no app depends on it; only the `UserRepo` adapter exists.
   Token-related contracts are provisional until the M3 ADR.

@@ -83,7 +83,9 @@ contract (independent siblings), so neither can import the other.
 - **User store** — `UserRepo` (contract and `User` model in `trutina-authentication`) has a PostgreSQL adapter,
   `PostgresUserRepo`, over a `users` table with its own migration. Email is stored normalized,
   `set_active` replaces deletion, and two user error codes exist with API and CLI catalog entries.
-  Storage only: no hasher, register, login, route or command uses it yet.
+  Storage only: no register, login, route or command uses it yet (the hasher exists but is not wired to it).
+- **Password hasher** — `Argon2PasswordHasher` in `trutina-authentication` (Argon2id via `argon2-cffi`),
+  with `AuthSettings` cost and concurrency fields. Unit-tested only; no use case, route or composition root uses it yet.
 
 ## What Is Partial or Explicitly Out of Scope
 
@@ -109,8 +111,9 @@ contract (independent siblings), so neither can import the other.
   resulting exception's text for a leaked value — `hide_parameters=True` is
   confirmed set on the engine, but this specific masking behavior is not yet
   directly exercised by a test.
-- Identity and authentication — `trutina-authentication` provides contracts and test
-  fakes only. No password hasher, token implementation, storage adapter, route or
+- Identity and authentication — `trutina-authentication` provides contracts, test fakes and one concrete
+  `Argon2PasswordHasher` (the `UserRepo` adapter lives in `trutina-storage-postgres`). No token implementation, route or
+  Keep the rest of the sentence: command exists….
   command exists, two `AUTH_*` `ErrorCode` members exist (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`) with catalog entries,
   and nothing raises them yet, and no app depends on the package.
   The token, refresh-token and login-attempt contracts are provisional.

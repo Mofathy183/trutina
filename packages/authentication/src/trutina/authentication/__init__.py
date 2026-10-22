@@ -1,4 +1,5 @@
 from .credentials import (
+    Argon2PasswordHasher,
     Authenticator,
     LoginAttemptRepo,
     PasswordHasher,
@@ -22,6 +23,7 @@ from .tokens import (
 __all__ = [
     "AccessState",
     "AccessToken",
+    "Argon2PasswordHasher",
     "AuthEvent",
     "AuthEventSink",
     "Authenticator",

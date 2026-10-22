@@ -4,7 +4,11 @@ For usage, see README.md. This document explains why, not how.
 
 ## Why This Package Exists
 
-Trutina needs to know who performed a write, without the accounting domain learning what a user, a password or a token is. This package holds the vocabulary for identity and authentication so that `trutina-core` never has to. Today it is contracts and models only (the one adapter, for `UserRepo`, lives in `trutina-storage-postgres`): it fixes the seams that later milestones fill in, and gives tests fakes to build against before any implementation exists.
+Trutina needs to know who performed a write, without the accounting domain learning what a user,
+a password or a token is. This package holds the vocabulary for identity and authentication so that `trutina-core` never has to.
+Today it is contracts and models plus one concrete implementation, the Argon2id password hasher
+(the one storage adapter, for `UserRepo`, lives in `trutina-storage-postgres`):
+it fixes the seams that later milestones fill in, and gives tests fakes to build against before an implementation exists.
 
 ## The Rule This Package Protects
 
@@ -14,14 +18,15 @@ Trutina needs to know who performed a write, without the accounting domain learn
 
 Four small folders group the contracts by what they are for. Every public symbol is re-exported from the package root, so callers always import from `trutina.authentication`, never from a subfolder.
 
-| Folder         | Holds                                                                              | Role                                |
-| -------------- | ---------------------------------------------------------------------------------- | ----------------------------------- |
-| `identity/`    | `Identity`, `AccessState`, `UserStatusChecker`                                     | Who is acting, and whether they may |
-| `credentials/` | `PasswordHasher`, `User`, `UserRepo`, `LoginAttemptRepo`, `Authenticator`          | Checking a login                    |
-| `tokens/`      | `access.py` (`AccessToken`, issuer, verifier); `refresh.py` (hasher, record, repo) | Sessions after login                |
-| `shared/`      | `Clock`, `AuthEvent`, `AuthEventSink`, `NoOpAuthEventSink`                         | Cross-cutting ports                 |
+| Folder         | Holds                                                                                             | Role                                |
+| -------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `identity/`    | `Identity`, `AccessState`, `UserStatusChecker`                                                    | Who is acting, and whether they may |
+| `credentials/` | `PasswordHasher`, `Argon2PasswordHasher`, `User`, `UserRepo`, `LoginAttemptRepo`, `Authenticator` | Checking a login                    |
+| `tokens/`      | `access.py` (`AccessToken`, issuer, verifier); `refresh.py` (hasher, record, repo)                | Sessions after login                |
+| `shared/`      | `Clock`, `AuthEvent`, `AuthEventSink`, `NoOpAuthEventSink`                                        | Cross-cutting ports                 |
 
 Internal direction: `credentials` and `tokens` may import `identity`; `identity` and `shared` import nothing from their siblings. This is observed convention, not an import-linter contract. A folder exists only where two or more related modules do; do not create a folder for a single file.
+Contracts and their concrete implementations share a role folder, each in its own module. A contract module never imports a cryptographic library; only the implementation module does.
 
 ## Design Decisions and Trade-offs
 
@@ -36,6 +41,18 @@ Internal direction: `credentials` and `tokens` may import `identity`; `identity`
 ### Two hashers, never interchangeable
 
 `PasswordHasher` is slow, salted and verified; `RefreshTokenHasher` is fast and deterministic because refresh tokens are 256-bit random values that are looked up by hash. Using the password hasher for lookup is impossible by design (it is not deterministic), and using the fast hash for passwords would be a security defect, so the two are separate ports.
+
+### Argon2id through `argon2-cffi`, parameters supplied by the caller
+
+`Argon2PasswordHasher` uses Argon2id via `argon2-cffi` 25.1.0. At the defaults one hash takes roughly a quarter of a second of CPU, so a single process sustains on the order of ten to fifteen hashes per second with 4 concurrent slots. M4c.2 measures the real figure, and login throttling (M2.7) is what stops this from being a cheap denial-of-service lever. It was chosen over `pwdlib` (a wrapper over the same library, redundant beside our own `PasswordHasher` port), `bcrypt` (truncates input at 72 bytes), `passlib` (unmaintained) and `hashlib.scrypt` (would need a hash format maintained in this repo). The hash string is self-describing, so parameters travel with it, which is what makes `needs_rehash` and later cost changes possible without a migration.
+
+The constructor takes plain keyword-only values (`time_cost`, `memory_cost_kib`, `parallelism`, `max_concurrency`); this package does not import `trutina-config`. The composition root maps `AuthSettings` onto them. Defaults are 3 iterations, 64 MiB, 1 lane and 4 concurrent hashes, above the OWASP Password Storage Cheat Sheet minimum for Argon2id (19 MiB, 2 iterations, 1 lane) and consistent with RFC 9106. Parallelism is 1 because the server parallelizes across requests, not inside one hash. Measured on a development machine, one hash at these defaults took about 261 ms; that is a record, not a guarantee. Peak hashing memory is roughly `max_concurrency * memory_cost_kib` (about 256 MiB at the defaults), so container sizing must account for it. M4c.2 revisits all four values with load data.
+
+Blocking work runs through `asyncio.to_thread` behind an `asyncio.Semaphore`, so this package needs no `anyio`. The semaphore binds to the first event loop that contends for it, so use one hasher per event loop.
+
+`verify` returns `False` for a wrong password and for any malformed hash, and never raises or logs for them. `needs_rehash` returns `True` for a hash made with different parameters and for a malformed hash. A malformed hash can never have verified, so the rehash-after-login path cannot reach it; the contract is silent on this and the behavior is pinned by a test.
+
+The password is UTF-8 encoded as given, with no Unicode normalization. If normalization is wanted it belongs to the register and login inputs, so both paths apply it identically.
 
 ### Email is stored once, normalized by the model
 
@@ -79,7 +96,7 @@ These may change before they are implemented:
 
 ## Allowed and Forbidden Dependencies
 
-**Allowed:** `pydantic` and the standard library. May also depend on `trutina-shared` and `trutina-config` (the layers below it) if a later change needs them.
+**Allowed:** `pydantic`, `argon2-cffi` and the standard library. May also depend on `trutina-shared` and `trutina-config` (the layers below it) if a later change needs them.
 
 **Forbidden:** `trutina.core`; `trutina.storage_postgres`, `trutina.observability`, `structlog`; `sqlalchemy`, `asyncpg`, `fastapi`, `starlette`, `typer`, `rich`. Enforced by the workspace import-linter: core and authentication are independent siblings in the layers contract, and dedicated forbidden contracts cover the rest. Like every package outside the two apps, it emits through stdlib `logging` only.
 
@@ -88,14 +105,22 @@ These may change before they are implemented:
 
 ## Known Gaps
 
-- Only `UserRepo` has an implementation (`PostgresUserRepo`, in `trutina-storage-postgres`, which declares the dependency on this package). No hasher, token module, route or command exists, and no app depends on this package.
+- Only UserRepo (`PostgresUserRepo`, in `trutina-storage-postgres`, which declares the dependency on this package)
+  and `PasswordHasher` (`Argon2PasswordHasher`, here) have implementations. No token module, refresh-token hasher,
+  route or command exists, nothing outside tests uses the hasher, and no app depends on this package.
 - Only two `AUTH_*` `ErrorCode` members exist, `AUTH_INVALID_CREDENTIALS` and `AUTH_THROTTLED`,
   with API and CLI catalog entries, and nothing raises them yet (M2.6, M2.7).
   The token codes and `AUTH_USER_DISABLED` land with M3. The user codes `DUPLICATE_USER_EMAIL` and `UNKNOWN_USER` also exist.
-- Once password login ships there is no self-service recovery for a locked-out user until password reset is built (deferred past core authentication).
+- Once password login ships there is no self-service recovery for a locked-out user until password reset is built
+  (deferred past core authentication).
 - `FakeUserRepo.create` does not reject duplicate emails; the service pre-check and the storage unique index are the real guards.
 - Email format is not validated, and normalization is a case fold only.
 - `DUPLICATE_USER_EMAIL` reveals that an address is registered. Whether it may reach a caller is decided with the register use case.
+- No maximum password length is enforced anywhere yet. Until the register input (M2.5) adds one,
+  the hasher must not be exposed to unbounded input.
+- If a caller is cancelled while its hash is running, the worker thread finishes but the concurrency slot is released at once,
+  so concurrency can briefly exceed the bound under cancellation.
+- The hasher does not reject weak parameters. Rejecting weak values in production is API startup validation (M3.6).
 
 ## Extension Points
 
