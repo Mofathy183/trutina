@@ -113,3 +113,53 @@ class TestEnvironment:
             Settings(_env_file=None)
 
         assert exc_info.value.errors()[0]["loc"] == ("environment",)
+
+
+@pytest.mark.unit
+class TestPasswordHashingSettings:
+    def test_defaults(self):
+        auth = AuthSettings()
+
+        assert (
+            auth.password_time_cost,
+            auth.password_memory_cost_kib,
+            auth.password_parallelism,
+            auth.password_hash_concurrency,
+        ) == (3, 65536, 1, 4)
+
+    def test_loads_from_env(self, monkeypatch):
+        monkeypatch.setenv("TRUTINA_AUTH__PASSWORD_TIME_COST", "2")
+        monkeypatch.setenv("TRUTINA_AUTH__PASSWORD_HASH_CONCURRENCY", "8")
+
+        settings = Settings(_env_file=None)
+
+        assert settings.auth.password_time_cost == 2
+        assert settings.auth.password_hash_concurrency == 8
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("password_time_cost", 0),
+            ("password_memory_cost_kib", 7),
+            ("password_parallelism", 0),
+            ("password_hash_concurrency", 0),
+        ],
+    )
+    def test_rejects_out_of_range_values(self, field, value):
+        with pytest.raises(ValidationError) as exc_info:
+            AuthSettings.model_validate({field: value})
+
+        assert exc_info.value.errors()[0]["loc"] == (field,)
+
+    def test_rejects_less_than_eight_kib_of_memory_per_lane(self):
+        with pytest.raises(ValidationError):
+            AuthSettings(password_parallelism=4, password_memory_cost_kib=16)
+
+    def test_defaults_meet_the_owasp_argon2id_minimum(self):
+        # OWASP Password Storage Cheat Sheet minimum: 19 MiB, 2 iterations,
+        # 1 lane. Re-read the source when this test is touched.
+        auth = AuthSettings()
+
+        assert auth.password_memory_cost_kib >= 19456
+        assert auth.password_time_cost >= 2
+        assert auth.password_parallelism >= 1
