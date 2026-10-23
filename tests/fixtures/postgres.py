@@ -10,6 +10,7 @@ from trutina.config import TestSettings
 from trutina.storage_postgres.account.repository import PostgresAccountRepo
 from trutina.storage_postgres.identity import PostgresUserRepo
 from trutina.storage_postgres.journal import PostgresJournalRepo
+from trutina.storage_postgres.login_attempt import PostgresLoginAttemptRepo
 from trutina.storage_postgres.posting import PostgresPostingRepo
 from trutina.storage_postgres.shared import connect, disconnect
 from trutina.storage_postgres.shared.execution import PostgresExecutor
@@ -104,7 +105,7 @@ async def clean_pg_db(schema_init, postgres_connection):
     async with postgres_connection.engine.begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE accounts, journal_entries, journal_lines, postings, users, audit_events "
+                "TRUNCATE accounts, journal_entries, journal_lines, postings, users, audit_events, login_attempts "
                 "RESTART IDENTITY CASCADE"
             )
         )
@@ -146,3 +147,12 @@ async def postgres_user_repo(clean_pg_db, postgres_connection):
     """A PostgresUserRepo backed by the clean test database."""
 
     return PostgresUserRepo(postgres_connection.session_factory, PostgresExecutor())
+
+
+@pytest_asyncio.fixture
+async def postgres_login_attempt_repo(clean_pg_db, postgres_connection):
+    """A PostgresLoginAttemptRepo backed by the clean test database."""
+
+    return PostgresLoginAttemptRepo(
+        postgres_connection.session_factory, PostgresExecutor()
+    )
