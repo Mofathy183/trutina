@@ -151,3 +151,21 @@ class TestPostgresLoginAttemptRepoPurge:
         self, postgres_login_attempt_repo
     ):
         assert await postgres_login_attempt_repo.purge_before(NOW) == 0
+
+
+@pytest.mark.integration
+class TestPostgresLoginAttemptRepoLogging:
+    async def test_logs_neither_the_ip_nor_the_email(
+        self, postgres_login_attempt_repo, caplog
+    ):
+        repo = postgres_login_attempt_repo
+        ip, email = "203.0.113.7", "secret.person@example.com"
+
+        with caplog.at_level("DEBUG"):
+            await repo.record_failure(ip=ip, email=email, at=NOW)
+            await repo.count_failures(ip=ip, email=email, since=NOW)
+            await repo.clear(ip=ip, email=email)
+            await repo.purge_before(NOW)
+
+        assert ip not in caplog.text
+        assert "secret.person" not in caplog.text
