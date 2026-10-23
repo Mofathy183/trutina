@@ -7,7 +7,7 @@ For usage, see README.md. This document explains why, not how.
 Trutina needs to know who performed a write, without the accounting domain learning what a user,
 a password or a token is. This package holds the vocabulary for identity and authentication so that `trutina-core` never has to.
 Today it is contracts and models plus one concrete implementation, the Argon2id password hasher
-(the one storage adapter, for `UserRepo`, lives in `trutina-storage-postgres`):
+(the storage adapters, for `UserRepo` and `LoginAttemptRepo`, live in `trutina-storage-postgres`)
 it fixes the seams that later milestones fill in, and gives tests fakes to build against before an implementation exists.
 
 ## The Rule This Package Protects
@@ -66,6 +66,18 @@ The password is UTF-8 encoded as given, with no Unicode normalization. If normal
 
 Users are never hard-deleted, so `set_active` is how access is removed. `set_active` and `update_password_hash` raise `UNKNOWN_USER` for an unknown id. `create` raises `DUPLICATE_USER_EMAIL` with a context of `resource` and `field` only, never the address, because `AppError.context` reaches logs and responses.
 
+### Login attempts are keyed on IP and normalized email, and carry no policy
+
+`LoginAttemptRepo` records one row per failed login and counts them for a client IP and an email together,
+so one address cannot lock out an account and one account is not exposed to every address.
+The email is matched through `normalize_email()`, the same rule `User` applies, so two spellings of one address count as one.
+The IP is matched exactly as given, and `"unknown"` is a valid value.
+Thresholds, windows and the retry delay belong to the authentication service (M2.7), never to an adapter.
+`count_failures` is inclusive of `since`, `purge_before` removes only rows strictly older than the cutoff,
+and `clear` affects one IP and email pair. No method raises a domain error.
+Timestamps are aware UTC supplied by the caller from `Clock`,
+so the throttle window and the stored times share one clock. The contract was frozen in M2.4.
+
 ### `PasswordHasher` is async and owns its own offloading
 
 Hashing is CPU-bound. The implementation, not the caller, runs it off the event loop and bounds concurrency, so no call site can forget either. `verify` returns `False` for a malformed hash so the unknown-user path (verifying against a dummy hash) behaves exactly like a wrong password.
@@ -91,7 +103,6 @@ An invalid token is an expected, frequent outcome, not an exceptional one. Retur
 These may change before they are implemented:
 
 - `TokenIssuer`, `TokenVerifier`, `AccessToken` and `RefreshTokenRepo` depend on decision D1 (JWT versus one opaque session mechanism), settled in the M3 ADR.
-- `LoginAttemptRepo` is finalized in M2 with the throttling logic.
 - `User` is deliberately minimal: fields are added by the milestone that needs them.
 
 ## Allowed and Forbidden Dependencies
@@ -101,13 +112,22 @@ These may change before they are implemented:
 **Forbidden:** `trutina.core`; `trutina.storage_postgres`, `trutina.observability`, `structlog`; `sqlalchemy`, `asyncpg`, `fastapi`, `starlette`, `typer`, `rich`. Enforced by the workspace import-linter: core and authentication are independent siblings in the layers contract, and dedicated forbidden contracts cover the rest. Like every package outside the two apps, it emits through stdlib `logging` only.
 
 **Direction:** storage packages and the apps may import this package; it imports nothing above `shared`/`config`.
-`trutina-storage-postgres` imports it, forUserRepo.
+`trutina-storage-postgres` imports it, for `UserRepo` and `LoginAttemptRepo`.
 
 ## Known Gaps
 
-- Only UserRepo (`PostgresUserRepo`, in `trutina-storage-postgres`, which declares the dependency on this package)
-  and `PasswordHasher` (`Argon2PasswordHasher`, here) have implementations. No token module, refresh-token hasher,
-  route or command exists, nothing outside tests uses the hasher, and no app depends on this package.
+- `UserRepo` (`PostgresUserRepo`) and `LoginAttemptRepo` (`PostgresLoginAttemptRepo`) have adapters in `trutina-storage-postgres`,
+  which declares the dependency on this package, and `PasswordHasher` has `Argon2PasswordHasher` here.
+  No token module, refresh-token hasher, route or command exists,
+  nothing outside tests uses the hasher or the login-attempt repository,
+  and no app depends on this package.
+- The attempted email passed to `LoginAttemptRepo` is not length-capped,
+  so junk or very long values are stored as given.
+  M2.6 must cap input before it reaches the repository.
+- Attempted emails are stored in plain normalized form,
+  including addresses that belong to no user.
+  Retention is bounded only by the purge tool and M2.7's opportunistic purge.
+- A naive datetime passed to `LoginAttemptRepo` is a caller bug and is not guarded.
 - Only two `AUTH_*` `ErrorCode` members exist, `AUTH_INVALID_CREDENTIALS` and `AUTH_THROTTLED`,
   with API and CLI catalog entries, and nothing raises them yet (M2.6, M2.7).
   The token codes and `AUTH_USER_DISABLED` land with M3. The user codes `DUPLICATE_USER_EMAIL` and `UNKNOWN_USER` also exist.
