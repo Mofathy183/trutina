@@ -46,6 +46,7 @@ packages/
 │       ├── {account,journal,posting,trial_balance}/   # repository.py
 │       ├── audit/                        # model.py (audit_events)
 │       ├── identity/                     # model.py, repository.py (users)
+│       ├── login_attempt/                # model.py, repository.py (login_attempts)
 │       ├── shared/                       # PostgresExecutor, connect()/disconnect()
 │       ├── models.py
 │       └── alembic.ini, alembic/
@@ -187,9 +188,9 @@ per-write status checker, and the `Authenticator` use case. A peer of
 `trutina.core`, never above or below it: core sees only an opaque `actor: str`
 supplied by its caller. Contracts and models plus one concrete `Argon2PasswordHasher`:
 no token module, route or command exists, and no app depends on it.
-The one storage adapter, `PostgresUserRepo`, lives in `trutina.storage_postgres`. The token and
-refresh-token contracts and `LoginAttemptRepo` are provisional until the M3 ADR and
-M2. See `packages/authentication/README.md` / `CONTEXT.md`.
+The storage adapters, `PostgresUserRepo` and `PostgresLoginAttemptRepo`, live in `trutina.storage_postgres`.
+The token and refresh-token contracts are provisional until the M3 ADR; `LoginAttemptRepo` was frozen in M2.4.
+See `packages/authentication/README.md` / `CONTEXT.md`.
 
 ### `trutina.storage_postgres`
 
@@ -210,7 +211,8 @@ every non-Alembic-declared Python logger mid-process — see
 it is not part of any domain model and is never returned by a repository read.
 The account repository's write methods take `created_by` and record it as the actor of an append-only `audit_events` row,
 written in the same transaction as the write.
-It also implements `UserRepo` (defined in `trutina.authentication`) against a users table.
+It also implements `UserRepo` and `LoginAttemptRepo` (both defined in `trutina.authentication`)
+against a `users` table and a `login_attempts` table.
 
 ### `trutina.cli`
 
@@ -302,5 +304,6 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   `tests/fixtures/postgres.py`'s `schema_init`.
 - `trutina-authentication` has contracts, test fakes and one concrete `Argon2PasswordHasher`.
   No token module, route or command exists,
-  and no app depends on it; only the `UserRepo` adapter exists.
+  and no app depends on it; only the `UserRepo` and `LoginAttemptRepo` adapters exist
+  (nothing writes login attempts yet)
   Token-related contracts are provisional until the M3 ADR.

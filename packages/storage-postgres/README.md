@@ -1,6 +1,7 @@
 # trutina-storage-postgres
 
-> Async PostgreSQL persistence adapters for Trutina's account, journal, ledger-posting, trial balance, and user repository contracts.
+> Async PostgreSQL persistence adapters for Trutina's account, journal, ledger-posting, trial balance, user,
+> and login-attempt repository contracts.
 
 ![CI](https://github.com/Mofathy183/trutina/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.14%2B-blue)
@@ -18,7 +19,10 @@ uv run pytest -m "unit and infra and postgres"
 
 ## What This Is
 
-`trutina-storage-postgres` implements the repository interfaces defined by `trutina-core` (and `UserRepo`, defined by `trutina-authentication`) using SQLAlchemy's asynchronous PostgreSQL support. It consumes PostgreSQL settings from `trutina-config` and is the persistence layer beneath the presentation applications. For the design rationale, trade-offs, and known gaps, see [CONTEXT.md](CONTEXT.md).
+`trutina-storage-postgres` implements the repository interfaces defined by `trutina-core`
+(and `UserRepo` and `LoginAttemptRepo`, defined by `trutina-authentication`) using SQLAlchemy's asynchronous PostgreSQL support.
+It consumes PostgreSQL settings from `trutina-config` and is the persistence layer beneath the presentation applications.
+For the design rationale, trade-offs, and known gaps, see [CONTEXT.md](CONTEXT.md).
 
 ## API at a Glance
 
@@ -33,6 +37,7 @@ uv run pytest -m "unit and infra and postgres"
 | `PostgresPostingRepo`      | Implements the core posting repository contract.                                                  |
 | `PostgresTrialBalanceRepo` | Implements the core trial balance contract by aggregating the `postings` table.                   |
 | `PostgresUserRepo`         | Implements the authentication user repository contract. `UserModel` is its table.                 |
+| `PostgresLoginAttemptRepo` | Implements the authentication login-attempt contract. `LoginAttemptModel` is its table.           |
 | `AuditEventModel`          | The `audit_events` table written by `PostgresAccountRepo`. `AuditAction` names its action values. |
 
 ## Usage
@@ -115,6 +120,18 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
+
+## Login Attempts
+
+`PostgresLoginAttemptRepo` stores failed logins in a `login_attempts` table: `ip`, `email_key` and `attempted_at`. `email_key` is the attempted email after `normalize_email()`, so differently cased spellings share one key. `attempted_at` is the caller's aware UTC time, not a database default. There is no foreign key, because the attempted address need not belong to a user. `count_failures` is inclusive of `since`, `purge_before` removes only rows strictly older than the cutoff, and `clear` removes one IP and email pair. No throttle policy lives here. Nothing writes to the table until the throttling milestone (M2.7).
+
+Table growth is bounded by `tools/purge-login-attempts.py`, which deletes rows older than `--older-than-hours` (default 24). There is no scheduler, so run it by hand or from cron:
+
+```bash
+uv run python tools/purge-login-attempts.py --older-than-hours 24
+```
+
+See [CONTEXT.md](CONTEXT.md).
 
 ## Attribution
 

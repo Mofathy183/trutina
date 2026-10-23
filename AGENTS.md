@@ -34,7 +34,7 @@ depends on `trutina-config`. `trutina-core`, `trutina-shared`, `trutina-config`,
 `trutina-cli` and `trutina-api` do, each exactly once at their own composition
 root.
 `trutina-authentication` is contracts, models and one concrete hasher (`Argon2PasswordHasher`); the only workspace package
-that declares it is `trutina-storage-postgres` (for `UserRepo`). No app depends on it. `trutina-core` never
+that declares it is `trutina-storage-postgres` (for `UserRepo` and `LoginAttemptRepo`). No app depends on it. `trutina-core` never
 imports it, and no core service method takes an `Identity`.
 
 ## Import-Linter Contracts (root `pyproject.toml`, enforced in CI)
@@ -72,6 +72,7 @@ packages/storage-postgres/src/trutina/storage_postgres/
   {account,journal,posting}/repository.py, shared/{connection.py, execution/, model.py}
 packages/storage-postgres/src/trutina/storage_postgres/trial_balance/repository.py
 packages/storage-postgres/src/trutina/storage_postgres/identity/{model,repository}.py   # users table, UserRepo
+packages/storage-postgres/src/trutina/storage_postgres/login_attempt/{model,repository}.py   # login_attempts table, LoginAttemptRepo
 packages/storage-postgres/src/trutina/storage_postgres/audit/model.py                   # audit_events table, written by PostgresAccountRepo
 packages/storage-postgres/alembic.ini, alembic/
 packages/config/src/trutina/config/{base,postgres,api,logging}.py
@@ -98,7 +99,8 @@ Package/app own tests live beside their own code (e.g.
 - `LedgerPosting` is frozen after creation.
 - `Account.normal_balance` is derived from `AccountCategory`, never stored
   independently.
-- `Account.code` must be 4 to 6 ASCII digits, validated as supplied (never trimmed) by `Account.validate_code`, which raises `INVALID_ACCOUNT_CODE`. Repositories rebuild `Account` on every read, so a persisted account with a non-conforming code is rejected on read and update; no cleanup or migration exists.
+- `Account.code` must be 4 to 6 ASCII digits, validated as supplied (never trimmed) by `Account.validate_code`, which raises `INVALID_ACCOUNT_CODE`. Repositories rebuild `Account` on every read,
+  so a persisted account with a non-conforming code is rejected on read and update; no cleanup or migration exists.
 - `ChartOfAccounts` enforces unique codes and unique canonical names,
   case-insensitively (`account_lookup_key()` uses Unicode `casefold()`, not `lower()`).
 - Account aliases and `ChartOfAccounts.resolve()` are **not implemented**.
@@ -133,6 +135,8 @@ Package/app own tests live beside their own code (e.g.
   so one unique column enforces case-insensitive uniqueness. Email format is not validated.
   `UserRepo.create` ignores a caller-supplied `created_at`,
   and `DUPLICATE_USER_EMAIL` never carries the address in its context.
+- `LoginAttemptRepo` keys failed logins on the client IP (as given) and the attempted email after `normalize_email()`.
+  Times are aware UTC from the caller. It carries no throttling policy, and nothing writes to it until M2.7.
 
 ## Error Model
 
@@ -201,8 +205,10 @@ uv run lint-imports
 `tools/bootstrap.sh` — sync workspace. `tools/fix.sh` — auto-fix format/lint.
 `tools/pre-push.sh` — fast local gate (format check, lint, `ty check`, unit tests).
 `tools/docker-build.sh` / `tools/docker-smoke.sh` — build/smoke-test the API image
-against a real PostgreSQL container; the smoke test also asserts a structured
-`request.completed` log line with a `correlation_id` appears in the container's output.
+  against a real PostgreSQL container; the smoke test also asserts a structured
+  `request.completed` log line with a `correlation_id` appears in the container's output.
+`tools/purge-login-attempts.py` — delete `login_attempts` rows older than `--older-than-hours` (default 24);
+no scheduler exists, so it is run by hand.
 
 ## Testing Layout
 

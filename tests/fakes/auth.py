@@ -193,20 +193,20 @@ class FakeUserRepo(UserRepo):
 
 
 class FakeLoginAttemptRepo(LoginAttemptRepo):
-    """In-memory failure log keyed on (ip, casefolded email)."""
+    """In-memory failure log keyed on (ip, normalized email)."""
 
     def __init__(self) -> None:
         self._rows: list[tuple[str, str, datetime]] = []
 
     async def record_failure(self, *, ip: str, email: str, at: datetime) -> None:
-        self._rows.append((ip, email.casefold(), at))
+        self._rows.append((ip, normalize_email(email), at))
 
     async def count_failures(self, *, ip: str, email: str, since: datetime) -> int:
-        key = email.casefold()
+        key = normalize_email(email)
         return sum(1 for i, e, at in self._rows if (i, e) == (ip, key) and at >= since)
 
     async def clear(self, *, ip: str, email: str) -> None:
-        key = email.casefold()
+        key = normalize_email(email)
         self._rows = [r for r in self._rows if (r[0], r[1]) != (ip, key)]
 
     async def purge_before(self, cutoff: datetime) -> int:

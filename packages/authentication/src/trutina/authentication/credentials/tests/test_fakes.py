@@ -144,3 +144,11 @@ class TestFakeLoginAttemptRepo:
         removed = await repo.purge_before(NOW + timedelta(hours=1))
 
         assert removed == 1
+
+    async def test_matches_email_ignoring_case_and_surrounding_whitespace(self):
+        repo = FakeLoginAttemptRepo()
+        await repo.record_failure(ip="1.1.1.1", email="  A@X.com ", at=NOW)
+
+        count = await repo.count_failures(ip="1.1.1.1", email="a@x.COM", since=NOW)
+
+        assert count == 1

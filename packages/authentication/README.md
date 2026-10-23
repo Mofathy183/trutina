@@ -1,7 +1,7 @@
 # trutina-authentication
 
 > Identity and authentication contracts for Trutina: ports and models,
-> with an Argon2id password hasher and a PostgreSQL user store as the only implementations so far.
+> with an Argon2id password hasher and PostgreSQL user and login-attempt stores as the only implementations so far.
 
 ![CI](https://github.com/Mofathy183/trutina/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.14%2B-blue)
@@ -22,7 +22,7 @@ will be built on: who an authenticated caller is, how passwords and tokens are h
 and what a user, refresh-token or login-attempt store must provide. It contains contracts and models,
 plus one concrete implementation, `Argon2PasswordHasher`. There is no token implementation,
 no refresh-token hasher and no route or command, and nothing outside tests uses the hasher yet.
-The one storage implementation of any contract is `PostgresUserRepo` in `trutina-storage-postgres`,
+The storage implementations are `PostgresUserRepo` and `PostgresLoginAttemptRepo` in `trutina-storage-postgres`,
 the only workspace package that depends on this one; no app does. Its dependencies are `pydantic` and `argon2-cffi`.
 See [CONTEXT.md](CONTEXT.md) for why it is shaped this way and which contracts are provisional.
 
@@ -42,7 +42,7 @@ See [CONTEXT.md](CONTEXT.md) for why it is shaped this way and which contracts a
 | `User` / `UserRepo`                                 | Minimal user model (email always stored normalized) and its persistence contract: create, lookup by id and email, password-hash update, `set_active`. |
 | `normalize_email`                                   | Canonical stored form of an email: trimmed, then case-folded. Normalization only, no format validation.                                               |
 | `RefreshTokenRepo` and its record/result types      | Refresh-token persistence with atomic rotation. **Provisional.**                                                                                      |
-| `LoginAttemptRepo`                                  | Failed-login tracking for throttling. **Provisional.**                                                                                                |
+| `LoginAttemptRepo`                                  | Failed-login tracking for throttling, keyed on IP and normalized email. Frozen in M2.4; `PostgresLoginAttemptRepo` implements it.                     |
 | `Authenticator`                                     | Email and password in, `Identity` out.                                                                                                                |
 
 In-memory fakes for these contracts live in the repo's shared test infrastructure (`tests/fakes/auth.py`), not in this package.
@@ -62,7 +62,8 @@ NoOpAuthEventSink().emit(
 )
 ```
 
-Implementations of the repository contracts belong in a storage package; `UserRepo` has one (`PostgresUserRepo`).
+Implementations of the repository contracts belong in a storage package;
+`UserRepo` and `LoginAttemptRepo` have one each (`PostgresUserRepo`, `PostgresLoginAttemptRepo`).
 password hasher is implemented here by Argon2PasswordHasher; the refresh-token hasher and the token contracts have no implementation yet.
 
 Hash and verify a password (cost parameters come from the caller, normally `AuthSettings`):

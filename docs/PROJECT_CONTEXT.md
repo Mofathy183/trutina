@@ -86,6 +86,9 @@ contract (independent siblings), so neither can import the other.
   Storage only: no register, login, route or command uses it yet (the hasher exists but is not wired to it).
 - **Password hasher** — `Argon2PasswordHasher` in `trutina-authentication` (Argon2id via `argon2-cffi`),
   with `AuthSettings` cost and concurrency fields. Unit-tested only; no use case, route or composition root uses it yet.
+- **Login-attempt store** — `LoginAttemptRepo` (contract in `trutina-authentication`) has a PostgreSQL adapter,
+  `PostgresLoginAttemptRepo`, over a `login_attempts` table with its own migration, plus `tools/purge-login-attempts.py`.
+  Storage only: no throttling policy, route or command uses it yet.
 
 ## What Is Partial or Explicitly Out of Scope
 
@@ -112,13 +115,14 @@ contract (independent siblings), so neither can import the other.
   confirmed set on the engine, but this specific masking behavior is not yet
   directly exercised by a test.
 - Identity and authentication — `trutina-authentication` provides contracts, test fakes and one concrete
-  `Argon2PasswordHasher` (the `UserRepo` adapter lives in `trutina-storage-postgres`). No token implementation, route or
-  Keep the rest of the sentence: command exists….
-  command exists, two `AUTH_*` `ErrorCode` members exist (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`) with catalog entries,
-  and nothing raises them yet, and no app depends on the package.
-  The token, refresh-token and login-attempt contracts are provisional.
-  Separately from that package, `trutina-core`'s journal, posting and account write services require a non-blank `actor: str` and pass it to the repository as `created_by`. `trutina-storage-postgres` persists it as `created_by` for journal entries and postings, and as the actor of an
-  `audit_events` row for account writes. The actor is not yet a real identity: both apps pass a fixed pre-auth constant until M4b and M4.5.
+  `Argon2PasswordHasher` (the `UserRepo` and `LoginAttemptRepo` adapters live in `trutina-storage-postgres`).
+  No token implementation, route or command exists, two `AUTH_*` `ErrorCode` members exist
+  (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`) with catalog entries and nothing raises them yet,
+  and no app depends on the package. The token and refresh-token contracts are provisional; `LoginAttemptRepo` was frozen in M2.4.
+  Separately from that package, `trutina-core`'s journal, posting and account write services require a non-blank `actor: str`
+  and pass it to the repository as `created_by`. `trutina-storage-postgres` persists it as `created_by` for journal entries
+  and postings, and as the actor of an `audit_events` row for account writes. The actor is not yet a real identity:
+  both apps pass a fixed pre-auth constant until M4b and M4.5.
 
 ## Cross-Package Conflicts Found During This Pass
 
