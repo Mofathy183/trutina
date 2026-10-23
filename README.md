@@ -36,7 +36,7 @@ flowchart TD
 `trutina-observability` is consumed only by the two presentation apps; every other
 package emits through the standard library's `logging` module directly.
 `trutina-authentication` holds identity and authentication contracts and models plus the Argon2id password hasher;
-its sole dependent is `trutina-storage-postgres`, for the `UserRepo` adapter.
+its sole dependent is `trutina-storage-postgres`, for the `UserRepo` and `LoginAttemptRepo` adapters.
 
 ## Packages & Apps
 
@@ -53,12 +53,14 @@ its sole dependent is `trutina-storage-postgres`, for the `UserRepo` adapter.
 - **`trutina-authentication`** — identity and authentication contracts (`Identity`,
   hasher, token, user, refresh-token and login-attempt ports) plus in-memory test
   fakes. Contracts and models plus one concrete `Argon2PasswordHasher`; no token or login exists
-  and only `trutina-storage-postgres` depends on it (for the `UserRepo` adapter). Never imported by `trutina-core`. See
-  `packages/authentication/README.md` / `CONTEXT.md`.
+  and only `trutina-storage-postgres` depends on it (for the `UserRepo` and `LoginAttemptRepo` adapters).
+  Never imported by `trutina-core`.
+  See `packages/authentication/README.md` / `CONTEXT.md`.
 - **`trutina-storage-postgres`** — the storage backend `apps/cli` and `apps/api`
   depend on: SQLAlchemy async + `asyncpg` implementations of the four core repository contracts
-  (including the trial balance aggregation) plus `UserRepo` plus Alembic
-  migrations. Logs connection lifecycle events and constructs its engine with `hide_parameters=True`. See `packages/storage-postgres/README.md` / `CONTEXT.md`.
+  (including the trial balance aggregation) plus `UserRepo` and `LoginAttemptRepo` plus Alembic migrations.
+  Logs connection lifecycle events and constructs its engine with `hide_parameters=True`.
+  See `packages/storage-postgres/README.md` / `CONTEXT.md`.
 - **`trutina-config`** — typed, environment-driven settings (`Settings`/`TestSettings`,
   `PostgresSettings`, `ApiSettings`, `LoggingSettings`, `AuthSettings`). Depends on
   nothing else in the workspace. See `packages/config/README.md` / `CONTEXT.md`.
