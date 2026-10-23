@@ -31,6 +31,9 @@ from trutina.storage_postgres.journal import (
     JournalEntryModel,  # noqa: F401
     JournalLineModel,  # noqa: F401
 )
+from trutina.storage_postgres.login_attempt import (
+    LoginAttemptModel,  # noqa: F401
+)
 from trutina.storage_postgres.posting import (
     PostingModel,  # noqa: F401
 )
