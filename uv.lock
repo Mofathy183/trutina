@@ -1636,12 +1636,14 @@ source = { editable = "packages/authentication" }
 dependencies = [
     { name = "argon2-cffi" },
     { name = "pydantic" },
+    { name = "trutina-shared" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "argon2-cffi", specifier = ">=25.1.0" },
     { name = "pydantic", specifier = ">=2.13.3" },
+    { name = "trutina-shared", editable = "packages/shared" },
 ]
 
 [[package]]
