@@ -23,7 +23,7 @@ documented in that package's own README.md/CONTEXT.md.
 | `trutina-config`           | `trutina.config`           | none                                                                          | pydantic, pydantic-settings          |
 | `trutina-core`             | `trutina.core`             | trutina-shared                                                                | pydantic                             |
 | `trutina-observability`    | `trutina.observability`    | trutina-config                                                                | structlog, platformdirs              |
-| `trutina-authentication`   | `trutina.authentication`   | none                                                                          | pydantic                             |
+| `trutina-authentication`   | `trutina.authentication`   | trutina-shared                                                                | pydantic                             |
 | `trutina-storage-postgres` | `trutina.storage_postgres` | trutina-shared, trutina-core, trutina-config, trutina-authentication          | sqlalchemy, asyncpg, alembic         |
 | `trutina-cli`              | `trutina.cli`              | trutina-core, trutina-storage-postgres, trutina-config, trutina-observability | typer, rich, anyio, prompt-toolkit   |
 | `trutina-api`              | `trutina.api`              | trutina-core, trutina-storage-postgres, trutina-config, trutina-observability | fastapi[standard], uvicorn[standard] |
@@ -33,7 +33,8 @@ depends on `trutina-config`. `trutina-core`, `trutina-shared`, `trutina-config`,
 `trutina-storage-postgres` never depend on `trutina-observability` or `structlog` — only
 `trutina-cli` and `trutina-api` do, each exactly once at their own composition
 root.
-`trutina-authentication` is contracts, models and one concrete hasher (`Argon2PasswordHasher`); the only workspace package
+`trutina-authentication` is contracts, models, one concrete hasher (`Argon2PasswordHasher`)
+and the service-only registration use case (`RegistrationService`); the only workspace package
 that declares it is `trutina-storage-postgres` (for `UserRepo` and `LoginAttemptRepo`). No app depends on it. `trutina-core` never
 imports it, and no core service method takes an `Identity`.
 
@@ -68,6 +69,7 @@ packages/observability/src/trutina/observability/
   __init__.py, configure.py, correlation.py, processors.py, asgi.py
 packages/authentication/src/trutina/authentication/
   {identity,credentials,tokens,shared}/   # contracts, grouped by role
+  credentials/{passwords,users,login}/    # credentials grouped by concern
 packages/storage-postgres/src/trutina/storage_postgres/
   {account,journal,posting}/repository.py, shared/{connection.py, execution/, model.py}
 packages/storage-postgres/src/trutina/storage_postgres/trial_balance/repository.py
@@ -137,6 +139,11 @@ Package/app own tests live beside their own code (e.g.
   and `DUPLICATE_USER_EMAIL` never carries the address in its context.
 - `LoginAttemptRepo` keys failed logins on the client IP (as given) and the attempted email after `normalize_email()`.
   Times are aware UTC from the caller. It carries no throttling policy, and nothing writes to it until M2.7.
+- `RegistrationService.register` validates before any hashing or storage: the email is normalized and must have a minimal shape
+  (`INVALID_EMAIL`, at most 254 characters); the password is checked raw (at most 128 characters),
+  normalized by `normalize_password()` (NFKC, then leading and trailing whitespace removed),
+  must not be blank (`REQUIRED_FIELD`) and must be 8 to 128 characters. A duplicate email raises `DUPLICATE_USER_EMAIL` before hashing.
+  The minimum length and email shape are registration-only rules that login must not apply. No route or command uses the service yet.
 
 ## Error Model
 
@@ -205,8 +212,8 @@ uv run lint-imports
 `tools/bootstrap.sh` — sync workspace. `tools/fix.sh` — auto-fix format/lint.
 `tools/pre-push.sh` — fast local gate (format check, lint, `ty check`, unit tests).
 `tools/docker-build.sh` / `tools/docker-smoke.sh` — build/smoke-test the API image
-  against a real PostgreSQL container; the smoke test also asserts a structured
-  `request.completed` log line with a `correlation_id` appears in the container's output.
+against a real PostgreSQL container; the smoke test also asserts a structured
+`request.completed` log line with a `correlation_id` appears in the container's output.
 `tools/purge-login-attempts.py` — delete `login_attempts` rows older than `--older-than-hours` (default 24);
 no scheduler exists, so it is run by hand.
 
