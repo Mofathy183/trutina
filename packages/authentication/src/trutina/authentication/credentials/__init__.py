@@ -1,16 +1,32 @@
-from .argon2_hasher import Argon2PasswordHasher
-from .attempts import LoginAttemptRepo
-from .authenticator import Authenticator
-from .email import normalize_email
-from .password import PasswordHasher
-from .user import User, UserRepo
+from .login import Authenticator, LoginAttemptRepo
+from .passwords import (
+    MAX_PASSWORD_LENGTH,
+    Argon2PasswordHasher,
+    PasswordHasher,
+    normalize_password,
+)
+from .users import (
+    MAX_EMAIL_LENGTH,
+    RegisteredUser,
+    RegisterInput,
+    RegistrationService,
+    User,
+    UserRepo,
+    normalize_email,
+)
 
 __all__ = [
+    "MAX_EMAIL_LENGTH",
+    "MAX_PASSWORD_LENGTH",
     "Argon2PasswordHasher",
     "Authenticator",
     "LoginAttemptRepo",
     "PasswordHasher",
+    "RegisterInput",
+    "RegisteredUser",
+    "RegistrationService",
     "User",
     "UserRepo",
     "normalize_email",
+    "normalize_password",
 ]

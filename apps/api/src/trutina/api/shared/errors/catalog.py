@@ -190,6 +190,11 @@ ERROR_CATALOG: dict[ErrorCode, ErrorCatalogEntry] = {
         "No user was found.",
         hint="Verify the user identifier.",
     ),
+    ErrorCode.INVALID_EMAIL: ErrorCatalogEntry(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "The email address is not valid.",
+        hint="Use an address such as name@example.com.",
+    ),
     # ── Auth domain ──────────────────────────────────────────────────
     # No message interpolates context: unknown email, wrong password and
     # a disabled account must produce the same response, and the retry

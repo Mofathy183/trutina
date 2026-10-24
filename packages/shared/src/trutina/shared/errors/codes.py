@@ -69,6 +69,7 @@ class ErrorCode(StrEnum):
     # ── User domain ────────────────────────────────────────────────────────
     DUPLICATE_USER_EMAIL = "user.duplicate_email"
     UNKNOWN_USER = "user.unknown"
+    INVALID_EMAIL = "user.invalid_email"
 
     # ── Auth domain ────────────────────────────────────────────────────────
     # AUTH_INVALID_CREDENTIALS covers wrong password, unknown email and a

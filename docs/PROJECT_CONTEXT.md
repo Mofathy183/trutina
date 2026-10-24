@@ -85,7 +85,10 @@ contract (independent siblings), so neither can import the other.
   `set_active` replaces deletion, and two user error codes exist with API and CLI catalog entries.
   Storage only: no register, login, route or command uses it yet (the hasher exists but is not wired to it).
 - **Password hasher** — `Argon2PasswordHasher` in `trutina-authentication` (Argon2id via `argon2-cffi`),
-  with `AuthSettings` cost and concurrency fields. Unit-tested only; no use case, route or composition root uses it yet.
+  with `AuthSettings` cost and concurrency fields. Used by `RegistrationService`; no route, command or composition root wires either yet.
+- **Registration service** — `RegistrationService` in `trutina-authentication`: bounded and normalized input,
+  an email shape check, duplicate rejection before hashing, an active user with a hashed password,
+  and one secret-free `auth.user_registered` event. Unit-tested only against fakes; no route, command or composition root uses it yet.
 - **Login-attempt store** — `LoginAttemptRepo` (contract in `trutina-authentication`) has a PostgreSQL adapter,
   `PostgresLoginAttemptRepo`, over a `login_attempts` table with its own migration, plus `tools/purge-login-attempts.py`.
   Storage only: no throttling policy, route or command uses it yet.

@@ -1,11 +1,17 @@
 from .credentials import (
+    MAX_EMAIL_LENGTH,
+    MAX_PASSWORD_LENGTH,
     Argon2PasswordHasher,
     Authenticator,
     LoginAttemptRepo,
     PasswordHasher,
+    RegisteredUser,
+    RegisterInput,
+    RegistrationService,
     User,
     UserRepo,
     normalize_email,
+    normalize_password,
 )
 from .identity import AccessState, Identity, UserStatusChecker
 from .shared import AuthEvent, AuthEventSink, Clock, NoOpAuthEventSink
@@ -21,6 +27,8 @@ from .tokens import (
 )
 
 __all__ = [
+    "MAX_EMAIL_LENGTH",
+    "MAX_PASSWORD_LENGTH",
     "AccessState",
     "AccessToken",
     "Argon2PasswordHasher",
@@ -35,6 +43,9 @@ __all__ = [
     "RefreshTokenHasher",
     "RefreshTokenRecord",
     "RefreshTokenRepo",
+    "RegisterInput",
+    "RegisteredUser",
+    "RegistrationService",
     "RotationOutcome",
     "RotationResult",
     "TokenIssuer",
@@ -43,4 +54,5 @@ __all__ = [
     "UserRepo",
     "UserStatusChecker",
     "normalize_email",
+    "normalize_password",
 ]

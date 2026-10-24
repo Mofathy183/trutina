@@ -40,6 +40,7 @@ packages/
 │   └── src/trutina/authentication/
 │       ├── __init__.py
 │       ├── {identity,credentials,tokens,shared}/   # contracts grouped by role
+│       ├── credentials/{passwords,users,login}/    # credentials grouped by concern
 │       └── tests/
 ├── storage-postgres/    trutina-storage-postgres
 │   └── src/trutina/storage_postgres/
@@ -120,7 +121,7 @@ cross-checked against its README/CONTEXT):
 | `trutina-config`           | _(none)_                                                                              | `pydantic`, `pydantic-settings`            |
 | `trutina-core`             | `trutina-shared`                                                                      | `pydantic`                                 |
 | `trutina-observability`    | `trutina-config`                                                                      | `structlog`, `platformdirs`                |
-| `trutina-authentication`   | _(none)_                                                                              | `pydantic`, `argon2-cffi`                  |
+| `trutina-authentication`   | `trutina-shared`                                                                      | `pydantic`, `argon2-cffi`                  |
 | `trutina-storage-postgres` | `trutina-shared`, `trutina-core`, `trutina-config`, `trutina-authentication`          | `sqlalchemy`, `asyncpg`, `alembic`         |
 | `trutina-cli`              | `trutina-core`, `trutina-storage-postgres`, `trutina-config`, `trutina-observability` | `typer`, `rich`, `anyio`, `prompt-toolkit` |
 | `trutina-api`              | `trutina-core`, `trutina-storage-postgres`, `trutina-config`, `trutina-observability` | `fastapi[standard]`, `uvicorn[standard]`   |
@@ -186,7 +187,7 @@ and abstract ports for password and refresh-token hashing, access-token issue an
 verify, user, refresh-token and login-attempt stores, a clock, an event sink, a
 per-write status checker, and the `Authenticator` use case. A peer of
 `trutina.core`, never above or below it: core sees only an opaque `actor: str`
-supplied by its caller. Contracts and models plus one concrete `Argon2PasswordHasher`:
+supplied by its caller. Contracts and models plus `Argon2PasswordHasher` and the service-only `RegistrationService`:.
 no token module, route or command exists, and no app depends on it.
 The storage adapters, `PostgresUserRepo` and `PostgresLoginAttemptRepo`, live in `trutina.storage_postgres`.
 The token and refresh-token contracts are provisional until the M3 ADR; `LoginAttemptRepo` was frozen in M2.4.
@@ -302,7 +303,7 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   logger for the rest of a process — see `packages/storage-postgres/CONTEXT.md`
   for the full account, including the belt-and-braces re-enable step in
   `tests/fixtures/postgres.py`'s `schema_init`.
-- `trutina-authentication` has contracts, test fakes and one concrete `Argon2PasswordHasher`.
+- `trutina-authentication` has contracts, test fakes, one concrete `Argon2PasswordHasher` and the service-only `RegistrationService`.
   No token module, route or command exists,
   and no app depends on it; only the `UserRepo` and `LoginAttemptRepo` adapters exist
   (nothing writes login attempts yet)

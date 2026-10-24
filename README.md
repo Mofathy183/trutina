@@ -30,7 +30,7 @@ flowchart TD
     OBS --> CONFIG[trutina-config]
     CORE --> SHARED[trutina-shared]
     CORE -.-> CONFIG
-    AUTH[trutina-authentication]
+    AUTH --> SHARED
 ```
 
 `trutina-observability` is consumed only by the two presentation apps; every other
@@ -52,10 +52,10 @@ its sole dependent is `trutina-storage-postgres`, for the `UserRepo` and `LoginA
   package. See `packages/observability/README.md` / `CONTEXT.md`.
 - **`trutina-authentication`** — identity and authentication contracts (`Identity`,
   hasher, token, user, refresh-token and login-attempt ports) plus in-memory test
-  fakes. Contracts and models plus one concrete `Argon2PasswordHasher`; no token or login exists
-  and only `trutina-storage-postgres` depends on it (for the `UserRepo` and `LoginAttemptRepo` adapters).
-  Never imported by `trutina-core`.
-  See `packages/authentication/README.md` / `CONTEXT.md`.
+  fakes.
+  Contracts and models plus `Argon2PasswordHasher` and a service-only `RegistrationService`;
+  no token, login, route or command exists and only `trutina-storage-postgres` depends on it (for the `UserRepo` and `LoginAttemptRepo` adapters). Never imported by`trutina-core`.
+  See`packages/authentication/README.md`/`CONTEXT.md`.
 - **`trutina-storage-postgres`** — the storage backend `apps/cli` and `apps/api`
   depend on: SQLAlchemy async + `asyncpg` implementations of the four core repository contracts
   (including the trial balance aggregation) plus `UserRepo` and `LoginAttemptRepo` plus Alembic migrations.

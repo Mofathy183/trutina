@@ -116,6 +116,7 @@ HINTS: HintMap = {
     #
     ErrorCode.DUPLICATE_USER_EMAIL: "Use a different email address.",
     ErrorCode.UNKNOWN_USER: "Check the user identifier and try again.",
+    ErrorCode.INVALID_EMAIL: "Use an address such as name@example.com.",
     #
     # Auth domain
     #
@@ -145,5 +146,6 @@ FIELD_LABELS: dict[str, str] = {
     ErrorCode.JOURNAL_ALREADY_POSTED: "journal_number",
     ErrorCode.DUPLICATE_USER_EMAIL: "email",
     ErrorCode.UNKNOWN_USER: "user_id",
+    ErrorCode.INVALID_EMAIL: "email",
     ErrorCode.AUTH_INVALID_CREDENTIALS: "credentials",
 }

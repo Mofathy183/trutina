@@ -24,13 +24,19 @@ class TestErrorCatalogParity:
         [
             (ErrorCode.DUPLICATE_USER_EMAIL, 409),
             (ErrorCode.UNKNOWN_USER, 404),
+            (ErrorCode.INVALID_EMAIL, 422),
         ],
     )
     def test_user_codes_map_to_the_decided_status(self, code, status_code):
         assert ERROR_CATALOG[code].status_code == status_code
 
     @pytest.mark.parametrize(
-        "code", [ErrorCode.DUPLICATE_USER_EMAIL, ErrorCode.UNKNOWN_USER]
+        "code",
+        [
+            ErrorCode.DUPLICATE_USER_EMAIL,
+            ErrorCode.UNKNOWN_USER,
+            ErrorCode.INVALID_EMAIL,
+        ],
     )
     def test_user_entries_interpolate_no_context(self, code):
         entry = ERROR_CATALOG[code]

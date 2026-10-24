@@ -171,6 +171,10 @@ ERRORS: ErrorMap = {
         code=ErrorCode.UNKNOWN_USER,
         message="No user exists with that identifier.",
     ),
+    ErrorCode.INVALID_EMAIL: ErrorDetail(
+        code=ErrorCode.INVALID_EMAIL,
+        message="The email address is not valid.",
+    ),
     #
     # Auth domain
     #

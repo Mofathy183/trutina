@@ -5,7 +5,11 @@ requires-python = ">=3.14"
 dependencies = [
     "argon2-cffi>=25.1.0",
     "pydantic>=2.13.3",
+    "trutina-shared",
 ]
+
+[tool.uv.sources]
+trutina-shared = { workspace = true }
 
 [build-system]
 requires = ["setuptools>=68"]
