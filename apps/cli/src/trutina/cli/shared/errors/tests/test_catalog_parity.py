@@ -26,7 +26,12 @@ class TestCliCatalogParity:
         assert _NOT_CATALOGED.isdisjoint(HINTS)
 
     @pytest.mark.parametrize(
-        "code", [ErrorCode.DUPLICATE_USER_EMAIL, ErrorCode.UNKNOWN_USER]
+        "code",
+        [
+            ErrorCode.DUPLICATE_USER_EMAIL,
+            ErrorCode.UNKNOWN_USER,
+            ErrorCode.INVALID_EMAIL,
+        ],
     )
     def test_user_codes_have_a_field_label(self, code):
         assert code in FIELD_LABELS

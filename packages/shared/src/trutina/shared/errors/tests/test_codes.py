@@ -9,3 +9,9 @@ class TestAuthErrorCodes:
 
     def test_throttled_value_is_stable(self):
         assert ErrorCode.AUTH_THROTTLED.value == "auth.throttled"
+
+
+@pytest.mark.unit
+class TestUserErrorCodes:
+    def test_invalid_email_value_is_stable(self):
+        assert ErrorCode.INVALID_EMAIL.value == "user.invalid_email"
