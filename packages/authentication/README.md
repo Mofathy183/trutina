@@ -21,29 +21,34 @@ uv run pytest -m "unit and authentication"
 will be built on: who an authenticated caller is, how passwords and tokens are hashed and verified,
 and what a user, refresh-token or login-attempt store must provide. It contains contracts and models,
 plus one concrete implementation, `Argon2PasswordHasher`. There is no token implementation,
-no refresh-token hasher and no route or command, and nothing outside tests uses the hasher yet.
+no refresh-token hasher and no route or command, and nothing outside tests uses the hasher or the registration service yet.
 The storage implementations are `PostgresUserRepo` and `PostgresLoginAttemptRepo` in `trutina-storage-postgres`,
-the only workspace package that depends on this one; no app does. Its dependencies are `pydantic` and `argon2-cffi`.
+the only workspace package that depends on this one; no app does. Its dependencies are `pydantic` and `argon2-cffi` and `trutina-shared`.
 See [CONTEXT.md](CONTEXT.md) for why it is shaped this way and which contracts are provisional.
 
 ## API at a Glance
 
-| Symbol                                              | Purpose                                                                                                                                               |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Identity`                                          | Frozen authenticated principal: just `subject_id`.                                                                                                    |
-| `AccessState`                                       | What is checked on every write: `is_active`.                                                                                                          |
-| `UserStatusChecker`                                 | Reads a user's `AccessState`; unknown users are inactive.                                                                                             |
-| `Clock`                                             | Source of timezone-aware UTC time.                                                                                                                    |
-| `AuthEvent` / `AuthEventSink` / `NoOpAuthEventSink` | Secret-free structured events and their receiver.                                                                                                     |
-| `PasswordHasher`                                    | Async hash, verify and rehash-check for passwords.                                                                                                    |
-| `Argon2PasswordHasher`                              | Argon2id `PasswordHasher`. Hashing and verifying run on worker threads, with a bound on concurrent work. Cost parameters are constructor arguments.   |
-| `RefreshTokenHasher`                                | Deterministic hash for refresh-token lookup, separate from password hashing.                                                                          |
-| `TokenIssuer` / `TokenVerifier` / `AccessToken`     | Access-token issue and verify. **Provisional.**                                                                                                       |
-| `User` / `UserRepo`                                 | Minimal user model (email always stored normalized) and its persistence contract: create, lookup by id and email, password-hash update, `set_active`. |
-| `normalize_email`                                   | Canonical stored form of an email: trimmed, then case-folded. Normalization only, no format validation.                                               |
-| `RefreshTokenRepo` and its record/result types      | Refresh-token persistence with atomic rotation. **Provisional.**                                                                                      |
-| `LoginAttemptRepo`                                  | Failed-login tracking for throttling, keyed on IP and normalized email. Frozen in M2.4; `PostgresLoginAttemptRepo` implements it.                     |
-| `Authenticator`                                     | Email and password in, `Identity` out.                                                                                                                |
+| Symbol                                              | Purpose                                                                                                                                                                                                                     |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Identity`                                          | Frozen authenticated principal: just `subject_id`.                                                                                                                                                                          |
+| `AccessState`                                       | What is checked on every write: `is_active`.                                                                                                                                                                                |
+| `UserStatusChecker`                                 | Reads a user's `AccessState`; unknown users are inactive.                                                                                                                                                                   |
+| `Clock`                                             | Source of timezone-aware UTC time.                                                                                                                                                                                          |
+| `AuthEvent` / `AuthEventSink` / `NoOpAuthEventSink` | Secret-free structured events and their receiver.                                                                                                                                                                           |
+| `PasswordHasher`                                    | Async hash, verify and rehash-check for passwords.                                                                                                                                                                          |
+| `Argon2PasswordHasher`                              | Argon2id `PasswordHasher`. Hashing and verifying run on worker threads, with a bound on concurrent work. Cost parameters are constructor arguments.                                                                         |
+| `RefreshTokenHasher`                                | Deterministic hash for refresh-token lookup, separate from password hashing.                                                                                                                                                |
+| `TokenIssuer` / `TokenVerifier` / `AccessToken`     | Access-token issue and verify. **Provisional.**                                                                                                                                                                             |
+| `User` / `UserRepo`                                 | Minimal user model (email always stored normalized) and its persistence contract: create, lookup by id and email, password-hash update, `set_active`.                                                                       |
+| `normalize_email`                                   | Canonical stored form of an email: trimmed, then case-folded. Normalization only, no format validation.                                                                                                                     |
+| `normalize_password`                                | The exact string hashed and verified for a password: converted to NFKC, then leading and trailing whitespace removed (whitespace between characters is kept). Registration and login both call it, so the two always agree. |
+| `MAX_PASSWORD_LENGTH`                               | Longest raw password an entry point may accept (128 characters). Checked on the input as typed, before `normalize_password`.                                                                                                |
+| `MAX_EMAIL_LENGTH`                                  | Longest normalized email accepted at an entry point (254 characters).                                                                                                                                                       |
+| `RegistrationService`                               | Service-only use case: validates an email and password, rejects a duplicate address, hashes the password and stores an active user. Takes a repo, hasher, clock and optional event sink.                                    |
+| `RegisterInput` / `RegisteredUser`                  | The registration input (email, `SecretStr` password) and its result (id and stored email only, never the hash).                                                                                                             |
+| `RefreshTokenRepo` and its record/result types      | Refresh-token persistence with atomic rotation. **Provisional.**                                                                                                                                                            |
+| `LoginAttemptRepo`                                  | Failed-login tracking for throttling, keyed on IP and normalized email. Frozen in M2.4; `PostgresLoginAttemptRepo` implements it.                                                                                           |
+| `Authenticator`                                     | Email and password in, `Identity` out.                                                                                                                                                                                      |
 
 In-memory fakes for these contracts live in the repo's shared test infrastructure (`tests/fakes/auth.py`), not in this package.
 
@@ -77,6 +82,19 @@ hasher = Argon2PasswordHasher(
 )
 stored = await hasher.hash(SecretStr("example-password"))
 assert await hasher.verify(SecretStr("example-password"), stored)
+```
+
+Register a user (the repository, hasher and clock come from the composition root):
+
+```python
+from pydantic import SecretStr
+from trutina.authentication import RegisterInput, RegistrationService
+
+service = RegistrationService(users=user_repo, hasher=hasher, clock=clock)
+registered = await service.register(
+    RegisterInput(email=" Ann@Example.com ", password=SecretStr("correct horse 1"))
+)
+assert registered.email == "ann@example.com"
 ```
 
 ## Testing
