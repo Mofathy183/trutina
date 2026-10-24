@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 import pytest
@@ -323,3 +324,22 @@ class TestAuthenticateRehash:
         error = await _failure(_login(authenticator))
 
         assert error is failure
+
+
+@pytest.mark.unit
+class TestAuthenticateLeaksNothing:
+    async def test_failures_carry_no_hash_and_emit_no_logs(self, caplog):
+        authenticator, users, hasher = await _build()
+        user = await _seed(users, hasher)
+
+        with caplog.at_level(logging.DEBUG):
+            wrong = await _failure(_login(authenticator, password=SECRET_SENTINEL))
+            unknown = await _failure(_login(authenticator, email="nobody@example.com"))
+            await _login(authenticator)
+
+        for error in (wrong, unknown):
+            text = repr(error)
+            assert user.password_hash not in text
+            assert authenticator._dummy_hash not in text
+            assert SECRET_SENTINEL not in text
+        assert [r for r in caplog.records if r.name.startswith("trutina")] == []
