@@ -187,7 +187,7 @@ and abstract ports for password and refresh-token hashing, access-token issue an
 verify, user, refresh-token and login-attempt stores, a clock, an event sink, a
 per-write status checker, and the `Authenticator` use case. A peer of
 `trutina.core`, never above or below it: core sees only an opaque `actor: str`
-supplied by its caller. Contracts and models plus `Argon2PasswordHasher` and the service-only `RegistrationService`:.
+supplied by its caller. Contracts and models plus `Argon2PasswordHasher` and the service-only `RegistrationService` and `PasswordAuthenticator`.
 no token module, route or command exists, and no app depends on it.
 The storage adapters, `PostgresUserRepo` and `PostgresLoginAttemptRepo`, live in `trutina.storage_postgres`.
 The token and refresh-token contracts are provisional until the M3 ADR; `LoginAttemptRepo` was frozen in M2.4.

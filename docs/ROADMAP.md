@@ -94,9 +94,9 @@ and its `UserRepo` and `LoginAttemptRepo` have PostgreSQL adapters (`users` and 
 - Actor attribution: journal, posting and account writes validate a required `actor` and pass it to the repository as `created_by`.
   `trutina-storage-postgres` persists it as a column for journal entries and postings and as an `audit_events` row for account writes.
   Still missing: replacing the fixed pre-auth constants with real identities (M4b, M4.5).
-- Password login with throttling. The hasher, user store, login-attempt store and service-only registration
-  (`RegistrationService`, with input limits and an email shape check) exist;
-  the login use case and the throttling policy do not.
+- Password login with throttling. The hasher, user store, login-attempt store, service-only registration (`RegistrationService`)
+  and login verification (`PasswordAuthenticator`: one indistinguishable failure, dummy-hash verify, rehash on login) exist;
+  the throttling policy does not, and nothing wires either use case into an app.
 - Access and refresh tokens, auth routes, and endpoint protection.
 - A CLI `auth` group.
 - Authorization (roles and a permission matrix).
