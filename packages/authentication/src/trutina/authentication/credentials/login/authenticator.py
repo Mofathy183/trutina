@@ -10,7 +10,8 @@ class Authenticator(ABC):
     """Turns an email and password into an ``Identity``.
 
     Issuing tokens is a separate step (``TokenIssuer``), so this contract
-    does not depend on the access-token mechanism.
+    does not depend on the access-token mechanism. ``PasswordAuthenticator``
+    is the implementation.
     """
 
     @abstractmethod
@@ -37,5 +38,7 @@ class Authenticator(ABC):
                 indistinguishable to the caller). AUTH_THROTTLED when
                 too many attempts have been made; its context may carry
                 ``retry_after_seconds`` in seconds. Both codes exist in
-                ``shared/errors``; no implementation raises them yet.
+                ``shared/errors``. ``PasswordAuthenticator`` raises
+                AUTH_INVALID_CREDENTIALS; nothing raises AUTH_THROTTLED
+                until throttling (M2.7).
         """

@@ -33,8 +33,8 @@ depends on `trutina-config`. `trutina-core`, `trutina-shared`, `trutina-config`,
 `trutina-storage-postgres` never depend on `trutina-observability` or `structlog` — only
 `trutina-cli` and `trutina-api` do, each exactly once at their own composition
 root.
-`trutina-authentication` is contracts, models, one concrete hasher (`Argon2PasswordHasher`)
-and the service-only registration use case (`RegistrationService`); the only workspace package
+`trutina-authentication` is contracts, models, one concrete hasher (`Argon2PasswordHasher`) and the service-only use cases
+`RegistrationService` and `PasswordAuthenticator`; the only workspace package
 that declares it is `trutina-storage-postgres` (for `UserRepo` and `LoginAttemptRepo`). No app depends on it. `trutina-core` never
 imports it, and no core service method takes an `Identity`.
 
@@ -144,6 +144,11 @@ Package/app own tests live beside their own code (e.g.
   normalized by `normalize_password()` (NFKC, then leading and trailing whitespace removed),
   must not be blank (`REQUIRED_FIELD`) and must be 8 to 128 characters. A duplicate email raises `DUPLICATE_USER_EMAIL` before hashing.
   The minimum length and email shape are registration-only rules that login must not apply. No route or command uses the service yet.
+- `PasswordAuthenticator.authenticate` raises one `AUTH_INVALID_CREDENTIALS`, with an empty context, for an unknown email,
+  a wrong password, a disabled account, a blank password and over-limit input.
+  It verifies against a dummy hash made at startup for an unknown email, verifies before reading `is_active`,
+  hashes `normalize_password()` of the input, applies neither the registration minimum length nor the email shape check,
+  and rehashes a stale hash after a successful login. It does no throttling, and no route or command uses it yet.
 
 ## Error Model
 

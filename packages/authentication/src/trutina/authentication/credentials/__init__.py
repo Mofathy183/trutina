@@ -1,4 +1,4 @@
-from .login import Authenticator, LoginAttemptRepo
+from .login import Authenticator, LoginAttemptRepo, PasswordAuthenticator
 from .passwords import (
     MAX_PASSWORD_LENGTH,
     Argon2PasswordHasher,
@@ -21,6 +21,7 @@ __all__ = [
     "Argon2PasswordHasher",
     "Authenticator",
     "LoginAttemptRepo",
+    "PasswordAuthenticator",
     "PasswordHasher",
     "RegisterInput",
     "RegisteredUser",

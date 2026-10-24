@@ -89,6 +89,9 @@ contract (independent siblings), so neither can import the other.
 - **Registration service** — `RegistrationService` in `trutina-authentication`: bounded and normalized input,
   an email shape check, duplicate rejection before hashing, an active user with a hashed password,
   and one secret-free `auth.user_registered` event. Unit-tested only against fakes; no route, command or composition root uses it yet.
+- **Login verification** — `PasswordAuthenticator` in `trutina-authentication`: bounded and normalized input,
+  one indistinguishable `AUTH_INVALID_CREDENTIALS` for every failure cause, a dummy-hash verify on the unknown-user path,
+  and rehash of a stale hash after success. Unit-tested only against fakes; no throttling, route, command or composition root uses it yet.
 - **Login-attempt store** — `LoginAttemptRepo` (contract in `trutina-authentication`) has a PostgreSQL adapter,
   `PostgresLoginAttemptRepo`, over a `login_attempts` table with its own migration, plus `tools/purge-login-attempts.py`.
   Storage only: no throttling policy, route or command uses it yet.
@@ -117,10 +120,11 @@ contract (independent siblings), so neither can import the other.
   resulting exception's text for a leaked value — `hide_parameters=True` is
   confirmed set on the engine, but this specific masking behavior is not yet
   directly exercised by a test.
-- Identity and authentication — `trutina-authentication` provides contracts, test fakes and one concrete
-  `Argon2PasswordHasher` (the `UserRepo` and `LoginAttemptRepo` adapters live in `trutina-storage-postgres`).
+- Identity and authentication — `trutina-authentication` provides contracts, test fakes and one concrete `Argon2PasswordHasher`,
+  the service-only `RegistrationService` and `PasswordAuthenticator` (the `UserRepo` and `LoginAttemptRepo` adapters live in `trutina-storage-postgres`).
   No token implementation, route or command exists, two `AUTH_*` `ErrorCode` members exist
-  (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`) with catalog entries and nothing raises them yet,
+  (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`) with catalog entries;
+  only `PasswordAuthenticator` raises `AUTH_INVALID_CREDENTIALS`, and nothing raises `AUTH_THROTTLED` yet
   and no app depends on the package. The token and refresh-token contracts are provisional; `LoginAttemptRepo` was frozen in M2.4.
   Separately from that package, `trutina-core`'s journal, posting and account write services require a non-blank `actor: str`
   and pass it to the repository as `created_by`. `trutina-storage-postgres` persists it as `created_by` for journal entries

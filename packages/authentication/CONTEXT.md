@@ -6,7 +6,7 @@ For usage, see README.md. This document explains why, not how.
 
 Trutina needs to know who performed a write, without the accounting domain learning what a user,
 a password or a token is. This package holds the vocabulary for identity and authentication so that `trutina-core` never has to.
-Today it is contracts and models plus two concrete pieces, the Argon2id password hasher and the registration use case
+Today it is contracts and models plus three concrete pieces, the Argon2id password hasher, the registration use case and the login verification (`PasswordAuthenticator`)
 (the storage adapters, for `UserRepo` and `LoginAttemptRepo`, live in `trutina-storage-postgres`)
 it fixes the seams that later milestones fill in, and gives tests fakes to build against before an implementation exists.
 
@@ -18,12 +18,12 @@ it fixes the seams that later milestones fill in, and gives tests fakes to build
 
 Four small folders group the contracts by what they are for. Every public symbol is re-exported from the package root, so callers always import from `trutina.authentication`, never from a subfolder.
 
-| Folder         | Holds                                                                                                                                                                                                                                                                                                                               | Role                                |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `identity/`    | `Identity`, `AccessState`, `UserStatusChecker`                                                                                                                                                                                                                                                                                      | Who is acting, and whether they may |
-| `credentials/` | Grouped into `passwords/` (`PasswordHasher`, `Argon2PasswordHasher`, `normalize_password`, `MAX_PASSWORD_LENGTH`), `users/` (`User`, `UserRepo`, `normalize_email`, `MAX_EMAIL_LENGTH`, and the registration use case: `RegistrationService`, `RegisterInput`, `RegisteredUser`) and `login/` (`LoginAttemptRepo`, `Authenticator`) | Checking a login                    |
-| `tokens/`      | `access.py` (`AccessToken`, issuer, verifier); `refresh.py` (hasher, record, repo)                                                                                                                                                                                                                                                  | Sessions after login                |
-| `shared/`      | `Clock`, `AuthEvent`, `AuthEventSink`, `NoOpAuthEventSink`                                                                                                                                                                                                                                                                          | Cross-cutting ports                 |
+| Folder         | Holds                                                                                                                                                                                                                                                                                                                                                        | Role                                |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| `identity/`    | `Identity`, `AccessState`, `UserStatusChecker`                                                                                                                                                                                                                                                                                                               | Who is acting, and whether they may |
+| `credentials/` | Grouped into `passwords/` (`PasswordHasher`, `Argon2PasswordHasher`, `normalize_password`, `MAX_PASSWORD_LENGTH`), `users/` (`User`, `UserRepo`, `normalize_email`, `MAX_EMAIL_LENGTH`, and the registration use case: `RegistrationService`, `RegisterInput`, `RegisteredUser`) and `login/` (`LoginAttemptRepo`, `Authenticator`, `PasswordAuthenticator`) | Checking a login                    |
+| `tokens/`      | `access.py` (`AccessToken`, issuer, verifier); `refresh.py` (hasher, record, repo)                                                                                                                                                                                                                                                                           | Sessions after login                |
+| `shared/`      | `Clock`, `AuthEvent`, `AuthEventSink`, `NoOpAuthEventSink`                                                                                                                                                                                                                                                                                                   | Cross-cutting ports                 |
 
 Internal direction: `credentials` and `tokens` may import `identity`; `identity` and `shared` import nothing from their siblings. This is observed convention, not an import-linter contract. A folder exists only where two or more related modules do; do not create a folder for a single file.
 `credentials/` is itself split into three subfolders, each holding two or more related modules:
@@ -93,6 +93,20 @@ Registration requires a normalized address that is non-empty, at most 254 charac
 
 `RegistrationService` raises `DUPLICATE_USER_EMAIL` when the address is already registered, with a context of `resource` and `field` only. The check runs before hashing, so a duplicate returns faster than a new registration. The check and the insert are not atomic; the unique index decides a race, and its error is passed on unchanged. Because nothing exposes the service yet, whether a public caller may see this error is decided with public registration (M5.6).
 
+### Login never reveals which credential was wrong
+
+`PasswordAuthenticator` raises one `AUTH_INVALID_CREDENTIALS`, with an empty context, for an unknown email, a wrong password, a disabled account, a blank password and over-limit input. The context stays empty because the CLI formatter lets a `field` key override its label, which would reveal which half was wrong. Accounts therefore cannot be enumerated through the error.
+
+Cost is kept equal where it can reveal an account. An unknown email verifies the password against a dummy hash, so it costs a real verify. The dummy hash is made once by `PasswordAuthenticator.create()` with `hash()` of a random value, so it uses the hasher's current parameters and nobody's password matches it. A hardcoded literal would stop costing the same once the parameters change. For a known user the password is verified before `is_active` is read, so a disabled account costs the same as a wrong password.
+
+Over-limit input skips everything. A raw password over `MAX_PASSWORD_LENGTH`, a normalized password that is blank or over the limit, and a normalized email over `MAX_EMAIL_LENGTH` are rejected before any lookup or hash, because hashing unbounded input is a denial-of-service lever. Such input returns faster than a wrong password. The limits do not depend on any account, so this leaks nothing about one.
+
+The password goes through `normalize_password()`, the same function registration calls, so both hash the identical string. The registration-only minimum length and the email shape check are not applied, so a user whose credentials were accepted under an earlier rule can still sign in.
+
+After a successful login of an active user, `needs_rehash` is checked and a stale hash is replaced through `update_password_hash`. A failed or disabled login never rehashes. A storage error from that write propagates as `AppError` unchanged, because a login that cannot persist its rehash is a storage incident and swallowing it would hide that.
+
+`client_ip` is accepted for the contract and unused. No `Clock`, event sink or throttling is wired in until M2.7.
+
 ### Login attempts are keyed on IP and normalized email, and carry no policy
 
 `LoginAttemptRepo` records one row per failed login and counts them for a client IP and an email together,
@@ -148,9 +162,9 @@ These may change before they are implemented:
   No token module, refresh-token hasher, route or command exists,
   nothing outside tests uses the hasher or the login-attempt repository,
   and no app depends on this package.
-- The attempted email passed to `LoginAttemptRepo` is not length-capped,
-  so junk or very long values are stored as given.
-  M2.6 must cap input before it reaches the repository.
+- The attempted email passed to `LoginAttemptRepo` is not length-capped by the repository.
+  `PasswordAuthenticator` caps the email with `MAX_EMAIL_LENGTH` before any lookup but does not call `LoginAttemptRepo` yet.
+  M2.7 must record only input that has passed that cap.
 - Attempted emails are stored in plain normalized form,
   including addresses that belong to no user.
   Retention is bounded only by the purge tool and M2.7's opportunistic purge.
@@ -167,14 +181,15 @@ These may change before they are implemented:
 - `RegistrationService` passes `DUPLICATE_USER_EMAIL` to its caller, so it reveals that an address is registered,
   and a duplicate is rejected faster than a new registration. Nothing exposes the service today;
   whether public registration exists is decided in M5.6.
-- `RegistrationService` caps and normalizes password input, but the hasher itself has no limit.
-  Any other caller of `PasswordHasher` must apply `MAX_PASSWORD_LENGTH` and `normalize_password` first.
-  Login (M2.6) must do the same and must not apply the registration-only minimum.
+- `RegistrationService` and `PasswordAuthenticator` cap and normalize password input,
+  but the hasher itself has no limit. Any other caller of `PasswordHasher` must apply `MAX_PASSWORD_LENGTH` and `normalize_password` first.
 - If a caller is cancelled while its hash is running, the worker thread finishes but the concurrency slot is released at once,
   so concurrency can briefly exceed the bound under cancellation.
 - The hasher does not reject weak parameters. Rejecting weak values in production is API startup validation (M3.6).
-- Nothing wires `RegistrationService` into an app yet, and no route or command calls it.
-- Passwords are checked for length only. There is no complexity rule and no breached-password check.
+- Nothing wires `RegistrationService` or `PasswordAuthenticator` into an app yet, and no route or command calls either.
+- Passwords are checked for length only. There is no complexity rule and no breached-password checkOver-limit
+  input is rejected faster than a wrong password. A rehash write failure fails the login.
+  A dummy hash made with different parameters than a later parameter change keeps the old cost until the process restarts.
 
 ## Extension Points
 
@@ -192,4 +207,4 @@ These may change before they are implemented:
 - Treating a provisional contract as stable in documentation or downstream code.
 - Applying the registration-only minimum password length or the email shape check at login.
 - Normalizing a password differently at registration and at login instead of calling `normalize_password()` in both.
-  
+- Putting a field key in the `AUTH_INVALID_CREDENTIALS` context. Making the dummy hash from a literal.

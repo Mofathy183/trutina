@@ -53,8 +53,7 @@ its sole dependent is `trutina-storage-postgres`, for the `UserRepo` and `LoginA
 - **`trutina-authentication`** — identity and authentication contracts (`Identity`,
   hasher, token, user, refresh-token and login-attempt ports) plus in-memory test
   fakes.
-  Contracts and models plus `Argon2PasswordHasher` and a service-only `RegistrationService`;
-  no token, login, route or command exists and only `trutina-storage-postgres` depends on it (for the `UserRepo` and `LoginAttemptRepo` adapters). Never imported by`trutina-core`.
+  Contracts and models plus `Argon2PasswordHasher` and the service-only `RegistrationService` and `PasswordAuthenticator`; no token, throttling, route or command exists and only `trutina-storage-postgres` depends on it (for the `UserRepo` and `LoginAttemptRepo` adapters). Never imported by`trutina-core`.
   See`packages/authentication/README.md`/`CONTEXT.md`.
 - **`trutina-storage-postgres`** — the storage backend `apps/cli` and `apps/api`
   depend on: SQLAlchemy async + `asyncpg` implementations of the four core repository contracts
