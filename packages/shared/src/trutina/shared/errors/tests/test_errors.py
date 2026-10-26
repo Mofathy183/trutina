@@ -110,6 +110,18 @@ class TestAppError:
         assert error.code == ErrorCode.STORAGE_TIMEOUT
         assert error.cause is cause
 
+    def test_throttled_carries_retry_after_as_a_digits_only_string(self):
+        error = AppError.throttled(30)
+
+        assert error.code == ErrorCode.AUTH_THROTTLED
+        assert error.context == {"retry_after_seconds": "30"}
+        assert error.cause is None
+
+    def test_throttled_clamps_a_negative_delay_to_zero(self):
+        error = AppError.throttled(-5)
+
+        assert error.context == {"retry_after_seconds": "0"}
+
 
 @pytest.mark.unit
 class TestValidationAppError:
