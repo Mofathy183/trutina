@@ -90,6 +90,12 @@ that.
 
 **Why:** a floor in settings would make cheap parameters impossible for tests and tooling, and "strong enough" is a deployment decision. Rejecting weak values in production belongs to API startup validation (D6), alongside signing keys.
 
+### Login-throttle fields validate shape only
+
+**Decision:** `login_max_failures` and `login_window_seconds` are plain integers with a floor of 1. They are not validated for strength.
+
+**Why:** the right limit is a deployment and load decision, and a floor above 1 would make tight limits impossible for tests. `ThrottledAuthenticator` takes plain integers and does not import this package; a composition root maps `AuthSettings` onto it. Defaults (5 failures per 15 minutes) are a starting point that M4c.2 revisits with load data.
+
 ### `LoggingSettings.file_path` coerces `pathlib.Path` to `str`
 
 **Decision:** `file_path` is typed `str | None`, but carries a

@@ -32,15 +32,15 @@ package may depend on it, and it depends on nothing else in the workspace. See
 
 ## API at a Glance
 
-| Symbol                       | Purpose                                                                                                                                    |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.                                                   |
-| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.                                                         |
-| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                                                                 |
-| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                                                                          |
-| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`.                                             |
-| `AuthSettings`               | Nested authentication settings: optional signing keys, the active key id, and password-hashing cost and concurrency. Nothing reads it yet. |
-| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                                                                       |
+| Symbol                       | Purpose                                                                                                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.                                                                        |
+| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.                                                                              |
+| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                                                                                      |
+| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                                                                                               |
+| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`.                                                                  |
+| `AuthSettings`               | Nested authentication settings: optional signing keys, the active key id, and password-hashing cost and concurrency. No app reads it yet. login-throttle limits |
+| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                                                                                            |
 
 ### `PostgresSettings` fields
 
@@ -86,6 +86,8 @@ package may depend on it, and it depends on nothing else in the workspace. See
 | `password_memory_cost_kib`  | `65536` | Argon2id memory per hash in KiB (64 MiB). Minimum 8, and at least 8 times `password_parallelism`.                              |
 | `password_parallelism`      | `1`     | Argon2id lanes per hash. Minimum 1.                                                                                            |
 | `password_hash_concurrency` | `4`     | Maximum concurrent password hashes per process. Minimum 1. Peak hashing memory is about this times `password_memory_cost_kib`. |
+| `login_max_failures`        | 5       | Failed logins per client IP and email, within the window, before further attempts are throttled. Minimum 1.                    |
+| `login_window_seconds`      | 900     | Failed-login window in seconds, also the retry delay reported when throttled. Minimum 1.                                       |
 
 `AuthSettings` only describes shape. It does not check that keys exist, are long enough, or that `active_kid` names a configured key; that is validated at API startup in a later milestone.
 The hashing fields are checked only for what Argon2 itself requires;
@@ -132,6 +134,8 @@ TRUTINA_API__PORT=8000
 TRUTINA_LOGGING__LEVEL=INFO
 TRUTINA_AUTH__PASSWORD_TIME_COST=3
 TRUTINA_AUTH__PASSWORD_MEMORY_COST_KIB=65536
+TRUTINA_AUTH__LOGIN_MAX_FAILURES=5
+TRUTINA_AUTH__LOGIN_WINDOW_SECONDS=900
 ```
 
 `logger_levels` is overridden as a single JSON object, since the `__` nested
