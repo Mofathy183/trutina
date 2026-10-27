@@ -245,12 +245,13 @@ adapter (CLI, future API)
   off the literal string.
 - **`errors.py`**: add a new `AppError` classmethod constructor only when an
   existing one (`not_found`, `conflict`, `storage_unavailable`,
-  `storage_timeout`, `unknown`) doesn't already fit the shape of the new
+  `storage_timeout`, `throttled`, `unknown`) doesn't already fit the shape of the new
   failure. `ValidationAppError` has two constructors: `validation()`
   (translates a Pydantic error) and `required_field()` (a single
   `REQUIRED_FIELD` violation for a blank required value). Keep every new
   constructor's `context` JSON-primitive-only.
-  `AUTH_THROTTLED` may carry `context["retry_after_seconds"]` (digits-only seconds); the API turns it into a `Retry-After` header.
+  `AppError.throttled(retry_after_seconds)` builds an `AUTH_THROTTLED` error whose `context["retry_after_seconds"]` is a digits-only string
+  (a negative value is clamped to `"0"`); the API turns it into a `Retry-After` header.
 - **`translators.py`**: extend `PYDANTIC_CODES` only when adding support for
   a genuinely new Pydantic-native error type that should pass through
   as-is. Do not use this set as a workaround for the `UNKNOWN_ERROR`
