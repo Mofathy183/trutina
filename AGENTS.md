@@ -34,7 +34,7 @@ depends on `trutina-config`. `trutina-core`, `trutina-shared`, `trutina-config`,
 `trutina-cli` and `trutina-api` do, each exactly once at their own composition
 root.
 `trutina-authentication` is contracts, models, one concrete hasher (`Argon2PasswordHasher`) and the service-only use cases
-`RegistrationService` and `PasswordAuthenticator`; the only workspace package
+`RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`; the only workspace package
 that declares it is `trutina-storage-postgres` (for `UserRepo` and `LoginAttemptRepo`). No app depends on it. `trutina-core` never
 imports it, and no core service method takes an `Identity`.
 
@@ -101,7 +101,8 @@ Package/app own tests live beside their own code (e.g.
 - `LedgerPosting` is frozen after creation.
 - `Account.normal_balance` is derived from `AccountCategory`, never stored
   independently.
-- `Account.code` must be 4 to 6 ASCII digits, validated as supplied (never trimmed) by `Account.validate_code`, which raises `INVALID_ACCOUNT_CODE`. Repositories rebuild `Account` on every read,
+- `Account.code` must be 4 to 6 ASCII digits, validated as supplied (never trimmed) by `Account.validate_code`,
+  which raises `INVALID_ACCOUNT_CODE`. Repositories rebuild `Account` on every read,
   so a persisted account with a non-conforming code is rejected on read and update; no cleanup or migration exists.
 - `ChartOfAccounts` enforces unique codes and unique canonical names,
   case-insensitively (`account_lookup_key()` uses Unicode `casefold()`, not `lower()`).
@@ -138,7 +139,7 @@ Package/app own tests live beside their own code (e.g.
   `UserRepo.create` ignores a caller-supplied `created_at`,
   and `DUPLICATE_USER_EMAIL` never carries the address in its context.
 - `LoginAttemptRepo` keys failed logins on the client IP (as given) and the attempted email after `normalize_email()`.
-  Times are aware UTC from the caller. It carries no throttling policy, and nothing writes to it until M2.7.
+  Times are aware UTC from the caller. It carries no throttling policy; `ThrottledAuthenticator` is its only writer and nothing wires it yet.
 - `RegistrationService.register` validates before any hashing or storage: the email is normalized and must have a minimal shape
   (`INVALID_EMAIL`, at most 254 characters); the password is checked raw (at most 128 characters),
   normalized by `normalize_password()` (NFKC, then leading and trailing whitespace removed),
@@ -148,7 +149,14 @@ Package/app own tests live beside their own code (e.g.
   a wrong password, a disabled account, a blank password and over-limit input.
   It verifies against a dummy hash made at startup for an unknown email, verifies before reading `is_active`,
   hashes `normalize_password()` of the input, applies neither the registration minimum length nor the email shape check,
-  and rehashes a stale hash after a successful login. It does no throttling, and no route or command uses it yet.
+  and rehashes a stale hash after a successful login. It does no throttling (`ThrottledAuthenticator` wraps it),
+  and no route or command uses it yet.
+- `ThrottledAuthenticator.authenticate` counts failed logins per client IP
+  (`"unknown"` when missing) and normalized email within `AuthSettings.login_window_seconds`
+  and raises `AUTH_THROTTLED`, with `retry_after_seconds` equal to the window, once `login_max_failures` is reached, before any lookup or hashing.
+  It counts only `AUTH_INVALID_CREDENTIALS` from the inner authenticator, never a throttled attempt, other errors or an email over 254 characters.
+  It clears the pair on success only if failures existed, purges rows older than the window after each recorded failure,
+  lets attempt-store errors propagate, and emits `auth.login_throttled` with no email or IP. It throttles and never locks. No route or command uses it yet.
 
 ## Error Model
 
