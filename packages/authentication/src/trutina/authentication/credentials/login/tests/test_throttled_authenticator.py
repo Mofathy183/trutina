@@ -178,6 +178,17 @@ class TestAllowsAttempts:
 
         assert harness.attempts.calls == ["count_failures"]
 
+    async def test_success_does_not_clear_another_pairs_failures(self):
+        harness = _Harness()
+        await harness.fail(2, email="bob@example.com")
+        await harness.fail(2)
+        harness.stub.error = None
+
+        await harness.login()
+
+        assert await harness.failures() == 0
+        assert await harness.failures(email="bob@example.com") == 2
+
 
 @pytest.mark.unit
 class TestThrottles:
