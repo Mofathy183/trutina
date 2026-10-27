@@ -18,12 +18,12 @@ it fixes the seams that later milestones fill in, and gives tests fakes to build
 
 Four small folders group the contracts by what they are for. Every public symbol is re-exported from the package root, so callers always import from `trutina.authentication`, never from a subfolder.
 
-| Folder         | Holds                                                                                                                                                                                                                                                                                                                                                        | Role                                |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
-| `identity/`    | `Identity`, `AccessState`, `UserStatusChecker`                                                                                                                                                                                                                                                                                                               | Who is acting, and whether they may |
-| `credentials/` | Grouped into `passwords/` (`PasswordHasher`, `Argon2PasswordHasher`, `normalize_password`, `MAX_PASSWORD_LENGTH`), `users/` (`User`, `UserRepo`, `normalize_email`, `MAX_EMAIL_LENGTH`, and the registration use case: `RegistrationService`, `RegisterInput`, `RegisteredUser`) and `login/` (`LoginAttemptRepo`, `Authenticator`, `PasswordAuthenticator`) | Checking a login                    |
-| `tokens/`      | `access.py` (`AccessToken`, issuer, verifier); `refresh.py` (hasher, record, repo)                                                                                                                                                                                                                                                                           | Sessions after login                |
-| `shared/`      | `Clock`, `AuthEvent`, `AuthEventSink`, `NoOpAuthEventSink`                                                                                                                                                                                                                                                                                                   | Cross-cutting ports                 |
+| Folder         | Holds                                                                                                                                                                                                                                                                                                                                                                                  | Role                                |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `identity/`    | `Identity`, `AccessState`, `UserStatusChecker`                                                                                                                                                                                                                                                                                                                                         | Who is acting, and whether they may |
+| `credentials/` | Grouped into `passwords/` (`PasswordHasher`, `Argon2PasswordHasher`, `normalize_password`, `MAX_PASSWORD_LENGTH`), `users/` (`User`, `UserRepo`, `normalize_email`, `MAX_EMAIL_LENGTH`, and the registration use case: `RegistrationService`, `RegisterInput`, `RegisteredUser`) and `login/` (`LoginAttemptRepo`, `Authenticator`, `PasswordAuthenticator`, `ThrottledAuthenticator`) | Checking a login                    |
+| `tokens/`      | `access.py` (`AccessToken`, issuer, verifier); `refresh.py` (hasher, record, repo)                                                                                                                                                                                                                                                                                                     | Sessions after login                |
+| `shared/`      | `Clock`, `AuthEvent`, `AuthEventSink`, `NoOpAuthEventSink`                                                                                                                                                                                                                                                                                                                             | Cross-cutting ports                 |
 
 Internal direction: `credentials` and `tokens` may import `identity`; `identity` and `shared` import nothing from their siblings. This is observed convention, not an import-linter contract. A folder exists only where two or more related modules do; do not create a folder for a single file.
 `credentials/` is itself split into three subfolders, each holding two or more related modules:
@@ -51,7 +51,7 @@ Contracts and their concrete implementations share a role folder, each in its ow
 
 ### Argon2id through `argon2-cffi`, parameters supplied by the caller
 
-`Argon2PasswordHasher` uses Argon2id via `argon2-cffi` 25.1.0. At the defaults one hash takes roughly a quarter of a second of CPU, so a single process sustains on the order of ten to fifteen hashes per second with 4 concurrent slots. M4c.2 measures the real figure, and login throttling (M2.7) is what stops this from being a cheap denial-of-service lever. It was chosen over `pwdlib` (a wrapper over the same library, redundant beside our own `PasswordHasher` port), `bcrypt` (truncates input at 72 bytes), `passlib` (unmaintained) and `hashlib.scrypt` (would need a hash format maintained in this repo). The hash string is self-describing, so parameters travel with it, which is what makes `needs_rehash` and later cost changes possible without a migration.
+`Argon2PasswordHasher` uses Argon2id via `argon2-cffi` 25.1.0. At the defaults one hash takes roughly a quarter of a second of CPU, so a single process sustains on the order of ten to fifteen hashes per second with 4 concurrent slots. M4c.2 measures the real figure, and login throttling (`ThrottledAuthenticator`) is what stops this from being a cheap denial-of-service lever It was chosen over `pwdlib` (a wrapper over the same library, redundant beside our own `PasswordHasher` port), `bcrypt` (truncates input at 72 bytes), `passlib` (unmaintained) and `hashlib.scrypt` (would need a hash format maintained in this repo). The hash string is self-describing, so parameters travel with it, which is what makes `needs_rehash` and later cost changes possible without a migration.
 
 The constructor takes plain keyword-only values (`time_cost`, `memory_cost_kib`, `parallelism`, `max_concurrency`); this package does not import `trutina-config`. The composition root maps `AuthSettings` onto them. Defaults are 3 iterations, 64 MiB, 1 lane and 4 concurrent hashes, above the OWASP Password Storage Cheat Sheet minimum for Argon2id (19 MiB, 2 iterations, 1 lane) and consistent with RFC 9106. Parallelism is 1 because the server parallelizes across requests, not inside one hash. Measured on a development machine, one hash at these defaults took about 261 ms; that is a record, not a guarantee. Peak hashing memory is roughly `max_concurrency * memory_cost_kib` (about 256 MiB at the defaults), so container sizing must account for it. M4c.2 revisits all four values with load data.
 
@@ -105,7 +105,8 @@ The password goes through `normalize_password()`, the same function registration
 
 After a successful login of an active user, `needs_rehash` is checked and a stale hash is replaced through `update_password_hash`. A failed or disabled login never rehashes. A storage error from that write propagates as `AppError` unchanged, because a login that cannot persist its rehash is a storage incident and swallowing it would hide that.
 
-`client_ip` is accepted for the contract and unused. No `Clock`, event sink or throttling is wired in until M2.7.
+`client_ip` is accepted for the contract and not used here. `PasswordAuthenticator` holds no `Clock`,
+event sink or throttling; `ThrottledAuthenticator` wraps it for that.
 
 ### Login attempts are keyed on IP and normalized email, and carry no policy
 
@@ -113,11 +114,23 @@ After a successful login of an active user, `needs_rehash` is checked and a stal
 so one address cannot lock out an account and one account is not exposed to every address.
 The email is matched through `normalize_email()`, the same rule `User` applies, so two spellings of one address count as one.
 The IP is matched exactly as given, and `"unknown"` is a valid value.
-Thresholds, windows and the retry delay belong to the authentication service (M2.7), never to an adapter.
+Thresholds, windows and the retry delay belong to `ThrottledAuthenticator`, never to an adapter.
 `count_failures` is inclusive of `since`, `purge_before` removes only rows strictly older than the cutoff,
 and `clear` affects one IP and email pair. No method raises a domain error.
 Timestamps are aware UTC supplied by the caller from `Clock`,
 so the throttle window and the stored times share one clock. The contract was frozen in M2.4.
+
+### Throttling wraps the authenticator and never looks at the account
+
+`ThrottledAuthenticator` is a decorator over any `Authenticator`, so `PasswordAuthenticator` and its security properties are unchanged. Before the inner call it counts failures for the client IP and normalized email together within a sliding window and, at `max_failures`, raises `AUTH_THROTTLED` with `context["retry_after_seconds"]` (built by `AppError.throttled`). The count uses only the IP and the email, never whether the account exists, so an unknown email is throttled exactly like a known one, and a throttled attempt costs no hashing, which is what stops a burst of logins from queuing behind the hasher's concurrency slots.
+
+Throttling is not locking. Once the window has passed the same pair can sign in again, and a different IP or email was never affected, so an attacker cannot lock a victim out from another address. The correct password is still rejected while the pair is throttled.
+
+What counts as a failure: every `AUTH_INVALID_CREDENTIALS` from the inner authenticator (the wrapper cannot tell the causes apart, by design). Never counted: other errors, throttled attempts themselves (counting them would let a retrying client extend its own delay and would break the retry bound), and any email longer than `MAX_EMAIL_LENGTH`, which is neither counted nor stored, so junk values never reach `login_attempts`. A missing client IP is stored as `"unknown"`.
+
+`retry_after_seconds` is the window length. The frozen `LoginAttemptRepo` has no "oldest failure" query, so an exact delay is not available; the window is a true upper bound, because after waiting it every recorded failure is older than the window. The client may wait longer than strictly needed.
+
+A successful login clears the pair's failures only if any were counted, saving a DELETE per ordinary login. Each recorded failure also purges rows older than the window; this is stateless (no per-process timestamp), so it keeps services safe under concurrent requests, and the DELETE is negligible beside the hash verify a failure already paid. Errors from the attempt store propagate unchanged, so throttling fails closed, as a failed rehash write does at login. The only event is `auth.login_throttled`, one per rejected attempt, carrying `retry_after_seconds` and nothing else: no email and no IP.
 
 ### `PasswordHasher` is async and owns its own offloading
 
@@ -160,18 +173,18 @@ These may change before they are implemented:
 - `UserRepo` (`PostgresUserRepo`) and `LoginAttemptRepo` (`PostgresLoginAttemptRepo`) have adapters in `trutina-storage-postgres`,
   which declares the dependency on this package, and `PasswordHasher` has `Argon2PasswordHasher` here.
   No token module, refresh-token hasher, route or command exists,
-  nothing outside tests uses the hasher or the login-attempt repository,
+  nothing outside tests uses the hasher, the login-attempt repository or the throttle,
   and no app depends on this package.
-- The attempted email passed to `LoginAttemptRepo` is not length-capped by the repository.
-  `PasswordAuthenticator` caps the email with `MAX_EMAIL_LENGTH` before any lookup but does not call `LoginAttemptRepo` yet.
-  M2.7 must record only input that has passed that cap.
+- `LoginAttemptRepo` itself does not cap the email. `ThrottledAuthenticator` records only emails within `MAX_EMAIL_LENGTH`,
+  so any other caller must do the same.
 - Attempted emails are stored in plain normalized form,
   including addresses that belong to no user.
-  Retention is bounded only by the purge tool and M2.7's opportunistic purge.
+  Retention is bounded only by the purge tool and `ThrottledAuthenticator`'s opportunistic purge.
 - A naive datetime passed to `LoginAttemptRepo` is a caller bug and is not guarded.
 - Only two `AUTH_*` `ErrorCode` members exist, `AUTH_INVALID_CREDENTIALS` and `AUTH_THROTTLED`,
   with API and CLI catalog entries, The user codes `DUPLICATE_USER_EMAIL`, `UNKNOWN_USER` and `INVALID_EMAIL` also exist.
   The token codes and `AUTH_USER_DISABLED` land with M3. The user codes `DUPLICATE_USER_EMAIL` and `UNKNOWN_USER` also exist.
+  `AUTH_THROTTLED` is raised by `ThrottledAuthenticator`.
 - Once password login ships there is no self-service recovery for a locked-out user until password reset is built
   (deferred past core authentication).
 - `FakeUserRepo.create` does not reject duplicate emails; the service pre-check and the storage unique index are the real guards.
@@ -186,10 +199,19 @@ These may change before they are implemented:
 - If a caller is cancelled while its hash is running, the worker thread finishes but the concurrency slot is released at once,
   so concurrency can briefly exceed the bound under cancellation.
 - The hasher does not reject weak parameters. Rejecting weak values in production is API startup validation (M3.6).
-- Nothing wires `RegistrationService` or `PasswordAuthenticator` into an app yet, and no route or command calls either.
+- Nothing wires `RegistrationService`, `PasswordAuthenticator` or `ThrottledAuthenticator` into an app yet,
+  and no route or command calls either.
 - Passwords are checked for length only. There is no complexity rule and no breached-password checkOver-limit
   input is rejected faster than a wrong password. A rehash write failure fails the login.
   A dummy hash made with different parameters than a later parameter change keeps the old cost until the process restarts.
+- The throttle's check and its later record are not atomic, so concurrent attempts can overshoot the limit by the number in flight.
+- Throttling is per IP and email only. One IP that tries many emails a few times each is never throttled,
+  and an attacker using many IPs against one email is not either. A per-IP or per-email limit would be a new decision.
+- `retry_after_seconds` is the window length, an upper bound (see above).
+  An exact delay needs an "oldest failure" query on `LoginAttemptRepo`, which means unfreezing the contract.
+- One `auth.login_throttled` event is emitted per rejected attempt, which is noisy under attack.
+- Purge runs only when a failure is recorded, so rows linger if failures stop; `tools/purge-login-attempts.py` covers that.
+- An empty email within the length cap is recorded like any other.
 
 ## Extension Points
 
@@ -208,3 +230,5 @@ These may change before they are implemented:
 - Applying the registration-only minimum password length or the email shape check at login.
 - Normalizing a password differently at registration and at login instead of calling `normalize_password()` in both.
 - Putting a field key in the `AUTH_INVALID_CREDENTIALS` context. Making the dummy hash from a literal.
+- Counting a throttled attempt as a failure, or recording an email longer than `MAX_EMAIL_LENGTH`.
+- Putting the email or client IP into an `auth.login_throttled` event.

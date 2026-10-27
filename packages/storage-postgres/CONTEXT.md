@@ -104,7 +104,7 @@ No test yet forces a real constraint-violation exception (e.g. a duplicate accou
 
 `audit_events` is append-only by repository convention only. A role with UPDATE or DELETE privilege on the table can alter it, and no trigger or privilege revocation prevents that. The table has no index, since nothing reads it yet, and it records neither before nor after values.
 
-`login_attempts` rows hold the attempted address in plain normalized form, including addresses that belong to no user, and nothing caps the address length. Retention is bounded by `tools/purge-login-attempts.py` and by the throttling milestone's opportunistic purge. The script has no automated test and sits outside `ty` and the lane-coverage check. The indexes are chosen by query shape, not measured, and are revisited with load data in M4c.2.
+`login_attempts` rows hold the attempted address in plain normalized form, including addresses that belong to no user, and the repository does not cap the address length (`ThrottledAuthenticator` records only addresses within `MAX_EMAIL_LENGTH`). Retention is bounded by `tools/purge-login-attempts.py` and by `ThrottledAuthenticator`'s opportunistic purge, which runs when it records a failure. The script has no automated test and sits outside `ty` and the lane-coverage check. The indexes are chosen by query shape, not measured, and are revisited with load data in M4c.2.
 
 ## Allowed and Forbidden Dependencies
 

@@ -163,6 +163,27 @@ class AppError(Exception):
         """
         return cls(code=ErrorCode.STORAGE_TIMEOUT, cause=cause)
 
+    @classmethod
+    def throttled(cls, retry_after_seconds: int) -> AppError:
+        """Create a login-throttled error.
+
+        Raised when too many sign-in attempts have failed for one client
+        and email. The delay travels in ``context["retry_after_seconds"]``
+        as a digits-only string: ``context`` holds strings only, and an
+        adapter may copy the value into a ``Retry-After`` header. A
+        negative delay is clamped to ``"0"``.
+
+        Args:
+            retry_after_seconds: Seconds the caller should wait.
+
+        Returns:
+            An AppError with ErrorCode.AUTH_THROTTLED.
+        """
+        return cls(
+            code=ErrorCode.AUTH_THROTTLED,
+            context={"retry_after_seconds": str(max(retry_after_seconds, 0))},
+        )
+
 
 @dataclass(frozen=True)
 class ValidationAppError(AppError):

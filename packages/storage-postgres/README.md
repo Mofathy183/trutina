@@ -123,7 +123,7 @@ asyncio.run(main())
 
 ## Login Attempts
 
-`PostgresLoginAttemptRepo` stores failed logins in a `login_attempts` table: `ip`, `email_key` and `attempted_at`. `email_key` is the attempted email after `normalize_email()`, so differently cased spellings share one key. `attempted_at` is the caller's aware UTC time, not a database default. There is no foreign key, because the attempted address need not belong to a user. `count_failures` is inclusive of `since`, `purge_before` removes only rows strictly older than the cutoff, and `clear` removes one IP and email pair. No throttle policy lives here. Nothing writes to the table until the throttling milestone (M2.7).
+`PostgresLoginAttemptRepo` stores failed logins in a `login_attempts` table: `ip`, `email_key` and `attempted_at`. `email_key` is the attempted email after `normalize_email()`, so differently cased spellings share one key. `attempted_at` is the caller's aware UTC time, not a database default. There is no foreign key, because the attempted address need not belong to a user. `count_failures` is inclusive of `since`, `purge_before` removes only rows strictly older than the cutoff, and `clear` removes one IP and email pair. No throttle policy lives here. `ThrottledAuthenticator` in `trutina-authentication` is the only writer; nothing wires it into an app yet.
 
 Table growth is bounded by `tools/purge-login-attempts.py`, which deletes rows older than `--older-than-hours` (default 24). There is no scheduler, so run it by hand or from cron:
 

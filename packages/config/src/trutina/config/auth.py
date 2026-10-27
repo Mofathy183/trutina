@@ -34,6 +34,10 @@ class AuthSettings(BaseModel):
         password_hash_concurrency: Maximum hashes running at once in one
             process. Peak hashing memory is roughly this value times
             ``password_memory_cost_kib``.
+        login_max_failures: Failed logins allowed per client IP and email
+            within the window before further attempts are throttled.
+        login_window_seconds: Length of the failed-login window in
+            seconds. Also the retry delay reported when throttled.
 
     Key ids are case-folded to lower case. pydantic-settings lower-cases
     the env-var-derived dict keys, so ``active_kid`` is folded the same
@@ -72,6 +76,17 @@ class AuthSettings(BaseModel):
         default=4,
         ge=1,
         description="Maximum concurrent password hashes per process.",
+    )
+
+    login_max_failures: int = Field(
+        default=5,
+        ge=1,
+        description="Failed logins per IP and email, within the window, before throttling.",
+    )
+    login_window_seconds: int = Field(
+        default=900,
+        ge=1,
+        description="Failed-login window in seconds; also the retry delay when throttled.",
     )
 
     @field_validator("signing_keys", mode="after")

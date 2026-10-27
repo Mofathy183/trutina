@@ -3,8 +3,8 @@
 Verifies an email and password against stored users and returns the
 authenticated ``Identity``. Depends only on the user repository and
 password hasher contracts, so it has no storage, web or CLI knowledge.
-No throttling, token or route exists yet, and nothing outside tests
-uses it.
+It does no throttling itself; ThrottledAuthenticator wraps it for that.
+No token or route exists yet, and nothing outside tests uses it.
 """
 
 import secrets
@@ -44,8 +44,8 @@ class PasswordAuthenticator(Authenticator):
     credentials were accepted under an earlier rule can still sign in.
 
     A successful login of an active user whose hash uses outdated
-    parameters stores a fresh hash. Throttling and the client IP are not
-    used yet (M2.7).
+    parameters stores a fresh hash. It does not throttle and does not use the client IP;
+    ThrottledAuthenticator wraps it for that.
     """
 
     def __init__(
@@ -97,8 +97,8 @@ class PasswordAuthenticator(Authenticator):
     ) -> Identity:
         """Verify credentials.
 
-        ``client_ip`` is accepted for the contract and not used until
-        throttling (M2.7).
+        ``client_ip`` is accepted for the contract and not used here;
+        `ThrottledAuthenticator` uses it.
 
         Args:
             email: The login email, as typed.

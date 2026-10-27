@@ -38,7 +38,7 @@ class Authenticator(ABC):
                 indistinguishable to the caller). AUTH_THROTTLED when
                 too many attempts have been made; its context may carry
                 ``retry_after_seconds`` in seconds. Both codes exist in
-                ``shared/errors``. ``PasswordAuthenticator`` raises
-                AUTH_INVALID_CREDENTIALS; nothing raises AUTH_THROTTLED
-                until throttling (M2.7).
+                ``shared/errors``. ``PasswordAuthenticator``
+                raises AUTH_INVALID_CREDENTIALS;
+                ``ThrottledAuthenticator`` raises AUTH_THROTTLED.
         """

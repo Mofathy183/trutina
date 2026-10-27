@@ -1,7 +1,7 @@
 """Delete login-attempt rows older than a cutoff.
 
 There is no scheduler in this project; run this by hand or from cron.
-Throttling (M2.7) also purges opportunistically, so this is housekeeping,
+ThrottledAuthenticator also purges opportunistically, so this is housekeeping,
 not a correctness requirement.
 
 Usage:

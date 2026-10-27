@@ -1,4 +1,9 @@
-from .login import Authenticator, LoginAttemptRepo, PasswordAuthenticator
+from .login import (
+    Authenticator,
+    LoginAttemptRepo,
+    PasswordAuthenticator,
+    ThrottledAuthenticator,
+)
 from .passwords import (
     MAX_PASSWORD_LENGTH,
     Argon2PasswordHasher,
@@ -26,6 +31,7 @@ __all__ = [
     "RegisterInput",
     "RegisteredUser",
     "RegistrationService",
+    "ThrottledAuthenticator",
     "User",
     "UserRepo",
     "normalize_email",

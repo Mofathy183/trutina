@@ -163,3 +163,27 @@ class TestPasswordHashingSettings:
         assert auth.password_memory_cost_kib >= 19456
         assert auth.password_time_cost >= 2
         assert auth.password_parallelism >= 1
+
+
+@pytest.mark.unit
+class TestLoginThrottleSettings:
+    def test_defaults(self):
+        auth = AuthSettings()
+
+        assert (auth.login_max_failures, auth.login_window_seconds) == (5, 900)
+
+    def test_loads_from_env(self, monkeypatch):
+        monkeypatch.setenv("TRUTINA_AUTH__LOGIN_MAX_FAILURES", "3")
+        monkeypatch.setenv("TRUTINA_AUTH__LOGIN_WINDOW_SECONDS", "60")
+
+        settings = Settings(_env_file=None)
+
+        assert settings.auth.login_max_failures == 3
+        assert settings.auth.login_window_seconds == 60
+
+    @pytest.mark.parametrize("field", ["login_max_failures", "login_window_seconds"])
+    def test_rejects_zero(self, field):
+        with pytest.raises(ValidationError) as exc_info:
+            AuthSettings.model_validate({field: 0})
+
+        assert exc_info.value.errors()[0]["loc"] == (field,)
