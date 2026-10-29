@@ -158,6 +158,9 @@ uv run pytest -m "integration and infra and postgres"
 ```
 
 Integration tests apply the real Alembic migration history once per session (`tests/fixtures/postgres.py`'s `schema_init`) rather than `Base.metadata.create_all()`, so a migration that doesn't actually reproduce `models.py` fails as a test, not as a surprise the first time someone runs `alembic upgrade head` against a real environment. Alembic's own `env.py` is configured with `disable_existing_loggers=False` — see CONTEXT.md's Known Gaps for why that flag matters here specifically.
+`shared/tests/test_credentials_integration.py` runs the real registration, login and throttle services from `trutina-authentication`
+over `PostgresUserRepo` and `PostgresLoginAttemptRepo`. It lives here, not in the authentication package,
+because authentication must not import storage.
 
 ## See Also
 
