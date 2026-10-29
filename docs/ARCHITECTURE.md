@@ -48,8 +48,7 @@ packages/
 │       ├── audit/                        # model.py (audit_events)
 │       ├── identity/                     # model.py, repository.py (users)
 │       ├── login_attempt/                # model.py, repository.py (login_attempts)
-│       ├── shared/                       # PostgresExecutor, connect()/disconnect()
-│       ├── models.py
+│       ├── shared/                       # PostgresExecutor, connect()/disconnect(), model.py (Base)
 │       └── alembic.ini, alembic/
 ├── config/              trutina-config
 │   └── src/trutina/config/   # base.py, postgres.py, api.py, logging.py
@@ -130,8 +129,9 @@ cross-checked against its README/CONTEXT):
 `trutina-config`. Only `trutina-cli` and `trutina-api` depend on
 `trutina-observability` — every other workspace package emits through the
 standard library alone.
-`trutina-authentication` is contracts, models and fakes; only `trutina-storage-postgres`
-depends on it (for `UserRepo`), and `trutina-core` never will.
+`trutina-authentication` is contracts, models, one concrete hasher and three service-only use cases
+(`RegistrationService`, `PasswordAuthenticator`, `ThrottledAuthenticator`); only `trutina-storage-postgres`
+depends on it (for `UserRepo` and `LoginAttemptRepo`), and `trutina-core` never will.
 
 ## Layer Responsibilities
 
@@ -192,6 +192,7 @@ supplied by its caller. Contracts and models plus `Argon2PasswordHasher` and the
 no token module, route or command exists, and no app depends on it.
 The storage adapters, `PostgresUserRepo` and `PostgresLoginAttemptRepo`, live in `trutina.storage_postgres`.
 The token and refresh-token contracts are provisional until the M3 ADR; `LoginAttemptRepo` was frozen in M2.4.
+Its end-to-end test lives in `trutina-storage-postgres`, not here, because authentication may not import storage.
 See `packages/authentication/README.md` / `CONTEXT.md`.
 
 ### `trutina.storage_postgres`
@@ -308,4 +309,10 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   No token module, route or command exists,
   and no app depends on it; only the `UserRepo` and `LoginAttemptRepo` adapters exist
   (only `ThrottledAuthenticator` writes login attempts, and nothing wires it)
+  Token-related contracts are provisional until the M3 ADR.
+- `trutina-authentication` has contracts, test fakes, one concrete `Argon2PasswordHasher` and the service-only
+  `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`. No token module, route or command
+  exists, and no app depends on it. The `UserRepo` and `LoginAttemptRepo` adapters exist in
+  `trutina-storage-postgres`. The register, login and throttle flow is verified end to end against real PostgreSQL
+  (`shared/tests/test_credentials_integration.py`, M2.8), but only at service level: nothing wires it into an app.
   Token-related contracts are provisional until the M3 ADR.

@@ -83,9 +83,11 @@ contract (independent siblings), so neither can import the other.
 - **User store** — `UserRepo` (contract and `User` model in `trutina-authentication`) has a PostgreSQL adapter,
   `PostgresUserRepo`, over a `users` table with its own migration. Email is stored normalized,
   `set_active` replaces deletion, and two user error codes exist with API and CLI catalog entries.
-  Storage only: no register, login, route or command uses it yet (the hasher exists but is not wired to it).
+  Used by `RegistrationService` and `PasswordAuthenticator` against fakes, and end to end against real PostgreSQL in M2.8.
+  No route, command or composition root uses it yet.
 - **Password hasher** — `Argon2PasswordHasher` in `trutina-authentication` (Argon2id via `argon2-cffi`),
-  with `AuthSettings` cost and concurrency fields. Used by `RegistrationService`; no route, command or composition root wires either yet.
+  with `AuthSettings` cost and concurrency fields. Used by `RegistrationService` and `PasswordAuthenticator`; no route,
+  command or composition root wires any of them yet.
 - **Registration service** — `RegistrationService` in `trutina-authentication`: bounded and normalized input,
   an email shape check, duplicate rejection before hashing, an active user with a hashed password,
   and one secret-free `auth.user_registered` event. Unit-tested only against fakes; no route, command or composition root uses it yet.
@@ -95,6 +97,13 @@ contract (independent siblings), so neither can import the other.
 - **Login-attempt store** — `LoginAttemptRepo` (contract in `trutina-authentication`) has a PostgreSQL adapter,
   `PostgresLoginAttemptRepo`, over a `login_attempts` table with its own migration, plus `tools/purge-login-attempts.py`.
   Written and read only by `ThrottledAuthenticator`, which no route, command or composition root uses yet.
+- **Credentials verified on real PostgreSQL (M2.8)** — `trutina-storage-postgres`'s
+  `shared/tests/test_credentials_integration.py` runs the real `RegistrationService`,
+  `PasswordAuthenticator` and `ThrottledAuthenticator` over the real user and login-attempt repositories and a real
+  Argon2id hasher (22 integration tests). It covers register then login, rehash on login, indistinguishable
+  failures, the dummy-hash verify, throttling including the window boundary, and a sweep proving no password or
+  hash reaches logs, error contexts, events or the `login_attempts` and `audit_events` tables. Service level only:
+  route-level proof (the 422 body, `Retry-After`, the structlog pipeline) waits for M3.7.
 
 ## What Is Partial or Explicitly Out of Scope
 
@@ -121,7 +130,8 @@ contract (independent siblings), so neither can import the other.
   confirmed set on the engine, but this specific masking behavior is not yet
   directly exercised by a test.
 - Identity and authentication — `trutina-authentication` provides contracts, test fakes and one concrete `Argon2PasswordHasher`,
-  the service-only `RegistrationService` and `PasswordAuthenticator` (the `UserRepo` and `LoginAttemptRepo` adapters live in `trutina-storage-postgres`).
+  the service-only `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`
+  (the `UserRepo` and `LoginAttemptRepo` adapters live in `trutina-storage-postgres`).
   No token implementation, route or command exists, two `AUTH_*` `ErrorCode` members exist
   (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`) with catalog entries;
   only `PasswordAuthenticator` raises `AUTH_INVALID_CREDENTIALS` and only `ThrottledAuthenticator` raises `AUTH_THROTTLED`

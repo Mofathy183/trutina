@@ -244,6 +244,9 @@ no scheduler exists, so it is run by hand.
 - `tests/fixtures/postgres.py`'s session-scoped `schema_init` applies the real
   Alembic migration history once per session, and re-enables every Python
   logger afterward — see Known Gaps below for why.
+- The register, login and throttle flow is verified end to end on real PostgreSQL by
+  `packages/storage-postgres/.../shared/tests/test_credentials_integration.py` (it must live in the storage package:
+  authentication cannot import storage, and storage tests cannot import `trutina.observability`).
 
 ## Configuration
 

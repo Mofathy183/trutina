@@ -6,7 +6,8 @@ For usage, see README.md. This document explains why, not how.
 
 Trutina needs to know who performed a write, without the accounting domain learning what a user,
 a password or a token is. This package holds the vocabulary for identity and authentication so that `trutina-core` never has to.
-Today it is contracts and models plus three concrete pieces, the Argon2id password hasher, the registration use case and the login verification (`PasswordAuthenticator`)
+Today it is contracts and models plus four concrete pieces: the Argon2id password hasher,
+the registration use case, the login verification (`PasswordAuthenticator`) and the login throttle (`ThrottledAuthenticator`)
 (the storage adapters, for `UserRepo` and `LoginAttemptRepo`, live in `trutina-storage-postgres`)
 it fixes the seams that later milestones fill in, and gives tests fakes to build against before an implementation exists.
 
@@ -51,7 +52,7 @@ Contracts and their concrete implementations share a role folder, each in its ow
 
 ### Argon2id through `argon2-cffi`, parameters supplied by the caller
 
-`Argon2PasswordHasher` uses Argon2id via `argon2-cffi` 25.1.0. At the defaults one hash takes roughly a quarter of a second of CPU, so a single process sustains on the order of ten to fifteen hashes per second with 4 concurrent slots. M4c.2 measures the real figure, and login throttling (`ThrottledAuthenticator`) is what stops this from being a cheap denial-of-service lever It was chosen over `pwdlib` (a wrapper over the same library, redundant beside our own `PasswordHasher` port), `bcrypt` (truncates input at 72 bytes), `passlib` (unmaintained) and `hashlib.scrypt` (would need a hash format maintained in this repo). The hash string is self-describing, so parameters travel with it, which is what makes `needs_rehash` and later cost changes possible without a migration.
+`Argon2PasswordHasher` uses Argon2id via `argon2-cffi` 25.1.0. At the defaults one hash takes roughly a quarter of a second of CPU, so a single process sustains on the order of ten to fifteen hashes per second with 4 concurrent slots. M4c.2 measures the real figure, and login throttling (`ThrottledAuthenticator`) is what stops this from being a cheap denial-of-service lever. It was chosen. over `pwdlib` (a wrapper over the same library, redundant beside our own `PasswordHasher` port), `bcrypt` (truncates input at 72 bytes), `passlib` (unmaintained) and `hashlib.scrypt` (would need a hash format maintained in this repo). The hash string is self-describing, so parameters travel with it, which is what makes `needs_rehash` and later cost changes possible without a migration.
 
 The constructor takes plain keyword-only values (`time_cost`, `memory_cost_kib`, `parallelism`, `max_concurrency`); this package does not import `trutina-config`. The composition root maps `AuthSettings` onto them. Defaults are 3 iterations, 64 MiB, 1 lane and 4 concurrent hashes, above the OWASP Password Storage Cheat Sheet minimum for Argon2id (19 MiB, 2 iterations, 1 lane) and consistent with RFC 9106. Parallelism is 1 because the server parallelizes across requests, not inside one hash. Measured on a development machine, one hash at these defaults took about 261 ms; that is a record, not a guarantee. Peak hashing memory is roughly `max_concurrency * memory_cost_kib` (about 256 MiB at the defaults), so container sizing must account for it. M4c.2 revisits all four values with load data.
 
@@ -182,9 +183,9 @@ These may change before they are implemented:
   Retention is bounded only by the purge tool and `ThrottledAuthenticator`'s opportunistic purge.
 - A naive datetime passed to `LoginAttemptRepo` is a caller bug and is not guarded.
 - Only two `AUTH_*` `ErrorCode` members exist, `AUTH_INVALID_CREDENTIALS` and `AUTH_THROTTLED`,
-  with API and CLI catalog entries, The user codes `DUPLICATE_USER_EMAIL`, `UNKNOWN_USER` and `INVALID_EMAIL` also exist.
-  The token codes and `AUTH_USER_DISABLED` land with M3. The user codes `DUPLICATE_USER_EMAIL` and `UNKNOWN_USER` also exist.
-  `AUTH_THROTTLED` is raised by `ThrottledAuthenticator`.
+  with API and CLI catalog entries. `PasswordAuthenticator` raises the first and `ThrottledAuthenticator` the second.
+  The user codes `DUPLICATE_USER_EMAIL`, `UNKNOWN_USER` and `INVALID_EMAIL` also exist.
+  The token codes and `AUTH_USER_DISABLED` land with M3.
 - Once password login ships there is no self-service recovery for a locked-out user until password reset is built
   (deferred past core authentication).
 - `FakeUserRepo.create` does not reject duplicate emails; the service pre-check and the storage unique index are the real guards.
@@ -201,8 +202,8 @@ These may change before they are implemented:
 - The hasher does not reject weak parameters. Rejecting weak values in production is API startup validation (M3.6).
 - Nothing wires `RegistrationService`, `PasswordAuthenticator` or `ThrottledAuthenticator` into an app yet,
   and no route or command calls either.
-- Passwords are checked for length only. There is no complexity rule and no breached-password checkOver-limit
-  input is rejected faster than a wrong password. A rehash write failure fails the login.
+- Passwords are checked for length only. There is no complexity rule and no breached-password check.
+  Over-limit input is rejected faster than a wrong password. A rehash write failure fails the login.
   A dummy hash made with different parameters than a later parameter change keeps the old cost until the process restarts.
 - The throttle's check and its later record are not atomic, so concurrent attempts can overshoot the limit by the number in flight.
 - Throttling is per IP and email only. One IP that tries many emails a few times each is never throttled,
@@ -212,6 +213,18 @@ These may change before they are implemented:
 - One `auth.login_throttled` event is emitted per rejected attempt, which is noisy under attack.
 - Purge runs only when a failure is recorded, so rows linger if failures stop; `tools/purge-login-attempts.py` covers that.
 - An empty email within the length cap is recorded like any other.
+- Two processes configured with different hash parameters rewrite each other's stored hash, one per successful
+  login (found in M2.8). It is harmless (one extra UPDATE, every hash still verifies) and can only happen while
+  configurations differ, for example during a rolling deploy.
+- The register, login and throttle flow is verified end to end on real PostgreSQL (M2.8), but no route or command
+  calls it. Route-level proof is M3.7.
+
+## Verification
+
+The end-to-end test is `packages/storage-postgres/.../shared/tests/test_credentials_integration.py`. It lives in the
+storage package because authentication must never import storage, and it uses a stdlib log handler because storage
+may not import `trutina-observability`. It uses the real hasher with the cheapest parameters and a fake clock, so the
+throttle window is deterministic (`attempted_at` is caller-supplied). The `AuthEventSink` is a fake.
 
 ## Extension Points
 

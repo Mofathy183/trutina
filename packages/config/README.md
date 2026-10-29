@@ -32,15 +32,15 @@ package may depend on it, and it depends on nothing else in the workspace. See
 
 ## API at a Glance
 
-| Symbol                       | Purpose                                                                                                                                                         |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.                                                                        |
-| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.                                                                              |
-| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                                                                                      |
-| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                                                                                               |
-| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`.                                                                  |
-| `AuthSettings`               | Nested authentication settings: optional signing keys, the active key id, and password-hashing cost and concurrency. No app reads it yet. login-throttle limits |
-| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                                                                                            |
+| Symbol                       | Purpose                                                                                                                                                          |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.                                                                         |
+| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.                                                                               |
+| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                                                                                       |
+| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                                                                                                |
+| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`.                                                                   |
+| `AuthSettings`               | Nested authentication settings: optional signing keys, the active key id, password-hashing cost and concurrency, and login-throttle limits. No app reads it yet. |
+| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                                                                                             |
 
 ### `PostgresSettings` fields
 
