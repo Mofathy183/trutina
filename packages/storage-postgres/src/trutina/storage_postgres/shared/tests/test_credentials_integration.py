@@ -18,6 +18,7 @@ Scope: closes, at service level, the end-to-end criteria that M2.0 to
 M2.7 deferred (R4). It adds no behavior.
 """
 
+import asyncio
 import logging
 from datetime import timedelta
 
@@ -241,6 +242,30 @@ class TestRegisterThenLogin:
 
         assert error.code == ErrorCode.AUTH_INVALID_CREDENTIALS
         assert await creds.password_hash() == before
+
+    async def test_registration_and_login_share_password_normalization(self, creds):
+        registered = await creds.register(password="  Ｐass word 1  ")
+
+        identity = await creds.login(password="Pass word 1")
+
+        assert identity == Identity(subject_id=registered.id)
+
+    async def test_the_unique_index_decides_a_concurrent_duplicate_registration(
+        self, creds
+    ):
+        results = await asyncio.gather(
+            creds.register(email="race@example.com"),
+            creds.register(email="RACE@example.com"),
+            return_exceptions=True,
+        )
+
+        winners = [r for r in results if isinstance(r, RegisteredUser)]
+        losers = [r for r in results if isinstance(r, AppError)]
+        assert len(winners) == 1
+        assert len(losers) == 1
+        assert losers[0].code == ErrorCode.DUPLICATE_USER_EMAIL
+        assert dict(losers[0].context) == {"resource": "user", "field": "email"}
+        assert await creds.sql_scalar("SELECT count(*) FROM users") == 1
 
 
 @pytest.mark.integration
