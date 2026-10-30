@@ -85,6 +85,7 @@ tests/fixtures/logging.py             # autouse reset of trutina-observability's
 tests/fakes/trial_balance_repo.py, tests/factories/trial_balance.py
 tests/fakes/auth.py                   # in-memory fakes for the authentication contracts
 conftest.py, pytest.ini, ty.toml, ruff.toml, pyproject.toml, compose.yml
+docs/adr/                             # architecture decision records (0001: session mechanism)
 ```
 
 Package/app own tests live beside their own code (e.g.

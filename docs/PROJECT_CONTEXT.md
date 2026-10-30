@@ -135,7 +135,8 @@ contract (independent siblings), so neither can import the other.
   No token implementation, route or command exists, two `AUTH_*` `ErrorCode` members exist
   (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`) with catalog entries;
   only `PasswordAuthenticator` raises `AUTH_INVALID_CREDENTIALS` and only `ThrottledAuthenticator` raises `AUTH_THROTTLED`
-  and no app depends on the package. The token and refresh-token contracts are provisional; `LoginAttemptRepo` was frozen in M2.4.
+  and no app depends on the package. The token and refresh-token contracts are provisional and will be replaced by session contracts
+  (ADR 0001, [0001-session-mechanism.md](../../docs/adr/0001-session-mechanism.md)); `LoginAttemptRepo` was frozen in M2.4.
   Separately from that package, `trutina-core`'s journal, posting and account write services require a non-blank `actor: str`
   and pass it to the repository as `created_by`. `trutina-storage-postgres` persists it as `created_by` for journal entries
   and postings, and as the actor of an `audit_events` row for account writes. The actor is not yet a real identity:

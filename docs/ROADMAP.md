@@ -98,15 +98,15 @@ and its `UserRepo` and `LoginAttemptRepo` have PostgreSQL adapters (`users` and 
   The hasher, user store, login-attempt store, service-only registration (`RegistrationService`), login
   verification (`PasswordAuthenticator`: one indistinguishable failure, dummy-hash verify, rehash on login) and the
   throttling wrapper (`ThrottledAuthenticator`) exist; nothing wires any of the three use cases into an app.
-- Access and refresh tokens, auth routes, and endpoint protection.
+- Opaque database-backed sessions (ADR 0001), auth routes (login, logout) and endpoint protection.
 - A CLI `auth` group.
 - Authorization (roles and a permission matrix).
 - Secret-safe validation errors (M2.1) are done for `FieldViolation.value`,
   the API 422 body and CLI rendering, proven with a test-only model. Still to do:
   re-verify on the real credential routes (M3.7). Credential detection is name-based and the marker list exists in two packages.
 
-The milestone order, locked decisions and open question (JWT versus one opaque
-session mechanism) are in the identity and authentication plan.
+The session mechanism is settled in ADR 0001 (opaque sessions).
+The milestone order and locked decisions are in the identity and authentication plan.
 
 ## Success Criteria
 
