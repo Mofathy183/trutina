@@ -157,7 +157,10 @@ An invalid token is an expected, frequent outcome, not an exceptional one. Retur
 
 These may change before they are implemented:
 
-- `TokenIssuer`, `TokenVerifier`, `AccessToken` and `RefreshTokenRepo` depend on decision D1 (JWT versus one opaque session mechanism), settled in the M3 ADR.
+- `TokenIssuer`, `TokenVerifier`, `AccessToken` and `RefreshTokenRepo` were drafted for a JWT design.
+  D1 is settled in favor of one opaque, database-backed session mechanism
+  (ADR 0001, [0001-session-mechanism.md](../../docs/adr/0001-session-mechanism.md)).
+  These contracts are superseded and are replaced by session contracts in M3.1; do not build on them.
 - `User` is deliberately minimal: fields are added by the milestone that needs them.
 
 ## Allowed and Forbidden Dependencies

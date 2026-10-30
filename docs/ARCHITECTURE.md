@@ -191,7 +191,8 @@ supplied by its caller. Contracts and models plus `Argon2PasswordHasher` and the
 `PasswordAuthenticator` and `ThrottledAuthenticator`.
 no token module, route or command exists, and no app depends on it.
 The storage adapters, `PostgresUserRepo` and `PostgresLoginAttemptRepo`, live in `trutina.storage_postgres`.
-The token and refresh-token contracts are provisional until the M3 ADR; `LoginAttemptRepo` was frozen in M2.4.
+The token and refresh-token contracts are superseded by ADR 0001 (opaque sessions) and replaced in M3.1;
+`LoginAttemptRepo` was frozen in M2.4.
 Its end-to-end test lives in `trutina-storage-postgres`, not here, because authentication may not import storage.
 See `packages/authentication/README.md` / `CONTEXT.md`.
 
@@ -309,7 +310,7 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   No token module, route or command exists,
   and no app depends on it; only the `UserRepo` and `LoginAttemptRepo` adapters exist
   (only `ThrottledAuthenticator` writes login attempts, and nothing wires it)
-  Token-related contracts are provisional until the M3 ADR.
+  Token-related contracts are superseded by ADR 0001 and replaced in M3.1.
 - `trutina-authentication` has contracts, test fakes, one concrete `Argon2PasswordHasher` and the service-only
   `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`. No token module, route or command
   exists, and no app depends on it. The `UserRepo` and `LoginAttemptRepo` adapters exist in
