@@ -41,6 +41,8 @@ Option B. API and CLI use the same session mechanism.
 8. **CLI.** Same table and same service, with a client-kind column. The CLI stores the token in a 0600 file or `TRUTINA_AUTH_TOKEN` (M4.5). CLI auth stays attribution-only (decision 9).
 9. **Key rotation: not applicable.** There is no signing key. Emergency procedure: revoke every session with a single UPDATE, and users log in again. It is documented in the runbook at M5.7.
 
+**Option C, JWT for the API and a separate opaque session for the CLI, is rejected.** It runs two mechanisms and keeps signing keys, while the API already queries the database on every write (decision 5) and the CLI must never hold a signing key (P5).
+
 ## Consequences
 
 ### Gained
@@ -62,10 +64,29 @@ Option B. API and CLI use the same session mechanism.
 - The residual-risk table under "Token lifetime and key rotation" and the "reads stateless" half of decision 5. The "check the database on every write" half still holds, through the same lookup.
 - `AUTH_REFRESH_CONFLICT` is dropped. `AUTH_USER_DISABLED` is folded into session validation unless M3.1 finds a reason to keep it.
 - `AuthSettings.signing_keys` and `active_kid` are removed (cleanup ticket in M3.1).
+- D6 (signing-key validation at API startup) is moot, because no signing key exists.
 
 ### Unchanged
 
-- Locked decisions 1 to 13, P1 to P7, D2 to D33. Core still sees only `actor: str`. The deploy gate (P1) still applies.
+- Locked decisions 1 to 13 (except the "reads stateless" half of decision 5, superseded above),
+  P1 to P7 and D2 to D33. Core still sees only `actor: str`. The deploy gate (P1) still applies.
+
+## Impact on planned tickets
+
+| Ticket | Effect                                                                               |
+| ------ | ------------------------------------------------------------------------------------ |
+| M3.1   | Re-scoped: session contracts and settings; removes `signing_keys` and `active_kid`   |
+| M3.2   | Removed: no JWT module                                                               |
+| M3.3   | Re-scoped: session persistence replaces refresh-token persistence                    |
+| M3.4   | Re-scoped: session service, no rotation or grace window                              |
+| M3.5   | Re-scoped: access state comes from the validation join; decides `AUTH_USER_DISABLED` |
+| M3.6   | Re-scoped: no key validation at startup                                              |
+| M3.7   | Re-scoped: login and logout only, no refresh route                                   |
+| M3.8   | Unchanged in shape                                                                   |
+| M4a.1  | Unchanged                                                                            |
+| M4a.2  | Allowlist is 2 system and 2 auth routes                                              |
+| M4.5.1 | Re-scoped: reuses the sessions table and service                                     |
+| M4c.1  | Pulled forward: sizes the session-lookup pool                                        |
 
 ## Revisit triggers
 
