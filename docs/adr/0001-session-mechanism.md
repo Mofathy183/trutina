@@ -1,7 +1,8 @@
 # ADR 0001: One opaque, database-backed session mechanism
 
-- **Status:** Proposed (becomes Accepted on owner sign-off)
+- **Status:** Accepted (owner approval 2026-10-30). Partially superseded by [ADR 0002](0002-session-lifetimes-step-up-and-connection-use.md); see Amendments at the end
 - **Date:** 2026-10-30
+- **Recorded in:** issue #82, PR #83 (merge commit not recorded yet)
 - **Deciders:** project owner
 - **Settles:** D1 in the identity and authentication plan (v3.23)
 - **Supersedes:** P8 (token lifetime and key rotation) and the JWT-specific parts of M3
@@ -97,3 +98,15 @@ Reopen this ADR if any of these happens:
 - A browser or third-party client needs delegated, self-contained tokens.
 
 If it is reopened, the likely target is short-lived signed access tokens over these same sessions, so the session table stays the revocation source of truth.
+
+## Amendments by ADR 0002 (2026-11-04)
+
+The text above is kept as written. [ADR 0002](0002-session-lifetimes-step-up-and-connection-use.md) supersedes these decisions:
+
+- **Decision 3 (validation):** the query also filters by client kind, so a session is valid only for the kind it was issued for, and the session carries `authenticated_at` for step-up re-authentication.
+- **Decision 4 (lifetimes):** the single pair of 14 days idle and 30 days absolute is replaced by one pair per client kind. `api`: 24 hours idle, 7 days absolute. `cli`: 14 days idle, 30 days absolute. The touch interval is unchanged. The values are provisional defaults.
+- **Decision 7 (routes):** `POST /auth/reauth` and `GET /auth/me` are added. Both require authentication. The public routes stay `POST /auth/login` and `POST /auth/logout`.
+- **Decision 8 (CLI):** the client-kind values are `api` and `cli`. The CLI is an operator tool with no step-up.
+- **Impact on planned tickets:** the table above is updated by the one in ADR 0002.
+
+Unchanged: Bearer transport (decision 1), SHA-256 hash storage (decision 2), no rotation (decision 5) and revocation (decision 6). Revoking all other sessions on a password change waits for a password-change route.

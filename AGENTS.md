@@ -85,7 +85,8 @@ tests/fixtures/logging.py             # autouse reset of trutina-observability's
 tests/fakes/trial_balance_repo.py, tests/factories/trial_balance.py
 tests/fakes/auth.py                   # in-memory fakes for the authentication contracts
 conftest.py, pytest.ini, ty.toml, ruff.toml, pyproject.toml, compose.yml
-docs/adr/                             # architecture decision records (0001: session mechanism)
+docs/adr/                             # architecture decision records
+(0001: session mechanism, 0002: session lifetimes, step-up and connection use)
 ```
 
 Package/app own tests live beside their own code (e.g.
@@ -305,6 +306,8 @@ no scheduler exists, so it is run by hand.
   service method an `Identity`. Core receives only an opaque `actor: str` from its
   caller. Never let `trutina.authentication` import `trutina.core`, a storage
   package, or a web/CLI framework.
+- Session decisions (ADR 0001, ADR 0002; not yet implemented): a session is valid only for the client kind it was issued for (`api` or `cli`),
+  and no request holds a database connection across the handler. Do not describe either as built until M3.
 - A service logs its own success, never its own failure — a raised
   `AppError`/`ValidationAppError` is logged exactly once, by the catching
   presentation-layer seam (`error_boundary()` or the API's exception

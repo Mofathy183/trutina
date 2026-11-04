@@ -48,7 +48,7 @@ Contracts and their concrete implementations share a role folder, each in its ow
 
 ### Two hashers, never interchangeable
 
-`PasswordHasher` is slow, salted and verified; `RefreshTokenHasher` is fast and deterministic because refresh tokens are 256-bit random values that are looked up by hash. Using the password hasher for lookup is impossible by design (it is not deterministic), and using the fast hash for passwords would be a security defect, so the two are separate ports.
+`PasswordHasher` is slow, salted and verified; `RefreshTokenHasher` is fast and deterministic because refresh tokens are 256-bit random values that are looked up by hash. Using the password hasher for lookup is impossible by design (it is not deterministic), and using the fast hash for passwords would be a security defect, so the two are separate ports. Under ADR 0001 the fast hasher hashes session tokens; M3.1 decides whether its port is renamed or only re-documented.
 
 ### Argon2id through `argon2-cffi`, parameters supplied by the caller
 
@@ -155,12 +155,15 @@ An invalid token is an expected, frequent outcome, not an exceptional one. Retur
 
 ## Provisional Contracts
 
-These may change before they are implemented:
+These are superseded or may change before they are implemented:
 
 - `TokenIssuer`, `TokenVerifier`, `AccessToken` and `RefreshTokenRepo` were drafted for a JWT design.
   D1 is settled in favor of one opaque, database-backed session mechanism
-  (ADR 0001, [0001-session-mechanism.md](../../docs/adr/0001-session-mechanism.md)).
-  These contracts are superseded and are replaced by session contracts in M3.1; do not build on them.
+  (ADR 0001, [0001-session-mechanism.md](../../docs/adr/0001-session-mechanism.md)),
+  and ADR 0002 ([0002-session-lifetimes-step-up-and-connection-use.md](../../docs/adr/0002-session-lifetimes-step-up-and-connection-use.md))
+  decides strict `api` and `cli` client kinds, lifetimes per kind, `authenticated_at` for step-up re-authentication
+  and a rule that no request holds a database connection across the handler.
+  These are decisions only: none of it is implemented, and these contracts are replaced by session contracts in M3.1. Do not build on them.
 - `User` is deliberately minimal: fields are added by the milestone that needs them.
 
 ## Allowed and Forbidden Dependencies
