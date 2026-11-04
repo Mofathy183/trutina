@@ -98,14 +98,18 @@ and its `UserRepo` and `LoginAttemptRepo` have PostgreSQL adapters (`users` and 
   The hasher, user store, login-attempt store, service-only registration (`RegistrationService`), login
   verification (`PasswordAuthenticator`: one indistinguishable failure, dummy-hash verify, rehash on login) and the
   throttling wrapper (`ThrottledAuthenticator`) exist; nothing wires any of the three use cases into an app.
-- Opaque database-backed sessions (ADR 0001), auth routes (login, logout) and endpoint protection.
+- Opaque database-backed sessions (ADR 0001, amended by ADR 0002: strict `api`/`cli` client kinds, per-kind lifetimes),
+  auth routes (login, logout, re-authentication, `GET /auth/me`) and endpoint protection.
+- Step-up re-authentication on posting and account delete (ADR 0002), with a new 403 code `AUTH_REAUTH_REQUIRED`.
+  Still open: whether account update needs it.
 - A CLI `auth` group.
 - Authorization (roles and a permission matrix).
 - Secret-safe validation errors (M2.1) are done for `FieldViolation.value`,
   the API 422 body and CLI rendering, proven with a test-only model. Still to do:
   re-verify on the real credential routes (M3.7). Credential detection is name-based and the marker list exists in two packages.
 
-The session mechanism is settled in ADR 0001 (opaque sessions).
+The session mechanism is settled in ADR 0001 (opaque sessions) and amended by ADR 0002 (lifetimes, step-up, connection rule).
+Cookie transport and a web client are deferred to ADR 0003 and do not ship before it.
 The milestone order and locked decisions are in the identity and authentication plan.
 
 ## Success Criteria
