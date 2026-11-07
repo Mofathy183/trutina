@@ -13,8 +13,9 @@ from pydantic import BaseModel, Field
 class PostgresSettings(BaseModel):
     """PostgreSQL connection settings for trutina-storage-postgres.
 
-    Every field maps to a create_async_engine() keyword in
-    trutina.storage_postgres.shared.connection.connect(). This class
+    Every field except pool_timeout_s maps to a create_async_engine()
+    keyword in trutina.storage_postgres.shared.connection.connect();
+    pool_timeout_s is declared here and not yet passed to the engine. This class
     describes connection shape only -- it performs no I/O and verifies
     no connectivity itself; that guarantee belongs to connect().
 
@@ -39,6 +40,8 @@ class PostgresSettings(BaseModel):
             caller, so a connection silently killed by the server (idle
             timeout, restart, failover) is detected and replaced instead
             of surfacing as a confusing mid-query failure.
+        pool_timeout_s: Max seconds a caller waits for a pooled connection
+            before failing. Declared only: the engine does not read it yet.
     """
 
     uri: str = Field(
@@ -63,5 +66,13 @@ class PostgresSettings(BaseModel):
             "Test each pooled connection with a lightweight query before "
             "handing it out, so a connection killed by the server is "
             "detected and replaced rather than surfacing as a query failure."
+        ),
+    )
+    pool_timeout_s: float = Field(
+        default=5.0,
+        gt=0,
+        description=(
+            "Max seconds a caller waits for a pooled connection before "
+            "failing. Declared only: the engine does not read it yet."
         ),
     )

@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 from pydantic_settings import BaseSettings
 from trutina.config import PostgresSettings
 
@@ -25,6 +26,10 @@ class TestPostgresSettingsDefaults:
         settings = PostgresSettings()
         assert settings.pool_pre_ping is True
 
+    def test_default_pool_timeout_s(self):
+        settings = PostgresSettings()
+        assert settings.pool_timeout_s == 5.0
+
 
 @pytest.mark.unit
 class TestPostgresSettingsOverrides:
@@ -47,6 +52,16 @@ class TestPostgresSettingsOverrides:
     def test_overrides_pool_pre_ping(self):
         settings = PostgresSettings(pool_pre_ping=False)
         assert settings.pool_pre_ping is False
+
+    def test_overrides_pool_timeout_s(self):
+        settings = PostgresSettings(pool_timeout_s=2.5)
+        assert settings.pool_timeout_s == 2.5
+
+    @pytest.mark.parametrize("value", [0, 0.0, -1.0])
+    def test_rejects_a_non_positive_pool_timeout_s(self, value):
+        with pytest.raises(ValidationError) as exc_info:
+            PostgresSettings(pool_timeout_s=value)
+        assert exc_info.value.errors()[0]["loc"] == ("pool_timeout_s",)
 
 
 @pytest.mark.unit
