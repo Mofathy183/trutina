@@ -5,7 +5,14 @@ from pydantic import ValidationError
 from trutina.config import AuthSettings, Settings
 from trutina.config import TestSettings as ConfigTestSettings
 
-_KEY = "k" * 32
+_SESSION_FIELDS = (
+    "session_api_idle_hours",
+    "session_api_absolute_days",
+    "session_cli_idle_days",
+    "session_cli_absolute_days",
+    "session_touch_interval_seconds",
+    "reauth_window_minutes",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -17,72 +24,130 @@ def _clear_trutina_env(monkeypatch):
 
 @pytest.mark.unit
 class TestAuthSettingsDefaults:
-    def test_has_no_keys_and_no_active_kid_by_default(self):
-        auth = AuthSettings()
-
-        assert auth.signing_keys == {}
-        assert auth.active_kid is None
-
-    def test_root_settings_constructs_without_signing_keys(self):
+    def test_root_settings_constructs_with_an_empty_environment(self):
         settings = Settings(_env_file=None)
 
-        assert settings.auth.signing_keys == {}
-        assert settings.auth.active_kid is None
+        assert isinstance(settings.auth, AuthSettings)
 
-    def test_test_settings_constructs_without_signing_keys(self):
+    def test_test_settings_constructs_with_an_empty_environment(self):
         settings = ConfigTestSettings(_env_file=None)
 
-        assert settings.auth.signing_keys == {}
-        assert settings.auth.active_kid is None
+        assert isinstance(settings.auth, AuthSettings)
 
 
 @pytest.mark.unit
-class TestAuthSettingsEnvLoading:
-    def test_loads_signing_key_and_active_kid_from_env(self, monkeypatch):
-        monkeypatch.setenv("TRUTINA_AUTH__SIGNING_KEYS__k1", _KEY)
+class TestSessionSettings:
+    def test_defaults(self):
+        auth = AuthSettings()
+
+        assert (
+            auth.session_api_idle_hours,
+            auth.session_api_absolute_days,
+            auth.session_cli_idle_days,
+            auth.session_cli_absolute_days,
+            auth.session_touch_interval_seconds,
+            auth.reauth_window_minutes,
+        ) == (24, 7, 14, 30, 300, 30)
+
+    @pytest.mark.parametrize("field", _SESSION_FIELDS)
+    @pytest.mark.parametrize("value", [0, -1])
+    def test_rejects_a_value_below_one(self, field, value):
+        with pytest.raises(ValidationError) as exc_info:
+            AuthSettings.model_validate({field: value})
+
+        assert exc_info.value.errors()[0]["loc"] == (field,)
+
+    @pytest.mark.parametrize("field", _SESSION_FIELDS)
+    def test_accepts_the_minimum_of_one(self, field):
+        auth = AuthSettings.model_validate({field: 1})
+
+        assert getattr(auth, field) == 1
+
+    def test_accepts_an_idle_lifetime_above_the_absolute_lifetime(self):
+        auth = AuthSettings(session_api_idle_hours=24 * 30, session_api_absolute_days=1)
+
+        assert auth.session_api_idle_hours == 24 * 30
+
+    def test_loads_from_env(self, monkeypatch):
+        monkeypatch.setenv("TRUTINA_AUTH__SESSION_API_IDLE_HOURS", "12")
+        monkeypatch.setenv("TRUTINA_AUTH__REAUTH_WINDOW_MINUTES", "10")
+
+        settings = Settings(_env_file=None)
+
+        assert settings.auth.session_api_idle_hours == 12
+        assert settings.auth.reauth_window_minutes == 10
+
+    def test_test_settings_reads_only_the_test_namespace(self, monkeypatch):
+        monkeypatch.setenv("TRUTINA_AUTH__REAUTH_WINDOW_MINUTES", "5")
+        monkeypatch.setenv("TRUTINA_TEST_AUTH__REAUTH_WINDOW_MINUTES", "7")
+
+        settings = ConfigTestSettings(_env_file=None)
+
+        assert settings.auth.reauth_window_minutes == 7
+
+
+@pytest.mark.unit
+class TestTrustedProxies:
+    def test_defaults_to_empty(self):
+        assert AuthSettings().trusted_proxies == []
+
+    def test_accepts_addresses_and_networks(self):
+        entries = ["203.0.113.7", "10.0.0.0/8", "2001:db8::/32"]
+
+        auth = AuthSettings(trusted_proxies=entries)
+
+        assert auth.trusted_proxies == entries
+
+    def test_trims_surrounding_whitespace(self):
+        auth = AuthSettings(trusted_proxies=[" 10.0.0.1 "])
+
+        assert auth.trusted_proxies == ["10.0.0.1"]
+
+    @pytest.mark.parametrize("entry", ["", "not-an-ip", "10.0.0.0/33"])
+    def test_rejects_an_entry_that_is_not_an_address_or_network(self, entry):
+        with pytest.raises(ValidationError) as exc_info:
+            AuthSettings(trusted_proxies=[entry])
+
+        assert exc_info.value.errors()[0]["loc"] == ("trusted_proxies",)
+
+    def test_loads_a_json_list_from_env(self, monkeypatch):
+        monkeypatch.setenv(
+            "TRUTINA_AUTH__TRUSTED_PROXIES", '["10.0.0.0/8", "203.0.113.7"]'
+        )
+
+        settings = Settings(_env_file=None)
+
+        assert settings.auth.trusted_proxies == ["10.0.0.0/8", "203.0.113.7"]
+
+
+@pytest.mark.unit
+class TestRemovedSigningKeySettings:
+    def test_auth_settings_has_no_signing_key_fields(self):
+        auth = AuthSettings()
+
+        assert not hasattr(auth, "signing_keys")
+        assert not hasattr(auth, "active_kid")
+
+    def test_stale_environment_variables_are_ignored(self, monkeypatch):
+        monkeypatch.setenv("TRUTINA_AUTH__SIGNING_KEYS__k1", "k" * 32)
         monkeypatch.setenv("TRUTINA_AUTH__ACTIVE_KID", "k1")
 
         settings = Settings(_env_file=None)
 
-        assert list(settings.auth.signing_keys) == ["k1"]
-        assert settings.auth.signing_keys["k1"].get_secret_value() == _KEY
-        assert settings.auth.active_kid == "k1"
+        assert not hasattr(settings.auth, "signing_keys")
+        assert not hasattr(settings.auth, "active_kid")
 
-    def test_active_kid_matches_key_regardless_of_env_case(self, monkeypatch):
-        # pydantic-settings lower-cases dict keys read from env vars but
-        # not plain string values; AuthSettings folds both so they agree.
-        monkeypatch.setenv("TRUTINA_AUTH__SIGNING_KEYS__K1", _KEY)
-        monkeypatch.setenv("TRUTINA_AUTH__ACTIVE_KID", "K1")
+    def test_stale_dotenv_entries_are_ignored(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            f"TRUTINA_AUTH__SIGNING_KEYS__k1={'k' * 32}\nTRUTINA_AUTH__ACTIVE_KID=k1\n",
+            encoding="utf-8",
+        )
 
-        settings = Settings(_env_file=None)
+        settings = Settings(_env_file=env_file)
 
-        assert settings.auth.active_kid in settings.auth.signing_keys
-
-    def test_folds_key_ids_on_direct_construction(self):
-        auth = AuthSettings(signing_keys={"Key-A": _KEY}, active_kid="KEY-A")
-
-        assert list(auth.signing_keys) == ["key-a"]
-        assert auth.active_kid == "key-a"
-
-    def test_test_settings_reads_only_the_test_namespace(self, monkeypatch):
-        monkeypatch.setenv("TRUTINA_AUTH__ACTIVE_KID", "prod")
-        monkeypatch.setenv("TRUTINA_TEST_AUTH__ACTIVE_KID", "test")
-
-        settings = ConfigTestSettings(_env_file=None)
-
-        assert settings.auth.active_kid == "test"
-
-
-@pytest.mark.unit
-class TestAuthSettingsSecrecy:
-    def test_repr_does_not_reveal_signing_key(self, monkeypatch):
-        monkeypatch.setenv("TRUTINA_AUTH__SIGNING_KEYS__k1", _KEY)
-
-        settings = Settings(_env_file=None)
-
-        assert _KEY not in repr(settings.auth)
-        assert _KEY not in repr(settings)
-        assert _KEY not in str(settings.auth)
+        assert not hasattr(settings.auth, "signing_keys")
+        assert not hasattr(settings.auth, "active_kid")
 
 
 @pytest.mark.unit

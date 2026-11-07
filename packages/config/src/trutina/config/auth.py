@@ -1,33 +1,42 @@
 """Authentication configuration shape.
 
-Describes the signing-key material and the password-hashing cost
-parameters the authentication milestones read. This module only declares
-fields and shape constraints: it performs no I/O, never checks that keys
-are present, long enough or not a placeholder, does not verify that
-``active_kid`` names a configured key, and does not judge whether the
-hashing parameters are strong enough for production. Those checks run at
-API startup (decision D6), not on the root ``Settings``, so Alembic, the
-CLI and tooling can start without keys.
+Describes the session lifetimes, re-authentication window, trusted proxy
+list, password-hashing cost parameters and login-throttle limits the
+authentication milestones read. This module only declares fields and shape
+constraints: it performs no I/O, sets no upper bound on any lifetime, does
+not relate an idle lifetime to its absolute lifetime, and does not judge
+whether the hashing parameters are strong enough for production. Those
+judgments belong to the code that reads the values, not to the settings.
 """
 
+import ipaddress
 from typing import Self
 
-from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class AuthSettings(BaseModel):
-    """Signing-key and password-hashing settings.
+    """Session, proxy, password-hashing and login-throttle settings.
 
     A plain ``BaseModel`` nested in ``Settings``, like every other
     settings group; only the root models own env-prefix and dotenv
     configuration.
 
     Attributes:
-        signing_keys: Key id (``kid``) to secret. No default: an empty
-            mapping means "no keys configured". Set one entry per key as
-            ``TRUTINA_AUTH__SIGNING_KEYS__<kid>``.
-        active_kid: The ``kid`` new tokens are signed with. ``None`` until
-            configured.
+        session_api_idle_hours: Hours an ``api`` session may sit unused
+            before it expires.
+        session_api_absolute_days: Days an ``api`` session lives from
+            creation, however active it is.
+        session_cli_idle_days: Days a ``cli`` session may sit unused
+            before it expires.
+        session_cli_absolute_days: Days a ``cli`` session lives from
+            creation, however active it is.
+        session_touch_interval_seconds: Minimum seconds between recorded
+            uses of one session, so reads do not each cause a write.
+        reauth_window_minutes: Minutes after a session's last password
+            check during which it counts as recently authenticated.
+        trusted_proxies: Proxy addresses or CIDR networks whose forwarded
+            client address may be trusted. Empty means no proxy is trusted.
         password_time_cost: Argon2id iterations.
         password_memory_cost_kib: Argon2id memory per hash, in KiB.
         password_parallelism: Argon2id lanes (threads) per hash.
@@ -39,23 +48,49 @@ class AuthSettings(BaseModel):
         login_window_seconds: Length of the failed-login window in
             seconds. Also the retry delay reported when throttled.
 
-    Key ids are case-folded to lower case. pydantic-settings lower-cases
-    the env-var-derived dict keys, so ``active_kid`` is folded the same
-    way; otherwise ``ACTIVE_KID=K1`` could never match the key loaded
-    from ``SIGNING_KEYS__K1``. Do not use ``__`` inside a kid.
+    The lifetime fields are validated only as positive integers. An idle
+    lifetime longer than its absolute lifetime is accepted, because a
+    session's idle expiry is capped by its absolute expiry when it is
+    created or touched.
 
     The hashing fields are validated only for what Argon2 itself
     requires (positive values, and at least 8 KiB of memory per lane).
     Whether they are strong enough is not decided here.
     """
 
-    signing_keys: dict[str, SecretStr] = Field(
-        default_factory=dict,
-        description="Key id to signing secret. Empty means no keys configured.",
+    session_api_idle_hours: int = Field(
+        default=24,
+        ge=1,
+        description="Hours an api session may sit unused before it expires.",
     )
-    active_kid: str | None = Field(
-        default=None,
-        description="Key id used to sign new tokens.",
+    session_api_absolute_days: int = Field(
+        default=7,
+        ge=1,
+        description="Days an api session lives from creation.",
+    )
+    session_cli_idle_days: int = Field(
+        default=14,
+        ge=1,
+        description="Days a cli session may sit unused before it expires.",
+    )
+    session_cli_absolute_days: int = Field(
+        default=30,
+        ge=1,
+        description="Days a cli session lives from creation.",
+    )
+    session_touch_interval_seconds: int = Field(
+        default=300,
+        ge=1,
+        description="Minimum seconds between recorded uses of one session.",
+    )
+    reauth_window_minutes: int = Field(
+        default=30,
+        ge=1,
+        description="Minutes after the last password check a session counts as recent.",
+    )
+    trusted_proxies: list[str] = Field(
+        default_factory=list,
+        description="IP addresses or CIDR networks whose forwarded client address is trusted.",
     )
     password_time_cost: int = Field(
         default=3,
@@ -89,15 +124,23 @@ class AuthSettings(BaseModel):
         description="Failed-login window in seconds; also the retry delay when throttled.",
     )
 
-    @field_validator("signing_keys", mode="after")
+    @field_validator("trusted_proxies", mode="after")
     @classmethod
-    def _fold_key_ids(cls, value: dict[str, SecretStr]) -> dict[str, SecretStr]:
-        return {kid.casefold(): secret for kid, secret in value.items()}
+    def _check_trusted_proxies(cls, value: list[str]) -> list[str]:
+        """Keep entries that are an IP address or CIDR network, trimmed.
 
-    @field_validator("active_kid", mode="after")
-    @classmethod
-    def _fold_active_kid(cls, value: str | None) -> str | None:
-        return value.casefold() if value is not None else None
+        Shape only: a typo fails at construction instead of silently
+        leaving a proxy untrusted. The entry is not echoed in the error.
+        """
+        cleaned = [entry.strip() for entry in value]
+        for entry in cleaned:
+            try:
+                ipaddress.ip_network(entry, strict=False)
+            except ValueError:
+                raise ValueError(
+                    "trusted_proxies entries must be IP addresses or CIDR networks"
+                ) from None
+        return cleaned
 
     @model_validator(mode="after")
     def _check_memory_per_lane(self) -> Self:
