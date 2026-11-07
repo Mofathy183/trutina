@@ -39,7 +39,7 @@ packages/
 ├── authentication/      trutina-authentication
 │   └── src/trutina/authentication/
 │       ├── __init__.py
-│       ├── {identity,credentials,tokens,shared}/   # contracts grouped by role
+│       ├── {identity,credentials,sessions,shared}/   # contracts grouped by role
 │       ├── credentials/{passwords,users,login}/    # credentials grouped by concern
 │       └── tests/
 ├── storage-postgres/    trutina-storage-postgres
@@ -183,16 +183,18 @@ own composition root; every other package emits through plain
 ### `trutina.authentication`
 
 Identity and authentication contracts: `Identity`, `AccessState`, a minimal `User`,
-and abstract ports for password and refresh-token hashing, access-token issue and
-verify, user, refresh-token and login-attempt stores, a clock, an event sink, a
-per-write status checker, and the `Authenticator` use case. A peer of
+and abstract ports for password and session-token hashing, session, user and
+login-attempt stores, a clock, an event sink, a per-write status checker, and
+the `Authenticator` use case, plus the session record and `ClientKind`. A peer of
 `trutina.core`, never above or below it: core sees only an opaque `actor: str`
 supplied by its caller. Contracts and models plus `Argon2PasswordHasher` and the service-only `RegistrationService`,
 `PasswordAuthenticator` and `ThrottledAuthenticator`.
 no token module, route or command exists, and no app depends on it.
 The storage adapters, `PostgresUserRepo` and `PostgresLoginAttemptRepo`, live in `trutina.storage_postgres`.
-The token and refresh-token contracts are superseded by ADR 0001 (opaque sessions) and replaced in M3.1;
-ADR 0002 decides per-client session lifetimes, step-up re-authentication and the connection rule (decisions only, no code yet);
+The session contracts (`SessionRepo`, `SessionRecord`, `ClientKind`) replaced the token contracts in M3.1
+(ADR 0001) and have no implementation yet;
+ADR 0002 decides per-client session lifetimes, step-up re-authentication and the connection rule
+(the settings exist since M3.1; the behavior is not built);
 `LoginAttemptRepo` was frozen in M2.4.
 Its end-to-end test lives in `trutina-storage-postgres`, not here, because authentication may not import storage.
 See `packages/authentication/README.md` / `CONTEXT.md`.
@@ -311,10 +313,10 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   No token module, route or command exists,
   and no app depends on it; only the `UserRepo` and `LoginAttemptRepo` adapters exist
   (only `ThrottledAuthenticator` writes login attempts, and nothing wires it)
-  Token-related contracts are superseded by ADR 0001 and replaced in M3.1.
+  The session contracts exist since M3.1 and have no implementation.
 - `trutina-authentication` has contracts, test fakes, one concrete `Argon2PasswordHasher` and the service-only
   `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`. No token module, route or command
   exists, and no app depends on it. The `UserRepo` and `LoginAttemptRepo` adapters exist in
   `trutina-storage-postgres`. The register, login and throttle flow is verified end to end against real PostgreSQL
   (`shared/tests/test_credentials_integration.py`, M2.8), but only at service level: nothing wires it into an app.
-  Token-related contracts are superseded by ADR 0001 and ADR 0002 and replaced in M3.1.
+  The session contracts exist since M3.1 and have no implementation.

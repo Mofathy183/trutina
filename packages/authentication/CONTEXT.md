@@ -23,10 +23,10 @@ Four small folders group the contracts by what they are for. Every public symbol
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
 | `identity/`    | `Identity`, `AccessState`, `UserStatusChecker`                                                                                                                                                                                                                                                                                                                                         | Who is acting, and whether they may |
 | `credentials/` | Grouped into `passwords/` (`PasswordHasher`, `Argon2PasswordHasher`, `normalize_password`, `MAX_PASSWORD_LENGTH`), `users/` (`User`, `UserRepo`, `normalize_email`, `MAX_EMAIL_LENGTH`, and the registration use case: `RegistrationService`, `RegisterInput`, `RegisteredUser`) and `login/` (`LoginAttemptRepo`, `Authenticator`, `PasswordAuthenticator`, `ThrottledAuthenticator`) | Checking a login                    |
-| `tokens/`      | `access.py` (`AccessToken`, issuer, verifier); `refresh.py` (hasher, record, repo)                                                                                                                                                                                                                                                                                                     | Sessions after login                |
+| `sessions/`    | `session.py` (`ClientKind`, `SessionRecord`, `ValidSession`, `SessionRepo`); `hasher.py` (`SessionTokenHasher`)                                                                                                                                                                                                                                                                        | Sessions after login                |
 | `shared/`      | `Clock`, `AuthEvent`, `AuthEventSink`, `NoOpAuthEventSink`                                                                                                                                                                                                                                                                                                                             | Cross-cutting ports                 |
 
-Internal direction: `credentials` and `tokens` may import `identity`; `identity` and `shared` import nothing from their siblings. This is observed convention, not an import-linter contract. A folder exists only where two or more related modules do; do not create a folder for a single file.
+Internal direction: `credentials` and `sessions` may import `identity`; `identity` and `shared` import nothing from their siblings. This is observed convention, not an import-linter contract. A folder exists only where two or more related modules do; do not create a folder for a single file.
 `credentials/` is itself split into three subfolders, each holding two or more related modules:
 `passwords/` (how a password becomes a hash), `users/` (who a user is) and `login/` (checking a login).
 Inside it, `login` may import `users` and `passwords`, `users` may import `passwords`, and `passwords` imports no sibling.
@@ -48,7 +48,7 @@ Contracts and their concrete implementations share a role folder, each in its ow
 
 ### Two hashers, never interchangeable
 
-`PasswordHasher` is slow, salted and verified; `RefreshTokenHasher` is fast and deterministic because refresh tokens are 256-bit random values that are looked up by hash. Using the password hasher for lookup is impossible by design (it is not deterministic), and using the fast hash for passwords would be a security defect, so the two are separate ports. Under ADR 0001 the fast hasher hashes session tokens; M3.1 decides whether its port is renamed or only re-documented.
+`PasswordHasher` is slow, salted and verified; `SessionTokenHasher` is fast and deterministic because session tokens are 256-bit random values that are looked up by hash. Using the password hasher for lookup is impossible by design (it is not deterministic), and using the fast hash for passwords would be a security defect, so the two are separate ports. M3.1 renamed the port that was first named for refresh tokens; nothing implements it yet.
 
 ### Argon2id through `argon2-cffi`, parameters supplied by the caller
 
@@ -141,13 +141,13 @@ Hashing is CPU-bound. The implementation, not the caller, runs it off the event 
 
 Authentication timestamps are always aware. The accounting domain's posting dates are naive; the two must never be compared directly. All expiry and rotation arithmetic takes its time from `Clock`, so it is testable without sleeping.
 
-### `TokenVerifier` returns `Identity | None`
+### Session contracts hold no policy and answer a miss with `None`
 
-An invalid token is an expected, frequent outcome, not an exceptional one. Returning `None` lets the caller map it to its own 401 and keeps this package free of `ErrorCode` and of any dependency on `trutina-shared` for now.
+`SessionRepo.get_valid` takes the client kind as a required argument and returns the session with the user's `AccessState` only when the hash matches, the kind matches, the session is not revoked, `now` is strictly before both expiries, and the user exists and is active. Every other case is the same `None`, so a caller cannot tell why a token failed. An inactive user's session is never valid, so `ValidSession.access.is_active` is always true; the field exists so a role added later extends the same lookup.
 
-### Rotation: atomic step in the repo, policy in the service
+Lifetimes, whether a touch is due, and the retention cutoff are service policy, not repository behavior, so an adapter holds no authentication rules. `touch`, `mark_reauthenticated` and `revoke` never move a stored time backward and are no-ops on a miss, so concurrent touches cannot shorten a session and logout never fails on a repeat. No method raises a domain error. The contract does not define what a duplicate token hash does, because 256-bit random tokens make one a defect.
 
-`RefreshTokenRepo.rotate` is the single atomic operation. It returns `ROTATED`, `REUSED` or `INVALID` plus the presented token's prior record. The grace window for harmless reuse and the decision to revoke a family are service policy, not repository behavior, so a storage adapter holds no authentication rules. The contract requires that of any number of concurrent rotations of one token exactly one returns `ROTATED`.
+`touch` is a separate call after `get_valid`, so one request makes two short, sequential database borrows and never nests them. This is a wider reading of ADR 0002's "same short session" and is recorded as a known gap. The session contracts were frozen in M3.1 and have no adapter or service yet.
 
 ### Events carry no secrets
 
@@ -155,16 +155,12 @@ An invalid token is an expected, frequent outcome, not an exceptional one. Retur
 
 ## Provisional Contracts
 
-These are superseded or may change before they are implemented:
+`User` is the only provisional contract: it is deliberately minimal, and fields are added by the milestone that needs them.
 
-- `TokenIssuer`, `TokenVerifier`, `AccessToken` and `RefreshTokenRepo` were drafted for a JWT design.
-  D1 is settled in favor of one opaque, database-backed session mechanism
-  (ADR 0001, [0001-session-mechanism.md](../../docs/adr/0001-session-mechanism.md)),
-  and ADR 0002 ([0002-session-lifetimes-step-up-and-connection-use.md](../../docs/adr/0002-session-lifetimes-step-up-and-connection-use.md))
-  decides strict `api` and `cli` client kinds, lifetimes per kind, `authenticated_at` for step-up re-authentication
-  and a rule that no request holds a database connection across the handler.
-  These are decisions only: none of it is implemented, and these contracts are replaced by session contracts in M3.1. Do not build on them.
-- `User` is deliberately minimal: fields are added by the milestone that needs them.
+The session contracts are frozen. They follow ADR 0001 ([0001-session-mechanism.md](../../docs/adr/0001-session-mechanism.md))
+and ADR 0002 ([0002-session-lifetimes-step-up-and-connection-use.md](../../docs/adr/0002-session-lifetimes-step-up-and-connection-use.md)):
+strict `api` and `cli` client kinds and `authenticated_at` for step-up. They have no adapter, service or route yet, so do not describe the
+session rules, the step-up check or the connection rule as built.
 
 ## Allowed and Forbidden Dependencies
 
@@ -179,7 +175,7 @@ These are superseded or may change before they are implemented:
 
 - `UserRepo` (`PostgresUserRepo`) and `LoginAttemptRepo` (`PostgresLoginAttemptRepo`) have adapters in `trutina-storage-postgres`,
   which declares the dependency on this package, and `PasswordHasher` has `Argon2PasswordHasher` here.
-  No token module, refresh-token hasher, route or command exists,
+  No session implementation, session-token hasher, route or command exists,
   nothing outside tests uses the hasher, the login-attempt repository or the throttle,
   and no app depends on this package.
 - `LoginAttemptRepo` itself does not cap the email. `ThrottledAuthenticator` records only emails within `MAX_EMAIL_LENGTH`,
@@ -224,6 +220,11 @@ These are superseded or may change before they are implemented:
   configurations differ, for example during a rolling deploy.
 - The register, login and throttle flow is verified end to end on real PostgreSQL (M2.8), but no route or command
   calls it. Route-level proof is M3.7.
+- Session contract caveats: `touch` is a separate call after `get_valid`, which is a wider reading of ADR 0002's
+  "same short session" and needs the ADR wording amended. The M3.3 card says a touch writes "only when the interval has passed",
+  but the contract puts that decision in the service. A duplicate token hash has no defined behavior.
+  A naive datetime passed to `SessionRepo` is a caller bug and is not guarded. `FakeSessionRepo`
+  stands in for the join to `users` with a `FakeUserRepo`; the real join is exercised only when the PostgreSQL adapter exists.
 
 ## Verification
 

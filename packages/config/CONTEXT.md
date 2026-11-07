@@ -88,7 +88,7 @@ that.
 
 **Decision:** `AuthSettings` validates only what Argon2 itself requires: every value at least 1, memory at least 8 KiB, and memory at least 8 KiB per lane. It does not enforce a production minimum.
 
-**Why:** a floor in settings would make cheap parameters impossible for tests and tooling, and "strong enough" is a deployment decision. Rejecting weak values in production belongs to API startup validation (D6), alongside signing keys.
+**Why:** a floor in settings would make cheap parameters impossible for tests and tooling, and "strong enough" is a deployment decision. Rejecting weak values in production belongs to API startup validation.
 
 ### Login-throttle fields validate shape only
 
@@ -125,11 +125,13 @@ leaving it `str`-only and hoping every caller remembers to convert.
 
 **Trade-off accepted:** a local run without `.env.test` behaves as production once something reads the field. `.env.test.example` and the CI workflows set the variable to avoid this; revisit when the first reader is added.
 
-### `AuthSettings` key ids are case-folded
+### Session settings validate shape, not policy
 
-**Decision:** both `signing_keys` keys and `active_kid` are case-folded on construction.
+**Decision:** the six session fields are positive integers with a floor of 1, with no upper bound and no check that an idle lifetime is below its absolute lifetime. `trusted_proxies` entries are checked as an IP address or CIDR network with the standard library, trimmed, and the offending entry is not echoed in the error.
 
-**Why:** `pydantic-settings` lower-cases dict keys read from environment variables but not plain string values, so `ACTIVE_KID=K1` would never match a key loaded from `SIGNING_KEYS__K1`. Folding both makes them agree. Do not use `__` inside a key id.
+**Why:** a session's idle expiry is capped by its absolute expiry when it is created or touched, so an idle value above the absolute value is harmless, and the right numbers are a deployment and load decision (M4c.2), as for the hashing fields. A typo in a proxy list should fail at construction instead of silently leaving a proxy untrusted. The code that reads these values owns any stricter judgment.
+
+**Removed:** `signing_keys` and `active_kid` were dropped when ADR 0001 replaced signed tokens with opaque sessions; there is nothing to sign. Their case-folding rule went with them.
 
 ## Architectural invariants that must never be broken
 
@@ -246,10 +248,10 @@ test_settings,test_logging}.py` cover each nested settings
   pass — `PostgresSettings`' docstring names it as the consumer of these
   fields, but the package's own manifest wasn't available to check. Confirm
   before stating it as fact elsewhere.
-- `AuthSettings` and `Settings.environment` have no readers yet. Key presence,
-  length and `active_kid` validity are not checked here,
-  and neither is whether the password-hashing parameters are strong enough;
-  that is API startup's job in a later milestone.
+- `AuthSettings`, `Settings.environment` and `PostgresSettings.pool_timeout_s` have no readers yet.
+  Whether the hashing parameters are strong enough, whether session lifetimes are sensible,
+  and what `pool_timeout_s` should be under load are not checked or decided here.
+  `pool_timeout_s` is not passed to the engine, and how a pool-wait timeout maps to an `ErrorCode` is not confirmed.
 
 ## Common mistakes to avoid
 

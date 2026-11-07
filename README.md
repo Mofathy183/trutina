@@ -51,10 +51,10 @@ its sole dependent is `trutina-storage-postgres`, for the `UserRepo` and `LoginA
   emits through plain `logging.getLogger(__name__)` with zero dependency on this
   package. See `packages/observability/README.md` / `CONTEXT.md`.
 - **`trutina-authentication`** — identity and authentication contracts (`Identity`,
-  hasher, token, user, refresh-token and login-attempt ports) plus in-memory test
+  hasher, session, session-token, user and login-attempt ports) plus in-memory test
   fakes.
   Contracts and models plus `Argon2PasswordHasher` and the service-only `RegistrationService`, `PasswordAuthenticator` and
-  `ThrottledAuthenticator`; no token, route or command exists and only `trutina-storage-postgres` depends on it
+  `ThrottledAuthenticator`; no session implementation, route or command exists and only `trutina-storage-postgres` depends on it
   (for the `UserRepo` and `LoginAttemptRepo` adapters). Never imported by `trutina-core`.
   See `packages/authentication/README.md` / `CONTEXT.md`.
 - **`trutina-storage-postgres`** — the storage backend `apps/cli` and `apps/api`

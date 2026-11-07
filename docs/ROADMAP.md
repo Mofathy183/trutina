@@ -98,7 +98,8 @@ and its `UserRepo` and `LoginAttemptRepo` have PostgreSQL adapters (`users` and 
   The hasher, user store, login-attempt store, service-only registration (`RegistrationService`), login
   verification (`PasswordAuthenticator`: one indistinguishable failure, dummy-hash verify, rehash on login) and the
   throttling wrapper (`ThrottledAuthenticator`) exist; nothing wires any of the three use cases into an app.
-- Opaque database-backed sessions (ADR 0001, amended by ADR 0002: strict `api`/`cli` client kinds, per-kind lifetimes),
+- Opaque database-backed sessions (ADR 0001, amended by ADR 0002: strict `api`/`cli` client kinds, per-kind lifetimes;
+  the contracts and lifetime settings exist since M3.1, the adapter and service do not),
   auth routes (login, logout, re-authentication, `GET /auth/me`) and endpoint protection.
 - Step-up re-authentication on posting and account delete (ADR 0002), with a new 403 code `AUTH_REAUTH_REQUIRED`.
   Still open: whether account update needs it.

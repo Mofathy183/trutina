@@ -2,8 +2,6 @@
 
 Each fake satisfies its contract with the least machinery needed for unit
 tests and exposes lightweight hooks for assertions. None performs I/O.
-Contracts marked provisional in ``trutina.authentication`` (tokens,
-refresh tokens, login attempts) may change with them.
 """
 
 from dataclasses import replace
@@ -13,28 +11,22 @@ from uuid import UUID
 from pydantic import SecretStr
 from trutina.authentication import (
     AccessState,
-    AccessToken,
     AuthEvent,
     AuthEventSink,
+    ClientKind,
     Clock,
-    Identity,
     LoginAttemptRepo,
     PasswordHasher,
-    RefreshTokenHasher,
-    RefreshTokenRecord,
-    RefreshTokenRepo,
-    RotationOutcome,
-    RotationResult,
-    TokenIssuer,
-    TokenVerifier,
+    SessionRecord,
+    SessionRepo,
+    SessionTokenHasher,
     User,
     UserRepo,
     UserStatusChecker,
+    ValidSession,
     normalize_email,
 )
 from trutina.shared.errors import AppError, ErrorCode
-
-_TOKEN_PREFIX = "fake-access-"
 
 
 class FakeClock(Clock):
@@ -93,38 +85,11 @@ class FakePasswordHasher(PasswordHasher):
         return password_hash in self.stale_hashes
 
 
-class FakeRefreshTokenHasher(RefreshTokenHasher):
+class FakeSessionTokenHasher(SessionTokenHasher):
     """Deterministic hasher: ``sha:<token>``."""
 
     def hash(self, token: SecretStr) -> str:
         return f"sha:{token.get_secret_value()}"
-
-
-class FakeTokenIssuer(TokenIssuer):
-    """Issues ``fake-access-<subject_id>`` tokens expiring ``ttl`` after the clock."""
-
-    def __init__(self, clock: Clock, ttl: timedelta = timedelta(minutes=15)) -> None:
-        self._clock = clock
-        self._ttl = ttl
-
-    def issue_access_token(self, identity: Identity) -> AccessToken:
-        return AccessToken(
-            value=SecretStr(f"{_TOKEN_PREFIX}{identity.subject_id}"),
-            expires_at=self._clock.now() + self._ttl,
-        )
-
-
-class FakeTokenVerifier(TokenVerifier):
-    """Accepts exactly the tokens ``FakeTokenIssuer`` produces; ignores expiry."""
-
-    def verify_access_token(self, token: SecretStr) -> Identity | None:
-        value = token.get_secret_value()
-        if not value.startswith(_TOKEN_PREFIX):
-            return None
-        try:
-            return Identity(subject_id=UUID(value[len(_TOKEN_PREFIX) :]))
-        except ValueError:
-            return None
 
 
 class FakeUserStatusChecker(UserStatusChecker):
@@ -216,53 +181,96 @@ class FakeLoginAttemptRepo(LoginAttemptRepo):
         return removed
 
 
-class FakeRefreshTokenRepo(RefreshTokenRepo):
-    """In-memory RefreshTokenRepo.
+def _died_at(record: SessionRecord) -> datetime:
+    """The earliest moment a session stopped being usable."""
+    moments = [record.idle_expires_at, record.absolute_expires_at]
+    if record.revoked_at is not None:
+        moments.append(record.revoked_at)
+    return min(moments)
 
-    ``rotate`` has no ``await`` between its check and its write, so on a
-    single event loop it is atomic: of two concurrent calls with the same
-    hash exactly one rotates. It does not simulate a database's behavior
-    under real concurrency.
+
+class FakeSessionRepo(SessionRepo):
+    """In-memory SessionRepo.
+
+    Evaluates validity against the ``now`` it is given and the
+    ``FakeUserRepo`` it is constructed with, standing in for the join to the
+    users table. No method has an ``await`` between a check and its write,
+    so on one event loop each is atomic. It does not simulate a database's
+    behavior under real concurrency, connection use or transactions.
+
+    ``touch``, ``mark_reauthenticated``, ``revoke`` and ``revoke_all_for_user``
+    never move a stored time backward, like the contract requires.
     """
 
-    def __init__(self) -> None:
-        self._records: dict[str, RefreshTokenRecord] = {}
+    def __init__(self, users: FakeUserRepo) -> None:
+        self._users = users
+        self._records: dict[str, SessionRecord] = {}
 
-    def get(self, token_hash: str) -> RefreshTokenRecord | None:
+    def get(self, token_hash: str) -> SessionRecord | None:
         """Inspect a stored record (test hook, not part of the contract)."""
         return self._records.get(token_hash)
 
-    async def add(self, record: RefreshTokenRecord) -> None:
+    async def create(self, record: SessionRecord) -> None:
         self._records[record.token_hash] = record
 
-    async def rotate(
+    async def get_valid(
         self,
+        token_hash: str,
         *,
-        presented_hash: str,
-        replacement: RefreshTokenRecord,
+        client_kind: ClientKind,
         now: datetime,
-    ) -> RotationResult:
-        record = self._records.get(presented_hash)
-        if record is None or record.expires_at <= now:
-            return RotationResult(RotationOutcome.INVALID)
-        if record.used_at is not None or record.revoked_at is not None:
-            return RotationResult(RotationOutcome.REUSED, record)
-        self._records[presented_hash] = replace(record, used_at=now)
-        self._records[replacement.token_hash] = replacement
-        return RotationResult(RotationOutcome.ROTATED, record)
+    ) -> ValidSession | None:
+        record = self._records.get(token_hash)
+        if record is None or record.client_kind is not client_kind:
+            return None
+        if record.revoked_at is not None:
+            return None
+        if record.idle_expires_at <= now or record.absolute_expires_at <= now:
+            return None
+        user = await self._users.get_by_id(record.user_id)
+        if user is None or not user.is_active:
+            return None
+        return ValidSession(
+            session=record, access=AccessState(is_active=user.is_active)
+        )
 
-    async def revoke_family(self, family_id: UUID, *, now: datetime) -> None:
-        for key, record in self._records.items():
-            if record.family_id == family_id and record.revoked_at is None:
-                self._records[key] = replace(record, revoked_at=now)
+    async def touch(
+        self,
+        token_hash: str,
+        *,
+        now: datetime,
+        idle_expires_at: datetime,
+    ) -> None:
+        record = self._records.get(token_hash)
+        if record is None or record.revoked_at is not None:
+            return
+        self._records[token_hash] = replace(
+            record,
+            last_used_at=max(record.last_used_at, now),
+            idle_expires_at=max(record.idle_expires_at, idle_expires_at),
+        )
+
+    async def mark_reauthenticated(self, token_hash: str, *, now: datetime) -> None:
+        record = self._records.get(token_hash)
+        if record is None or record.revoked_at is not None:
+            return
+        self._records[token_hash] = replace(
+            record, authenticated_at=max(record.authenticated_at, now)
+        )
+
+    async def revoke(self, token_hash: str, *, now: datetime) -> None:
+        record = self._records.get(token_hash)
+        if record is None or record.revoked_at is not None:
+            return
+        self._records[token_hash] = replace(record, revoked_at=now)
 
     async def revoke_all_for_user(self, user_id: UUID, *, now: datetime) -> None:
         for key, record in self._records.items():
             if record.user_id == user_id and record.revoked_at is None:
                 self._records[key] = replace(record, revoked_at=now)
 
-    async def purge_expired(self, *, now: datetime) -> int:
-        expired = [k for k, r in self._records.items() if r.expires_at <= now]
-        for key in expired:
+    async def purge_before(self, cutoff: datetime) -> int:
+        dead = [k for k, r in self._records.items() if _died_at(r) < cutoff]
+        for key in dead:
             del self._records[key]
-        return len(expired)
+        return len(dead)
