@@ -32,25 +32,26 @@ package may depend on it, and it depends on nothing else in the workspace. See
 
 ## API at a Glance
 
-| Symbol                       | Purpose                                                                                                                                                          |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.                                                                         |
-| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.                                                                               |
-| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                                                                                       |
-| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                                                                                                |
-| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`.                                                                   |
-| `AuthSettings`               | Nested authentication settings: optional signing keys, the active key id, password-hashing cost and concurrency, and login-throttle limits. No app reads it yet. |
-| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                                                                                             |
+| Symbol                       | Purpose                                                                                                                                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Settings`                   | Root production configuration model. Loads from `TRUTINA_`-prefixed env vars and `.env`.                                                                                                 |
+| `TestSettings`               | `Settings` subclass. Loads from `TRUTINA_TEST_`-prefixed env vars and `.env.test`.                                                                                                       |
+| `PostgresSettings`           | Nested PostgreSQL connection settings (SQLAlchemy async URI, pool sizing).                                                                                                               |
+| `ApiSettings`                | Nested API-layer settings (host, port, reload, OpenAPI metadata).                                                                                                                        |
+| `LoggingSettings`            | Nested logging-pipeline settings, consumed by `trutina-observability`'s `configure_logging()`.                                                                                           |
+| `AuthSettings`               | Nested authentication settings: session lifetimes, the re-authentication window, trusted proxies, password-hashing cost and concurrency, and login-throttle limits. No app reads it yet. |
+| `get_settings() -> Settings` | `lru_cache`-wrapped accessor returning a cached `Settings` instance.                                                                                                                     |
 
 ### `PostgresSettings` fields
 
-| Field               | Default                                       | Description                                                       |
-| ------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
-| `uri`               | `postgresql+asyncpg://localhost:5432/trutina` | SQLAlchemy async connection URI (path carries the DB name).       |
-| `connect_timeout_s` | `5.0`                                         | Max seconds to wait for a new connection before raising.          |
-| `pool_size`         | `1`                                           | Minimum connections SQLAlchemy's pool keeps open.                 |
-| `max_overflow`      | `10`                                          | Additional connections allowed above `pool_size` under load.      |
-| `pool_pre_ping`     | `True`                                        | Liveness-check a pooled connection before handing it to a caller. |
+| Field               | Default                                       | Description                                                                                                                 |
+| ------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `uri`               | `postgresql+asyncpg://localhost:5432/trutina` | SQLAlchemy async connection URI (path carries the DB name).                                                                 |
+| `connect_timeout_s` | `5.0`                                         | Max seconds to wait for a new connection before raising.                                                                    |
+| `pool_timeout_s`    | `5.0`                                         | Max seconds a caller waits for a pooled connection. Must be greater than 0. Declared only: the engine does not read it yet. |
+| `pool_size`         | `1`                                           | Minimum connections SQLAlchemy's pool keeps open.                                                                           |
+| `max_overflow`      | `10`                                          | Additional connections allowed above `pool_size` under load.                                                                |
+| `pool_pre_ping`     | `True`                                        | Liveness-check a pooled connection before handing it to a caller.                                                           |
 
 ### `ApiSettings` fields
 
@@ -78,18 +79,26 @@ package may depend on it, and it depends on nothing else in the workspace. See
 
 ### `AuthSettings` fields
 
-| Field                       | Default | Description                                                                                                                    |
-| --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `signing_keys`              | `{}`    | Key id to signing secret (`SecretStr`). Empty means no keys configured. Key ids are case-folded.                               |
-| `active_kid`                | `None`  | Key id used to sign new tokens. Case-folded to match `signing_keys`.                                                           |
-| `password_time_cost`        | `3`     | Argon2id iterations. Minimum 1.                                                                                                |
-| `password_memory_cost_kib`  | `65536` | Argon2id memory per hash in KiB (64 MiB). Minimum 8, and at least 8 times `password_parallelism`.                              |
-| `password_parallelism`      | `1`     | Argon2id lanes per hash. Minimum 1.                                                                                            |
-| `password_hash_concurrency` | `4`     | Maximum concurrent password hashes per process. Minimum 1. Peak hashing memory is about this times `password_memory_cost_kib`. |
-| `login_max_failures`        | 5       | Failed logins per client IP and email, within the window, before further attempts are throttled. Minimum 1.                    |
-| `login_window_seconds`      | 900     | Failed-login window in seconds, also the retry delay reported when throttled. Minimum 1.                                       |
+| Field                            | Default | Description                                                                                                                                                              |
+| -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `password_time_cost`             | `3`     | Argon2id iterations. Minimum 1.                                                                                                                                          |
+| `password_memory_cost_kib`       | `65536` | Argon2id memory per hash in KiB (64 MiB). Minimum 8, and at least 8 times `password_parallelism`.                                                                        |
+| `password_parallelism`           | `1`     | Argon2id lanes per hash. Minimum 1.                                                                                                                                      |
+| `password_hash_concurrency`      | `4`     | Maximum concurrent password hashes per process. Minimum 1. Peak hashing memory is about this times `password_memory_cost_kib`.                                           |
+| `login_max_failures`             | 5       | Failed logins per client IP and email, within the window, before further attempts are throttled. Minimum 1.                                                              |
+| `login_window_seconds`           | 900     | Failed-login window in seconds, also the retry delay reported when throttled. Minimum 1.                                                                                 |
+| `session_api_idle_hours`         | `24`    | Hours an `api` session may sit unused before it expires. Minimum 1.                                                                                                      |
+| `session_api_absolute_days`      | `7`     | Days an `api` session lives from creation, however active. Minimum 1.                                                                                                    |
+| `session_cli_idle_days`          | `14`    | Days a `cli` session may sit unused before it expires. Minimum 1.                                                                                                        |
+| `session_cli_absolute_days`      | `30`    | Days a `cli` session lives from creation, however active. Minimum 1.                                                                                                     |
+| `session_touch_interval_seconds` | `300`   | Minimum seconds between recorded uses of one session. Minimum 1.                                                                                                         |
+| `reauth_window_minutes`          | `30`    | Minutes after the last password check during which a session counts as recently authenticated. Minimum 1.                                                                |
+| `trusted_proxies`                | `[]`    | Proxy addresses or CIDR networks whose forwarded client address may be trusted. Each entry must be an IP address or CIDR network. Set as a JSON list in the environment. |
 
-`AuthSettings` only describes shape. It does not check that keys exist, are long enough, or that `active_kid` names a configured key; that is validated at API startup in a later milestone.
+`AuthSettings` only describes shape. Every numeric field must be at least 1, and nothing sets an upper bound or relates an idle lifetime to its
+absolute lifetime (a session's idle expiry is capped by its absolute expiry when it is created, so an idle value above the absolute value is
+harmless). `trusted_proxies` entries must each be an IP address or CIDR network. `signing_keys` and `active_kid` no longer exist;
+`TRUTINA_AUTH__SIGNING_KEYS__*` and `TRUTINA_AUTH__ACTIVE_KID` left in an environment or dotenv file are ignored.
 The hashing fields are checked only for what Argon2 itself requires;
 whether they are strong enough for production is also an API-startup concern.
 
@@ -127,8 +136,9 @@ Nested settings use a double underscore (`__`) as the delimiter:
 
 ```bash
 TRUTINA_ENVIRONMENT=development
-TRUTINA_AUTH__SIGNING_KEYS__k1=<secret>
-TRUTINA_AUTH__ACTIVE_KID=k1
+TRUTINA_AUTH__SESSION_API_IDLE_HOURS=24
+TRUTINA_AUTH__REAUTH_WINDOW_MINUTES=30
+TRUTINA_AUTH__TRUSTED_PROXIES=["10.0.0.0/8"]
 TRUTINA_POSTGRES__URI=postgresql+asyncpg://username:password@localhost:5432/trutina
 TRUTINA_API__PORT=8000
 TRUTINA_LOGGING__LEVEL=INFO
