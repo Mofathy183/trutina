@@ -1,6 +1,6 @@
 # ADR 0002: Per-client session lifetimes, step-up re-authentication and connection discipline
 
-- **Status:** Proposed (becomes Accepted on owner sign-off)
+- **Status:** Accepted
 - **Date:** 2026-11-04
 - **Deciders:** project owner
 - **Amends:** ADR 0001 (decisions 3, 4, 7 and 8). Recorded in the identity and authentication plan as D35 (v3.25)
@@ -93,7 +93,7 @@ A session is dead when revoked, idle-expired or absolute-expired. Dead rows olde
 ### Open at the time of writing
 
 - Whether account update (which can change the category and so the normal-balance side) needs step-up. Decide in M4a.2, or in the M5.0 permission matrix.
-- Whether the token hasher port, now used for session tokens, is renamed or only re-documented. M3.1 decides.
+- The token hasher port was renamed `SessionTokenHasher` in M3.1.
 
 ### Superseded in ADR 0001
 

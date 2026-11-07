@@ -68,7 +68,7 @@ packages/core/src/trutina/core/trial_balance/{dtos,repo,service}.py, schemas/acc
 packages/observability/src/trutina/observability/
   __init__.py, configure.py, correlation.py, processors.py, asgi.py
 packages/authentication/src/trutina/authentication/
-  {identity,credentials,tokens,shared}/   # contracts, grouped by role
+  {identity,credentials,sessions,shared}/   # contracts, grouped by role
   credentials/{passwords,users,login}/    # credentials grouped by concern
 packages/storage-postgres/src/trutina/storage_postgres/
   {account,journal,posting}/repository.py, shared/{connection.py, execution/, model.py}
@@ -307,7 +307,7 @@ no scheduler exists, so it is run by hand.
   caller. Never let `trutina.authentication` import `trutina.core`, a storage
   package, or a web/CLI framework.
 - Session decisions (ADR 0001, ADR 0002; not yet implemented): a session is valid only for the client kind it was issued for (`api` or `cli`),
-  and no request holds a database connection across the handler. Do not describe either as built until M3.
+  and no request holds a database connection across the handler. The session contracts (`SessionRepo`, `SessionRecord`, `ClientKind`, `SessionTokenHasher`) and the session settings exist, with no adapter or service; do not describe the rule, a repository, the step-up check or a service as built until M3.3 and M3.4.
 - A service logs its own success, never its own failure — a raised
   `AppError`/`ValidationAppError` is logged exactly once, by the catching
   presentation-layer seam (`error_boundary()` or the API's exception
