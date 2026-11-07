@@ -9,9 +9,9 @@ from trutina.authentication.identity import Identity
 class Authenticator(ABC):
     """Turns an email and password into an ``Identity``.
 
-    Issuing tokens is a separate step (``TokenIssuer``), so this contract
-    does not depend on the access-token mechanism. ``PasswordAuthenticator``
-    is the implementation.
+    Creating a session is a separate step, so this contract does not
+    depend on the session mechanism. ``PasswordAuthenticator`` is the
+    implementation.
     """
 
     @abstractmethod

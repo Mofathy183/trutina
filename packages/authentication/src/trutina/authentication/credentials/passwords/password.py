@@ -11,8 +11,8 @@ class PasswordHasher(ABC):
     Hashing is deliberately slow and CPU-bound. The implementation, not
     the caller, owns running it off the event loop and bounding how many
     run at once, so no caller can forget either. Distinct from
-    ``RefreshTokenHasher``: a password hash must never be used to look up
-    a token.
+    ``SessionTokenHasher``: a password hash must never be used to look up
+    a session token.
     """
 
     @abstractmethod
