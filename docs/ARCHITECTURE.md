@@ -48,6 +48,7 @@ packages/
 │       ├── audit/                        # model.py (audit_events)
 │       ├── identity/                     # model.py, repository.py (users)
 │       ├── login_attempt/                # model.py, repository.py (login_attempts)
+│       ├── session/                      # model.py, repository.py (sessions)
 │       ├── shared/                       # PostgresExecutor, connect()/disconnect(), model.py (Base)
 │       └── alembic.ini, alembic/
 ├── config/              trutina-config
@@ -190,9 +191,10 @@ the `Authenticator` use case, plus the session record and `ClientKind`. A peer o
 supplied by its caller. Contracts and models plus `Argon2PasswordHasher` and the service-only `RegistrationService`,
 `PasswordAuthenticator` and `ThrottledAuthenticator`.
 no token module, route or command exists, and no app depends on it.
-The storage adapters, `PostgresUserRepo` and `PostgresLoginAttemptRepo`, live in `trutina.storage_postgres`.
+The storage adapters, `PostgresUserRepo`, `PostgresLoginAttemptRepo` and `PostgresSessionRepo`, live in `trutina.storage_postgres`.
 The session contracts (`SessionRepo`, `SessionRecord`, `ClientKind`) replaced the token contracts in M3.1
-(ADR 0001) and have no implementation yet;
+(ADR 0001); `PostgresSessionRepo` in `trutina.storage_postgres` implements `SessionRepo`
+since M3.3, with no service, token hasher, route or command on top;
 ADR 0002 decides per-client session lifetimes, step-up re-authentication and the connection rule
 (the settings exist since M3.1; the behavior is not built);
 `LoginAttemptRepo` was frozen in M2.4.
@@ -218,8 +220,8 @@ every non-Alembic-declared Python logger mid-process — see
 it is not part of any domain model and is never returned by a repository read.
 The account repository's write methods take `created_by` and record it as the actor of an append-only `audit_events` row,
 written in the same transaction as the write.
-It also implements `UserRepo` and `LoginAttemptRepo` (both defined in `trutina.authentication`)
-against a `users` table and a `login_attempts` table.
+It also implements `UserRepo`, `LoginAttemptRepo` and `SessionRepo` (all defined in `trutina.authentication`)
+against a `users` table, a `login_attempts` table and a `sessions` table.
 
 ### `trutina.cli`
 
@@ -311,12 +313,12 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   `tests/fixtures/postgres.py`'s `schema_init`.
 - `trutina-authentication` has contracts, test fakes, one concrete `Argon2PasswordHasher` and the service-only `RegistrationService`.
   No token module, route or command exists,
-  and no app depends on it; only the `UserRepo` and `LoginAttemptRepo` adapters exist
+  and no app depends on it; only the `UserRepo`, `LoginAttemptRepo` and `SessionRepo` adapters exist
   (only `ThrottledAuthenticator` writes login attempts, and nothing wires it)
-  The session contracts exist since M3.1 and have no implementation.
+  The session contracts exist since M3.1; `PostgresSessionRepo` implements `SessionRepo` since M3.3, with no service on top.
 - `trutina-authentication` has contracts, test fakes, one concrete `Argon2PasswordHasher` and the service-only
   `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`. No token module, route or command
   exists, and no app depends on it. The `UserRepo` and `LoginAttemptRepo` adapters exist in
   `trutina-storage-postgres`. The register, login and throttle flow is verified end to end against real PostgreSQL
   (`shared/tests/test_credentials_integration.py`, M2.8), but only at service level: nothing wires it into an app.
-  The session contracts exist since M3.1 and have no implementation.
+  The session contracts exist since M3.1; `PostgresSessionRepo` implements `SessionRepo` since M3.3, with no service on top.
