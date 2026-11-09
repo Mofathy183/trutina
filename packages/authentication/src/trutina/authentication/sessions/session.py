@@ -97,11 +97,20 @@ class SessionRepo(ABC):
         """Store a new session.
 
         Token hashes come from 256-bit random tokens, so a duplicate hash
-        is a defect, not a domain outcome; the contract defines no behavior
-        for it.
+        is a defect, not a domain outcome; a record for a user that does
+        not exist is a defect too. An adapter must report either as
+        ``AppError`` with ``UNKNOWN_ERROR``, never as a driver exception.
+        It must not attach the driver exception as ``cause`` or put the
+        token hash in the error, because the driver's message can contain
+        the stored value and the error reaches the failure log.
 
         Args:
             record: The session to store. It carries only the token's hash.
+
+        Raises:
+            AppError: UNKNOWN_ERROR for a duplicate token hash or an
+                unknown user. STORAGE_UNAVAILABLE or STORAGE_TIMEOUT for
+                infrastructure failures.
         """
 
     @abstractmethod

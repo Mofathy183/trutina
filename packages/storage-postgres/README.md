@@ -1,7 +1,7 @@
 # trutina-storage-postgres
 
 > Async PostgreSQL persistence adapters for Trutina's account, journal, ledger-posting, trial balance, user,
-> and login-attempt repository contracts.
+> login-attempt, and session repository contracts.
 
 ![CI](https://github.com/Mofathy183/trutina/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.14%2B-blue)
@@ -20,7 +20,7 @@ uv run pytest -m "unit and infra and postgres"
 ## What This Is
 
 `trutina-storage-postgres` implements the repository interfaces defined by `trutina-core`
-(and `UserRepo` and `LoginAttemptRepo`, defined by `trutina-authentication`) using SQLAlchemy's asynchronous PostgreSQL support.
+(and `UserRepo`, `LoginAttemptRepo` and `SessionRepo`, defined by `trutina-authentication`) using SQLAlchemy's asynchronous PostgreSQL support.
 It consumes PostgreSQL settings from `trutina-config` and is the persistence layer beneath the presentation applications.
 For the design rationale, trade-offs, and known gaps, see [CONTEXT.md](CONTEXT.md).
 
@@ -38,6 +38,7 @@ For the design rationale, trade-offs, and known gaps, see [CONTEXT.md](CONTEXT.m
 | `PostgresTrialBalanceRepo` | Implements the core trial balance contract by aggregating the `postings` table.                   |
 | `PostgresUserRepo`         | Implements the authentication user repository contract. `UserModel` is its table.                 |
 | `PostgresLoginAttemptRepo` | Implements the authentication login-attempt contract. `LoginAttemptModel` is its table.           |
+| `PostgresSessionRepo`      | Implements the authentication session contract. `SessionModel` is its table.                      |
 | `AuditEventModel`          | The `audit_events` table written by `PostgresAccountRepo`. `AuditAction` names its action values. |
 
 ## Usage
@@ -146,6 +147,20 @@ not enforced by the database. See [CONTEXT.md](CONTEXT.md).
 
 `PostgresUserRepo` stores users in a `users` table keyed by an application-supplied UUID. `email` is the only identity column and arrives already normalized, so one unique constraint, `uq_users_email`, enforces case-insensitive uniqueness. A duplicate raises `DUPLICATE_USER_EMAIL` with no address in its context. `created_at` is stamped by the database and a caller-supplied value is ignored. `set_active` and `update_password_hash` raise `UNKNOWN_USER` when no row matches. Users are never deleted. See [CONTEXT.md](CONTEXT.md).
 
+## Sessions
+
+`PostgresSessionRepo` stores sessions in a `sessions` table: a surrogate `id`, a unique `token_hash` (never the token), `user_id` (a foreign key to `users.id` with `ON DELETE RESTRICT`), `client_kind` (`api` or `cli`, enforced by a CHECK built from `ClientKind`), and the times `created_at`, `last_used_at`, `authenticated_at`, `idle_expires_at`, `absolute_expires_at` and nullable `revoked_at`. Every time is the caller's aware UTC value from `Clock`, not a database default. `get_valid` is one read-only query joining `users`; it returns `None` for every failure without saying why. The repository holds no policy: lifetimes, when a touch is due and the retention cutoff come from the caller. No session service uses it yet.
+
+A failed `create` (a duplicate token hash or an unknown user) raises `AppError` with `UNKNOWN_ERROR`, a context of `resource` and `constraint` only, and no `cause`, because the driver's message can contain the stored hash.
+
+Dead sessions (revoked or expired) are removed by `tools/purge-sessions.py`, which deletes sessions that died more than `--older-than-days` ago (default 7). There is no scheduler, so run it by hand or from cron:
+
+```bash
+uv run python tools/purge-sessions.py --older-than-days 7
+```
+
+See [CONTEXT.md](CONTEXT.md).
+
 ## Logging
 
 `connect()` and `disconnect()` each emit one `logging.getLogger(__name__)` line — `db.connected` and `db.disconnected` — through Python's standard library only; this package imports nothing from `trutina-observability` or `structlog`. `db.connected`'s context carries `backend`, `pool_size`, `max_overflow`, and `pool_pre_ping` — never `postgres.uri`, since the URI can embed credentials. The engine itself is constructed with `hide_parameters=True`, so any exception SQLAlchemy raises omits bound parameter values (account names, amounts, etc.) from its text, independent of what any caller does with the exception afterward. See [CONTEXT.md](CONTEXT.md) for the full rationale and the Alembic logging caveat below.
@@ -169,4 +184,4 @@ because authentication must not import storage.
 - [trutina-config](../config/README.md) — typed PostgreSQL connection settings.
 - [trutina-shared](../shared/README.md) — shared error types and account lookup rules.
 - [trutina-observability](../observability/README.md) — this package emits through stdlib `logging` only; observability owns how those records are formatted and routed.
-- [trutina-authentication](../authentication/README.md) — the `User` model and `UserRepo` contract implemented here.
+- [trutina-authentication](../authentication/README.md) — the `User` model and the `UserRepo`, `LoginAttemptRepo` and `SessionRepo` contracts implemented here.

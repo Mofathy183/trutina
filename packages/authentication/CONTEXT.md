@@ -8,7 +8,7 @@ Trutina needs to know who performed a write, without the accounting domain learn
 a password or a token is. This package holds the vocabulary for identity and authentication so that `trutina-core` never has to.
 Today it is contracts and models plus four concrete pieces: the Argon2id password hasher,
 the registration use case, the login verification (`PasswordAuthenticator`) and the login throttle (`ThrottledAuthenticator`)
-(the storage adapters, for `UserRepo` and `LoginAttemptRepo`, live in `trutina-storage-postgres`)
+(the storage adapters, for `UserRepo`, `LoginAttemptRepo` and `SessionRepo`, live in `trutina-storage-postgres`)
 it fixes the seams that later milestones fill in, and gives tests fakes to build against before an implementation exists.
 
 ## The Rule This Package Protects
@@ -147,7 +147,7 @@ Authentication timestamps are always aware. The accounting domain's posting date
 
 Lifetimes, whether a touch is due, and the retention cutoff are service policy, not repository behavior, so an adapter holds no authentication rules. `touch`, `mark_reauthenticated` and `revoke` never move a stored time backward and are no-ops on a miss, so concurrent touches cannot shorten a session and logout never fails on a repeat. No method raises a domain error. The contract does not define what a duplicate token hash does, because 256-bit random tokens make one a defect.
 
-`touch` is a separate call after `get_valid`, so one request makes two short, sequential database borrows and never nests them. This is a wider reading of ADR 0002's "same short session" and is recorded as a known gap. The session contracts were frozen in M3.1 and have no adapter or service yet.
+`touch` is a separate call after `get_valid`, so one request makes two short, sequential database borrows and never nests them. ADR 0002 section 4 was amended in M3.3 to say so. The session contracts were frozen in M3.1; `PostgresSessionRepo` implements them (M3.3) and no service uses it yet.
 
 ### Events carry no secrets
 
@@ -159,8 +159,8 @@ Lifetimes, whether a touch is due, and the retention cutoff are service policy, 
 
 The session contracts are frozen. They follow ADR 0001 ([0001-session-mechanism.md](../../docs/adr/0001-session-mechanism.md))
 and ADR 0002 ([0002-session-lifetimes-step-up-and-connection-use.md](../../docs/adr/0002-session-lifetimes-step-up-and-connection-use.md)):
-strict `api` and `cli` client kinds and `authenticated_at` for step-up. They have no adapter, service or route yet, so do not describe the
-session rules, the step-up check or the connection rule as built.
+strict `api` and `cli` client kinds and `authenticated_at` for step-up. They have a PostgreSQL adapter (`PostgresSessionRepo`, M3.3) but no service or route yet, so do not describe the
+session service, the step-up check or the request-level connection rule as built.
 
 ## Allowed and Forbidden Dependencies
 
@@ -169,13 +169,14 @@ session rules, the step-up check or the connection rule as built.
 **Forbidden:** `trutina.core`; `trutina.storage_postgres`, `trutina.observability`, `structlog`; `sqlalchemy`, `asyncpg`, `fastapi`, `starlette`, `typer`, `rich`. Enforced by the workspace import-linter: core and authentication are independent siblings in the layers contract, and dedicated forbidden contracts cover the rest. Like every package outside the two apps, it emits through stdlib `logging` only.
 
 **Direction:** storage packages and the apps may import this package; it imports nothing above `shared`/`config`.
-`trutina-storage-postgres` imports it, for `UserRepo` and `LoginAttemptRepo`.
+`trutina-storage-postgres` imports it, for `UserRepo`, `LoginAttemptRepo` and `SessionRepo`.
 
 ## Known Gaps
 
-- `UserRepo` (`PostgresUserRepo`) and `LoginAttemptRepo` (`PostgresLoginAttemptRepo`) have adapters in `trutina-storage-postgres`,
+- `UserRepo` (`PostgresUserRepo`), `LoginAttemptRepo` (`PostgresLoginAttemptRepo`) and `SessionRepo` (`PostgresSessionRepo`)
+  have adapters in `trutina-storage-postgres`,
   which declares the dependency on this package, and `PasswordHasher` has `Argon2PasswordHasher` here.
-  No session implementation, session-token hasher, route or command exists,
+  No session service, session-token hasher, route or command exists,
   nothing outside tests uses the hasher, the login-attempt repository or the throttle,
   and no app depends on this package.
 - `LoginAttemptRepo` itself does not cap the email. `ThrottledAuthenticator` records only emails within `MAX_EMAIL_LENGTH`,
@@ -220,11 +221,11 @@ session rules, the step-up check or the connection rule as built.
   configurations differ, for example during a rolling deploy.
 - The register, login and throttle flow is verified end to end on real PostgreSQL (M2.8), but no route or command
   calls it. Route-level proof is M3.7.
-- Session contract caveats: `touch` is a separate call after `get_valid`, which is a wider reading of ADR 0002's
-  "same short session" and needs the ADR wording amended. The M3.3 card says a touch writes "only when the interval has passed",
-  but the contract puts that decision in the service. A duplicate token hash has no defined behavior.
+- Session contract caveats: `touch` is a separate call after `get_valid`, so one request makes two short, sequential borrows.
+  `purge_before` has no batch limit, so a bounded purge on session creation needs an optional limit or another approach.
   A naive datetime passed to `SessionRepo` is a caller bug and is not guarded. `FakeSessionRepo`
-  stands in for the join to `users` with a `FakeUserRepo`; the real join is exercised only when the PostgreSQL adapter exists.
+  stands in for the join to `users` with a `FakeUserRepo`; the PostgreSQL adapter adds a foreign key, so a session for a
+  nonexistent user can exist in the fake and cannot in PostgreSQL. `create` raises `UNKNOWN_ERROR` for a duplicate hash or an unknown user.
 
 ## Verification
 

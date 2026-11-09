@@ -89,7 +89,8 @@ internal extension points, which live in that package's own README/CONTEXT.
 ## Identity and Authentication
 
 `trutina-authentication` contains contracts and fakes and a concrete Argon2id `PasswordHasher`,
-and its `UserRepo` and `LoginAttemptRepo` have PostgreSQL adapters (`users` and `login_attempts` tables). Still missing:
+and its `UserRepo`, `LoginAttemptRepo` and `SessionRepo` have PostgreSQL adapters (`users`, `login_attempts` and `sessions` tables).
+Still missing:
 
 - Actor attribution: journal, posting and account writes validate a required `actor` and pass it to the repository as `created_by`.
   `trutina-storage-postgres` persists it as a column for journal entries and postings and as an `audit_events` row for account writes.
@@ -99,7 +100,7 @@ and its `UserRepo` and `LoginAttemptRepo` have PostgreSQL adapters (`users` and 
   verification (`PasswordAuthenticator`: one indistinguishable failure, dummy-hash verify, rehash on login) and the
   throttling wrapper (`ThrottledAuthenticator`) exist; nothing wires any of the three use cases into an app.
 - Opaque database-backed sessions (ADR 0001, amended by ADR 0002: strict `api`/`cli` client kinds, per-kind lifetimes;
-  the contracts and lifetime settings exist since M3.1, the adapter and service do not),
+  the contracts and lifetime settings exist since M3.1 and `PostgresSessionRepo` since M3.3, the service does not),
   auth routes (login, logout, re-authentication, `GET /auth/me`) and endpoint protection.
 - Step-up re-authentication on posting and account delete (ADR 0002), with a new 403 code `AUTH_REAUTH_REQUIRED`.
   Still open: whether account update needs it.

@@ -35,7 +35,8 @@ depends on `trutina-config`. `trutina-core`, `trutina-shared`, `trutina-config`,
 root.
 `trutina-authentication` is contracts, models, one concrete hasher (`Argon2PasswordHasher`) and the service-only use cases
 `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`; the only workspace package
-that declares it is `trutina-storage-postgres` (for `UserRepo` and `LoginAttemptRepo`). No app depends on it. `trutina-core` never
+that declares it is `trutina-storage-postgres` (for `UserRepo`, `LoginAttemptRepo` and `SessionRepo`).
+No app depends on it. `trutina-core` never
 imports it, and no core service method takes an `Identity`.
 
 ## Import-Linter Contracts (root `pyproject.toml`, enforced in CI)
@@ -75,6 +76,7 @@ packages/storage-postgres/src/trutina/storage_postgres/
 packages/storage-postgres/src/trutina/storage_postgres/trial_balance/repository.py
 packages/storage-postgres/src/trutina/storage_postgres/identity/{model,repository}.py   # users table, UserRepo
 packages/storage-postgres/src/trutina/storage_postgres/login_attempt/{model,repository}.py   # login_attempts table, LoginAttemptRepo
+packages/storage-postgres/src/trutina/storage_postgres/session/{model,repository}.py   # sessions table, SessionRepo
 packages/storage-postgres/src/trutina/storage_postgres/audit/model.py                   # audit_events table, written by PostgresAccountRepo
 packages/storage-postgres/alembic.ini, alembic/
 packages/config/src/trutina/config/{base,postgres,api,logging}.py
@@ -231,6 +233,7 @@ against a real PostgreSQL container; the smoke test also asserts a structured
 `request.completed` log line with a `correlation_id` appears in the container's output.
 `tools/purge-login-attempts.py` — delete `login_attempts` rows older than `--older-than-hours` (default 24);
 no scheduler exists, so it is run by hand.
+`tools/purge-sessions.py` — delete sessions that died more than `--older-than-days` ago (default 7); also run by hand.
 
 ## Testing Layout
 
@@ -306,8 +309,9 @@ no scheduler exists, so it is run by hand.
   service method an `Identity`. Core receives only an opaque `actor: str` from its
   caller. Never let `trutina.authentication` import `trutina.core`, a storage
   package, or a web/CLI framework.
-- Session decisions (ADR 0001, ADR 0002; not yet implemented): a session is valid only for the client kind it was issued for (`api` or `cli`),
-  and no request holds a database connection across the handler. The session contracts (`SessionRepo`, `SessionRecord`, `ClientKind`, `SessionTokenHasher`) and the session settings exist, with no adapter or service; do not describe the rule, a repository, the step-up check or a service as built until M3.3 and M3.4.
+- Session decisions (ADR 0001, ADR 0002; adapter built, service not yet):
+  a session is valid only for the client kind it was issued for (`api` or `cli`),
+  and no request holds a database connection across the handler. The session contracts (`SessionRepo`, `SessionRecord`, `ClientKind`, `SessionTokenHasher`) and the session settings exist, and `PostgresSessionRepo` (M3.3) implements `SessionRepo`; no session service exists, so do not describe the request-level connection rule, the step-up check or a service as built until M3.4.
 - A service logs its own success, never its own failure — a raised
   `AppError`/`ValidationAppError` is logged exactly once, by the catching
   presentation-layer seam (`error_boundary()` or the API's exception

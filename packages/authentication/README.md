@@ -1,7 +1,7 @@
 # trutina-authentication
 
 > Identity and authentication contracts for Trutina: ports and models,
-> with an Argon2id password hasher and PostgreSQL user and login-attempt stores as the only implementations so far.
+> with an Argon2id password hasher and PostgreSQL user, login-attempt and session stores as the only implementations so far.
 
 ![CI](https://github.com/Mofathy183/trutina/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.14%2B-blue)
@@ -20,9 +20,9 @@ uv run pytest -m "unit and authentication"
 `trutina-authentication` (import path `trutina.authentication`) defines the abstract contracts and small models that identity and authentication
 will be built on: who an authenticated caller is, how passwords and tokens are hashed and verified,
 and what a user, session or login-attempt store must provide. It contains contracts and models, plus `Argon2PasswordHasher` and three
-service-only use cases, `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`. There is no session implementation,
+service-only use cases, `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`. There is no session service,
 no session-token hasher and no route or command, and nothing outside tests uses the hasher or any of the three use cases yet.
-The storage implementations are `PostgresUserRepo` and `PostgresLoginAttemptRepo` in `trutina-storage-postgres`,
+The storage implementations are `PostgresUserRepo`, `PostgresLoginAttemptRepo` and `PostgresSessionRepo` in `trutina-storage-postgres`,
 the only workspace package that depends on this one; no app does. Its dependencies are `pydantic` and `argon2-cffi` and `trutina-shared`.
 See [CONTEXT.md](CONTEXT.md) for why it is shaped this way and which contracts are provisional.
 
@@ -40,7 +40,7 @@ See [CONTEXT.md](CONTEXT.md) for why it is shaped this way and which contracts a
 | `SessionTokenHasher`                                | Deterministic hash for storing and looking up session tokens, separate from password hashing. Contract only; nothing implements it yet.                                                                                                                                                                                                                                                                                                                     |
 | `ClientKind`                                        | The two kinds of client a session is issued to, `api` and `cli`. A session is valid only for its kind.                                                                                                                                                                                                                                                                                                                                                      |
 | `SessionRecord` / `ValidSession`                    | The stored session (token hash excluded from `repr`) and the result of validating one: the record plus the user's `AccessState`.                                                                                                                                                                                                                                                                                                                            |
-| `SessionRepo`                                       | Frozen session persistence contract: create, `get_valid` (kind required, miss is `None`), `touch`, `mark_reauthenticated`, `revoke`, `revoke_all_for_user`, `purge_before`. No adapter exists yet.                                                                                                                                                                                                                                                          |
+| `SessionRepo`                                       | Frozen session persistence contract: create, `get_valid` (kind required, miss is `None`), `touch`, `mark_reauthenticated`, `revoke`, `revoke_all_for_user`, `purge_before`. `PostgresSessionRepo` in `trutina-storage-postgres` implements it; no service uses it yet.                                                                                                                                                                                      |
 | `User` / `UserRepo`                                 | Minimal user model (email always stored normalized) and its persistence contract: create, lookup by id and email, password-hash update, `set_active`.                                                                                                                                                                                                                                                                                                       |
 | `normalize_email`                                   | Canonical stored form of an email: trimmed, then case-folded. Normalization only, no format validation.                                                                                                                                                                                                                                                                                                                                                     |
 | `normalize_password`                                | The exact string hashed and verified for a password: converted to NFKC, then leading and trailing whitespace removed (whitespace between characters is kept). Registration and login both call it, so the two always agree.                                                                                                                                                                                                                                 |
@@ -71,8 +71,8 @@ NoOpAuthEventSink().emit(
 ```
 
 Implementations of the repository contracts belong in a storage package;
-`UserRepo` and `LoginAttemptRepo` have one each (`PostgresUserRepo`, `PostgresLoginAttemptRepo`).
-password hasher is implemented here by Argon2PasswordHasher; `SessionRepo` and `SessionTokenHasher` have no implementation yet.
+`UserRepo`, `LoginAttemptRepo` and `SessionRepo` have one each (`PostgresUserRepo`, `PostgresLoginAttemptRepo`, `PostgresSessionRepo`).
+password hasher is implemented here by Argon2PasswordHasher; `SessionTokenHasher` has no implementation yet.
 
 Hash and verify a password (cost parameters come from the caller, normally `AuthSettings`):
 
@@ -143,4 +143,4 @@ uv run pytest -m "unit and authentication"
 
 - [CONTEXT.md](CONTEXT.md) — design rationale, provisional contracts, known gaps.
 - [`trutina-core`](../core/README.md) — the accounting domain; it never imports this package.
-- [`trutina-storage-postgres`](../storage-postgres/README.md) — the `UserRepo` adapter.
+- [`trutina-storage-postgres`](../storage-postgres/README.md) — the `UserRepo`, `LoginAttemptRepo` and `SessionRepo` adapters.

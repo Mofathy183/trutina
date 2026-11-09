@@ -37,6 +37,9 @@ from trutina.storage_postgres.login_attempt import (
 from trutina.storage_postgres.posting import (
     PostingModel,  # noqa: F401
 )
+from trutina.storage_postgres.session import (
+    SessionModel,  # noqa: F401
+)
 from trutina.storage_postgres.shared import Base
 
 config = context.config

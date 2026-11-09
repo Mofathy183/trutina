@@ -46,7 +46,7 @@
 
 ### 4. Borrow, use, return: no connection held across a request
 
-- The session lookup opens its own short session, runs the validation query and returns the connection before the handler starts. When a touch is due, the `UPDATE` runs in the same short session, with `GREATEST` on expiry so concurrent touches never move expiry backward. Otherwise the lookup is a read.
+- The session lookup (`get_valid`) is a read: it opens its own short session, runs the validation query and returns the connection before the handler starts. When a touch is due, the service makes a separate `touch` call, which opens its own short session and runs one `UPDATE` with `GREATEST` on both times, so concurrent touches never move a stored time backward. A request therefore makes two short, sequential borrows and never nests them. (Amended in M3.3: the original text ran the touch in the lookup's session; the frozen contract keeps the lookup read-only.)
 - No request holds one connection while asking for another. No connection is held while hashing: re-authentication loads the user, releases the connection, verifies the password, then borrows again to write `authenticated_at`.
 - `PostgresSettings` gains `pool_timeout_s`, set explicitly (a few seconds), so exhaustion fails fast as `STORAGE_TIMEOUT` and does not hang for the library default. Pool size comes from M4c.1. The check is processes × (`pool_size` + `max_overflow`) against PostgreSQL `max_connections`.
 - Proof: a load test fires more concurrent authenticated requests than the pool size and shows no stall (M4c.2). The cost of `pool_pre_ping` is measured there.
@@ -64,13 +64,13 @@ A session is dead when revoked, idle-expired or absolute-expired. Dead rows olde
 
 ## Options considered
 
-| Question | Options | Chosen |
-| -------- | ------- | ------ |
-| Lifetimes | One pair for both clients (ADR 0001); a pair per kind | Per kind: a remote client should not carry an operator-length session |
-| Kind check | API accepts any kind; each side accepts its own only | Own only: a leaked 30-day operator token must not work through the network API |
-| Step-up | None; at posting and delete; at every write | Posting and delete: the commit point and the destructive action, without prompting for drafts |
-| Transport | Bearer; cookie | Bearer: no web client exists, and cookies add CSRF surface for no consumer |
-| Connections | Hold one for the whole request; borrow and return | Borrow and return: nesting two connections per request deadlocks a small pool |
+| Question    | Options                                               | Chosen                                                                                        |
+| ----------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Lifetimes   | One pair for both clients (ADR 0001); a pair per kind | Per kind: a remote client should not carry an operator-length session                         |
+| Kind check  | API accepts any kind; each side accepts its own only  | Own only: a leaked 30-day operator token must not work through the network API                |
+| Step-up     | None; at posting and delete; at every write           | Posting and delete: the commit point and the destructive action, without prompting for drafts |
+| Transport   | Bearer; cookie                                        | Bearer: no web client exists, and cookies add CSRF surface for no consumer                    |
+| Connections | Hold one for the whole request; borrow and return     | Borrow and return: nesting two connections per request deadlocks a small pool                 |
 
 ## Consequences
 
@@ -108,17 +108,17 @@ Bearer transport, SHA-256 hash storage, no rotation, revocation on logout and de
 
 ## Impact on planned tickets
 
-| Ticket | Effect |
-| ------ | ------ |
-| M3.1 | Per-kind lifetime fields, `reauth_window_minutes`, touch interval, `trusted_proxies`; `PostgresSettings.pool_timeout_s`; contracts take `client_kind`, add mark-reauthenticated; token hasher naming decided |
-| M3.3 | `client_kind` CHECK, `authenticated_at`, lifetime by kind, purge and indexes, every repo method on its own short session |
-| M3.4 | `require_recent_auth`, re-authentication through the throttle, `AUTH_REAUTH_REQUIRED`, the three events |
-| M3.6 | Connection discipline in the auth dependency; no Origin middleware |
-| M3.7 | Login, logout, `POST /auth/reauth`, `GET /auth/me` |
-| M4a.2 | Step-up dependency on posting and account delete; route inventory unchanged (2 system, 2 auth public) |
-| M4.5.1 | `cli` kind, 14 and 30 day lifetimes, validated against the CLI only, no step-up |
-| M4c.1, M4c.2 | Pool size and `pool_timeout_s`; re-auth load; concurrent-requests-above-pool test; `pool_pre_ping` cost |
-| M5 | Step-up on user and role management; the API-client CLI uses `api` sessions |
+| Ticket       | Effect                                                                                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M3.1         | Per-kind lifetime fields, `reauth_window_minutes`, touch interval, `trusted_proxies`; `PostgresSettings.pool_timeout_s`; contracts take `client_kind`, add mark-reauthenticated; token hasher naming decided |
+| M3.3         | `client_kind` CHECK, `authenticated_at`, lifetime by kind, purge and indexes, every repo method on its own short session                                                                                     |
+| M3.4         | `require_recent_auth`, re-authentication through the throttle, `AUTH_REAUTH_REQUIRED`, the three events                                                                                                      |
+| M3.6         | Connection discipline in the auth dependency; no Origin middleware                                                                                                                                           |
+| M3.7         | Login, logout, `POST /auth/reauth`, `GET /auth/me`                                                                                                                                                           |
+| M4a.2        | Step-up dependency on posting and account delete; route inventory unchanged (2 system, 2 auth public)                                                                                                        |
+| M4.5.1       | `cli` kind, 14 and 30 day lifetimes, validated against the CLI only, no step-up                                                                                                                              |
+| M4c.1, M4c.2 | Pool size and `pool_timeout_s`; re-auth load; concurrent-requests-above-pool test; `pool_pre_ping` cost                                                                                                      |
+| M5           | Step-up on user and role management; the API-client CLI uses `api` sessions                                                                                                                                  |
 
 ## Revisit triggers
 

@@ -97,6 +97,10 @@ contract (independent siblings), so neither can import the other.
 - **Login-attempt store** — `LoginAttemptRepo` (contract in `trutina-authentication`) has a PostgreSQL adapter,
   `PostgresLoginAttemptRepo`, over a `login_attempts` table with its own migration, plus `tools/purge-login-attempts.py`.
   Written and read only by `ThrottledAuthenticator`, which no route, command or composition root uses yet.
+- **Session store** — `SessionRepo` (contract in `trutina-authentication`) has a PostgreSQL adapter,
+  `PostgresSessionRepo`, over a `sessions` table with its own migration, plus `tools/purge-sessions.py`.
+  `get_valid` is one read-only query joining `users`; writes are single atomic statements. Tested on real PostgreSQL,
+  including a one-connection pool. No session service, route, command or composition root uses it yet.
 - **Credentials verified on real PostgreSQL (M2.8)** — `trutina-storage-postgres`'s
   `shared/tests/test_credentials_integration.py` runs the real `RegistrationService`,
   `PasswordAuthenticator` and `ThrottledAuthenticator` over the real user and login-attempt repositories and a real
@@ -132,10 +136,10 @@ contract (independent siblings), so neither can import the other.
 - Identity and authentication — `trutina-authentication` provides contracts, test fakes and one concrete `Argon2PasswordHasher`,
   the service-only `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`
   (the `UserRepo` and `LoginAttemptRepo` adapters live in `trutina-storage-postgres`).
-  No token implementation, route or command exists, two `AUTH_*` `ErrorCode` members exist
+  No session service, route or command exists, two `AUTH_*` `ErrorCode` members exist
   (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`) with catalog entries;
   only `PasswordAuthenticator` raises `AUTH_INVALID_CREDENTIALS` and only `ThrottledAuthenticator` raises `AUTH_THROTTLED`
-  and no app depends on the package. The token and refresh-token contracts were replaced in M3.1 by frozen, unimplemented session contracts
+  and no app depends on the package. The token and refresh-token contracts were replaced in M3.1 by frozen session contracts, which `PostgresSessionRepo` implements since M3.3 (no session service or route exists)
   (ADR 0001, [0001-session-mechanism.md](../../docs/adr/0001-session-mechanism.md), amended by
   ADR 0002, [0002-session-lifetimes-step-up-and-connection-use.md](../../docs/adr/0002-session-lifetimes-step-up-and-connection-use.md)); `LoginAttemptRepo` was frozen in M2.4.
   Separately from that package, `trutina-core`'s journal, posting and account write services require a non-blank `actor: str`

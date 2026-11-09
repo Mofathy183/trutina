@@ -36,7 +36,7 @@ flowchart TD
 `trutina-observability` is consumed only by the two presentation apps; every other
 package emits through the standard library's `logging` module directly.
 `trutina-authentication` holds identity and authentication contracts and models plus the Argon2id password hasher;
-its sole dependent is `trutina-storage-postgres`, for the `UserRepo` and `LoginAttemptRepo` adapters.
+its sole dependent is `trutina-storage-postgres`, for the `UserRepo`, `LoginAttemptRepo` and `SessionRepo` adapters.
 
 ## Packages & Apps
 
@@ -54,12 +54,12 @@ its sole dependent is `trutina-storage-postgres`, for the `UserRepo` and `LoginA
   hasher, session, session-token, user and login-attempt ports) plus in-memory test
   fakes.
   Contracts and models plus `Argon2PasswordHasher` and the service-only `RegistrationService`, `PasswordAuthenticator` and
-  `ThrottledAuthenticator`; no session implementation, route or command exists and only `trutina-storage-postgres` depends on it
-  (for the `UserRepo` and `LoginAttemptRepo` adapters). Never imported by `trutina-core`.
+  `ThrottledAuthenticator`; no session service, route or command exists and only `trutina-storage-postgres` depends on it
+  (for the `UserRepo`, `LoginAttemptRepo` and `SessionRepo` adapters). Never imported by `trutina-core`.
   See `packages/authentication/README.md` / `CONTEXT.md`.
 - **`trutina-storage-postgres`** — the storage backend `apps/cli` and `apps/api`
   depend on: SQLAlchemy async + `asyncpg` implementations of the four core repository contracts
-  (including the trial balance aggregation) plus `UserRepo` and `LoginAttemptRepo` plus Alembic migrations.
+  (including the trial balance aggregation) plus `UserRepo`, `LoginAttemptRepo` and `SessionRepo` plus Alembic migrations.
   Logs connection lifecycle events and constructs its engine with `hide_parameters=True`.
   See `packages/storage-postgres/README.md` / `CONTEXT.md`.
 - **`trutina-config`** — typed, environment-driven settings (`Settings`/`TestSettings`,
