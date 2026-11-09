@@ -19,6 +19,7 @@ PREVIOUS_REVISION = "7e1b970f05a7"
 REVISION_BEFORE_USERS = "a3f1c9d2b7e4"
 REVISION_BEFORE_AUDIT = "373da73ec0bb"
 REVISION_BEFORE_LOGIN_ATTEMPTS = "41065b2e2190"
+REVISION_BEFORE_SESSIONS = "4794a1756a02"
 
 
 def _config() -> Config:
@@ -143,6 +144,29 @@ class TestLoginAttemptsMigration:
             await loop.run_in_executor(None, lambda: command.upgrade(cfg, "head"))
 
         after_upgrade = await _table_exists(engine, "login_attempts")
+
+        assert after_downgrade is False
+        assert after_upgrade is True
+
+
+@pytest.mark.integration
+class TestSessionsMigration:
+    async def test_downgrade_removes_and_upgrade_restores_sessions_table(
+        self, schema_init, postgres_connection
+    ):
+        cfg = _config()
+        loop = asyncio.get_event_loop()
+        engine = postgres_connection.engine
+
+        try:
+            await loop.run_in_executor(
+                None, lambda: command.downgrade(cfg, REVISION_BEFORE_SESSIONS)
+            )
+            after_downgrade = await _table_exists(engine, "sessions")
+        finally:
+            await loop.run_in_executor(None, lambda: command.upgrade(cfg, "head"))
+
+        after_upgrade = await _table_exists(engine, "sessions")
 
         assert after_downgrade is False
         assert after_upgrade is True
