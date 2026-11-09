@@ -12,6 +12,7 @@ from trutina.storage_postgres.identity import PostgresUserRepo
 from trutina.storage_postgres.journal import PostgresJournalRepo
 from trutina.storage_postgres.login_attempt import PostgresLoginAttemptRepo
 from trutina.storage_postgres.posting import PostgresPostingRepo
+from trutina.storage_postgres.session import PostgresSessionRepo
 from trutina.storage_postgres.shared import connect, disconnect
 from trutina.storage_postgres.shared.execution import PostgresExecutor
 from trutina.storage_postgres.trial_balance import PostgresTrialBalanceRepo
@@ -156,3 +157,10 @@ async def postgres_login_attempt_repo(clean_pg_db, postgres_connection):
     return PostgresLoginAttemptRepo(
         postgres_connection.session_factory, PostgresExecutor()
     )
+
+
+@pytest_asyncio.fixture
+async def postgres_session_repo(clean_pg_db, postgres_connection):
+    """A PostgresSessionRepo backed by the clean test database."""
+
+    return PostgresSessionRepo(postgres_connection.session_factory, PostgresExecutor())
