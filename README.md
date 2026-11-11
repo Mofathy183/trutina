@@ -35,7 +35,8 @@ flowchart TD
 
 `trutina-observability` is consumed only by the two presentation apps; every other
 package emits through the standard library's `logging` module directly.
-`trutina-authentication` holds identity and authentication contracts and models plus the Argon2id password hasher;
+`trutina-authentication` holds identity and authentication contracts and models, the Argon2id password hasher,
+a SHA-256 session-token hasher and the service-only use cases;
 its sole dependent is `trutina-storage-postgres`, for the `UserRepo`, `LoginAttemptRepo` and `SessionRepo` adapters.
 
 ## Packages & Apps
@@ -54,7 +55,8 @@ its sole dependent is `trutina-storage-postgres`, for the `UserRepo`, `LoginAtte
   hasher, session, session-token, user and login-attempt ports) plus in-memory test
   fakes.
   Contracts and models plus `Argon2PasswordHasher` and the service-only `RegistrationService`, `PasswordAuthenticator` and
-  `ThrottledAuthenticator`; no session service, route or command exists and only `trutina-storage-postgres` depends on it
+  `ThrottledAuthenticator`, plus `SessionService` and `Sha256SessionTokenHasher`;
+  no route or command exists and only `trutina-storage-postgres` depends on it
   (for the `UserRepo`, `LoginAttemptRepo` and `SessionRepo` adapters). Never imported by `trutina-core`.
   See `packages/authentication/README.md` / `CONTEXT.md`.
 - **`trutina-storage-postgres`** — the storage backend `apps/cli` and `apps/api`

@@ -130,8 +130,8 @@ cross-checked against its README/CONTEXT):
 `trutina-config`. Only `trutina-cli` and `trutina-api` depend on
 `trutina-observability` — every other workspace package emits through the
 standard library alone.
-`trutina-authentication` is contracts, models, one concrete hasher and three service-only use cases
-(`RegistrationService`, `PasswordAuthenticator`, `ThrottledAuthenticator`); only `trutina-storage-postgres`
+`trutina-authentication` is contracts, models, two concrete hashers and four service-only use cases
+(`RegistrationService`, `PasswordAuthenticator`, `ThrottledAuthenticator`, `SessionService`); only `trutina-storage-postgres`
 depends on it (for `UserRepo` and `LoginAttemptRepo`), and `trutina-core` never will.
 
 ## Layer Responsibilities
@@ -188,15 +188,16 @@ and abstract ports for password and session-token hashing, session, user and
 login-attempt stores, a clock, an event sink, a per-write status checker, and
 the `Authenticator` use case, plus the session record and `ClientKind`. A peer of
 `trutina.core`, never above or below it: core sees only an opaque `actor: str`
-supplied by its caller. Contracts and models plus `Argon2PasswordHasher` and the service-only `RegistrationService`,
-`PasswordAuthenticator` and `ThrottledAuthenticator`.
-no token module, route or command exists, and no app depends on it.
+supplied by its caller. Contracts and models plus `Argon2PasswordHasher`, `Sha256SessionTokenHasher` and the service-only `RegistrationService`,
+`PasswordAuthenticator`, `ThrottledAuthenticator` and `SessionService`.
+No route or command exists, and no app depends on it.
 The storage adapters, `PostgresUserRepo`, `PostgresLoginAttemptRepo` and `PostgresSessionRepo`, live in `trutina.storage_postgres`.
 The session contracts (`SessionRepo`, `SessionRecord`, `ClientKind`) replaced the token contracts in M3.1
 (ADR 0001); `PostgresSessionRepo` in `trutina.storage_postgres` implements `SessionRepo`
-since M3.3, with no service, token hasher, route or command on top;
+since M3.3, and `SessionService` (M3.4) uses it with `Sha256SessionTokenHasher`, with no route or command on top;
 ADR 0002 decides per-client session lifetimes, step-up re-authentication and the connection rule
-(the settings exist since M3.1; the behavior is not built);
+(the settings exist since M3.1; the service computes lifetimes and step-up since M3.4;
+the request-level connection rule and the route dependency are not built);
 `LoginAttemptRepo` was frozen in M2.4.
 Its end-to-end test lives in `trutina-storage-postgres`, not here, because authentication may not import storage.
 See `packages/authentication/README.md` / `CONTEXT.md`.
@@ -315,10 +316,10 @@ produces. See `apps/api/README.md` / `CONTEXT.md`.
   No token module, route or command exists,
   and no app depends on it; only the `UserRepo`, `LoginAttemptRepo` and `SessionRepo` adapters exist
   (only `ThrottledAuthenticator` writes login attempts, and nothing wires it)
-  The session contracts exist since M3.1; `PostgresSessionRepo` implements `SessionRepo` since M3.3, with no service on top.
+  `SessionService` (M3.4) uses `SessionRepo`; no route wires it.
 - `trutina-authentication` has contracts, test fakes, one concrete `Argon2PasswordHasher` and the service-only
   `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`. No token module, route or command
   exists, and no app depends on it. The `UserRepo` and `LoginAttemptRepo` adapters exist in
   `trutina-storage-postgres`. The register, login and throttle flow is verified end to end against real PostgreSQL
   (`shared/tests/test_credentials_integration.py`, M2.8), but only at service level: nothing wires it into an app.
-  The session contracts exist since M3.1; `PostgresSessionRepo` implements `SessionRepo` since M3.3, with no service on top.
+  `SessionService` (M3.4) is verified the same way (`session/tests/test_service_integration.py`); no route wires it.

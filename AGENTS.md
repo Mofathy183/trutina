@@ -33,8 +33,9 @@ depends on `trutina-config`. `trutina-core`, `trutina-shared`, `trutina-config`,
 `trutina-storage-postgres` never depend on `trutina-observability` or `structlog` — only
 `trutina-cli` and `trutina-api` do, each exactly once at their own composition
 root.
-`trutina-authentication` is contracts, models, one concrete hasher (`Argon2PasswordHasher`) and the service-only use cases
-`RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`; the only workspace package
+`trutina-authentication` is contracts, models, two concrete hashers (`Argon2PasswordHasher`, `Sha256SessionTokenHasher`)
+and the service-only use cases
+`RegistrationService`, `PasswordAuthenticator`, `ThrottledAuthenticator` and `SessionService`; the only workspace package
 that declares it is `trutina-storage-postgres` (for `UserRepo`, `LoginAttemptRepo` and `SessionRepo`).
 No app depends on it. `trutina-core` never
 imports it, and no core service method takes an `Identity`.
@@ -161,6 +162,12 @@ Package/app own tests live beside their own code (e.g.
   It counts only `AUTH_INVALID_CREDENTIALS` from the inner authenticator, never a throttled attempt, other errors or an email over 254 characters.
   It clears the pair on success only if failures existed, purges rows older than the window after each recorded failure,
   lets attempt-store errors propagate, and emits `auth.login_throttled` with no email or IP. It throttles and never locks. No route or command uses it yet.
+- `SessionService.login` creates a session only after its authenticator succeeds, deletes sessions dead longer than its retention window
+  (one unbounded call, before the insert), and stores only the SHA-256 hash of a 256-bit token, returned once in `IssuedSession`.
+  `validate` raises one `AUTH_TOKEN_INVALID`, with an empty context, for a blank, oversized, unknown, revoked, expired, other-kind or disabled-user token.
+  A session is valid only for the client kind it was issued for; idle expiry is `min(now + idle, absolute)`; a use is recorded only when the touch interval has passed.
+  `require_recent_auth` raises `AUTH_REAUTH_REQUIRED` once `authenticated_at` is a full window old (exclusive), and only login and `reauthenticate` set `authenticated_at`.
+  `reauthenticate` checks the session's own user's password through the throttle and does not rotate the token. `logout` is idempotent. No route or command uses the service yet.
 
 ## Error Model
 
@@ -233,7 +240,8 @@ against a real PostgreSQL container; the smoke test also asserts a structured
 `request.completed` log line with a `correlation_id` appears in the container's output.
 `tools/purge-login-attempts.py` — delete `login_attempts` rows older than `--older-than-hours` (default 24);
 no scheduler exists, so it is run by hand.
-`tools/purge-sessions.py` — delete sessions that died more than `--older-than-days` ago (default 7); also run by hand.
+`tools/purge-sessions.py` — delete sessions that died more than `--older-than-days` ago (default 7); also run by hand
+(`SessionService` also purges on each login).
 
 ## Testing Layout
 
@@ -309,9 +317,9 @@ no scheduler exists, so it is run by hand.
   service method an `Identity`. Core receives only an opaque `actor: str` from its
   caller. Never let `trutina.authentication` import `trutina.core`, a storage
   package, or a web/CLI framework.
-- Session decisions (ADR 0001, ADR 0002; adapter built, service not yet):
+- Session decisions (ADR 0001, ADR 0002; adapter and service built, no route):
   a session is valid only for the client kind it was issued for (`api` or `cli`),
-  and no request holds a database connection across the handler. The session contracts (`SessionRepo`, `SessionRecord`, `ClientKind`, `SessionTokenHasher`) and the session settings exist, and `PostgresSessionRepo` (M3.3) implements `SessionRepo`; no session service exists, so do not describe the request-level connection rule, the step-up check or a service as built until M3.4.
+  and no request holds a database connection across the handler. The session contracts (`SessionRepo`, `SessionRecord`, `ClientKind`, `SessionTokenHasher`) and the session settings exist, and `PostgresSessionRepo` (M3.3) implements `SessionRepo`; `SessionService` (M3.4) implements login, validation, logout, re-authentication and `require_recent_auth`, but no route or app wires it, so do not describe the request-level connection rule, the step-up route dependency or any `/auth` route as built until M3.6 to M4a.2.
 - A service logs its own success, never its own failure — a raised
   `AppError`/`ValidationAppError` is logged exactly once, by the catching
   presentation-layer seam (`error_boundary()` or the API's exception

@@ -149,7 +149,7 @@ not enforced by the database. See [CONTEXT.md](CONTEXT.md).
 
 ## Sessions
 
-`PostgresSessionRepo` stores sessions in a `sessions` table: a surrogate `id`, a unique `token_hash` (never the token), `user_id` (a foreign key to `users.id` with `ON DELETE RESTRICT`), `client_kind` (`api` or `cli`, enforced by a CHECK built from `ClientKind`), and the times `created_at`, `last_used_at`, `authenticated_at`, `idle_expires_at`, `absolute_expires_at` and nullable `revoked_at`. Every time is the caller's aware UTC value from `Clock`, not a database default. `get_valid` is one read-only query joining `users`; it returns `None` for every failure without saying why. The repository holds no policy: lifetimes, when a touch is due and the retention cutoff come from the caller. No session service uses it yet.
+`PostgresSessionRepo` stores sessions in a `sessions` table: a surrogate `id`, a unique `token_hash` (never the token), `user_id` (a foreign key to `users.id` with `ON DELETE RESTRICT`), `client_kind` (`api` or `cli`, enforced by a CHECK built from `ClientKind`), and the times `created_at`, `last_used_at`, `authenticated_at`, `idle_expires_at`, `absolute_expires_at` and nullable `revoked_at`. Every time is the caller's aware UTC value from `Clock`, not a database default. `get_valid` is one read-only query joining `users`; it returns `None` for every failure without saying why. The repository holds no policy: lifetimes, when a touch is due and the retention cutoff come from the caller, which is `SessionService` in `trutina-authentication` (not yet wired into an app).
 
 A failed `create` (a duplicate token hash or an unknown user) raises `AppError` with `UNKNOWN_ERROR`, a context of `resource` and `constraint` only, and no `cause`, because the driver's message can contain the stored hash.
 
@@ -176,6 +176,7 @@ Integration tests apply the real Alembic migration history once per session (`te
 `shared/tests/test_credentials_integration.py` runs the real registration, login and throttle services from `trutina-authentication`
 over `PostgresUserRepo` and `PostgresLoginAttemptRepo`. It lives here, not in the authentication package,
 because authentication must not import storage.
+`session/tests/test_service_integration.py` does the same for the real `SessionService`.
 
 ## See Also
 
