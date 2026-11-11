@@ -122,6 +122,8 @@ HINTS: HintMap = {
     #
     ErrorCode.AUTH_INVALID_CREDENTIALS: ("Check the email and password and try again."),
     ErrorCode.AUTH_THROTTLED: "Wait before trying again.",
+    ErrorCode.AUTH_TOKEN_INVALID: "Sign in again.",
+    ErrorCode.AUTH_REAUTH_REQUIRED: "Confirm your password, then repeat the command.",
     #
     # Storage
     #

@@ -79,3 +79,11 @@ class ErrorCode(StrEnum):
     # string, which an adapter may turn into a Retry-After value.
     AUTH_INVALID_CREDENTIALS = "auth.invalid_credentials"
     AUTH_THROTTLED = "auth.throttled"
+
+    # AUTH_TOKEN_INVALID covers a missing, malformed, unknown, revoked,
+    # expired, wrong-client-kind and disabled-user session alike, with an
+    # empty context. AUTH_REAUTH_REQUIRED (HTTP 403) means the session is
+    # valid but its last password check is older than the re-authentication
+    # window; its context is empty too.
+    AUTH_TOKEN_INVALID = "auth.token_invalid"
+    AUTH_REAUTH_REQUIRED = "auth.reauth_required"
