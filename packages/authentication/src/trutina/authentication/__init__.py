@@ -18,9 +18,13 @@ from .credentials import (
 from .identity import AccessState, Identity, UserStatusChecker
 from .sessions import (
     ClientKind,
+    IssuedSession,
+    SessionLifetime,
     SessionRecord,
     SessionRepo,
+    SessionService,
     SessionTokenHasher,
+    Sha256SessionTokenHasher,
     ValidSession,
 )
 from .shared import AuthEvent, AuthEventSink, Clock, NoOpAuthEventSink
@@ -36,6 +40,7 @@ __all__ = [
     "ClientKind",
     "Clock",
     "Identity",
+    "IssuedSession",
     "LoginAttemptRepo",
     "NoOpAuthEventSink",
     "PasswordAuthenticator",
@@ -43,9 +48,12 @@ __all__ = [
     "RegisterInput",
     "RegisteredUser",
     "RegistrationService",
+    "SessionLifetime",
     "SessionRecord",
     "SessionRepo",
+    "SessionService",
     "SessionTokenHasher",
+    "Sha256SessionTokenHasher",
     "ThrottledAuthenticator",
     "User",
     "UserRepo",
