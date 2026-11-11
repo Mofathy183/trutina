@@ -247,7 +247,7 @@ request-level connection rule, the step-up route dependency or any `/auth` route
   re-authentications can throttle that email's login; nothing calls `revoke_all_for_user`; `logout` of an expired but unrevoked session is a
   no-op, so that row stays until a purge; a failed touch fails the request; `validate` returns the session as read, before its touch; a token
   factory other than the default is a test hook with no guard; `sessions/service.py` imports `credentials`, an observed-convention dependency no
-  contract pins; and the manual negative checks are not recorded as run.
+  contract pins.
 
 ## Verification
 
