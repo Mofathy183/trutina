@@ -100,7 +100,7 @@ contract (independent siblings), so neither can import the other.
 - **Session store** — `SessionRepo` (contract in `trutina-authentication`) has a PostgreSQL adapter,
   `PostgresSessionRepo`, over a `sessions` table with its own migration, plus `tools/purge-sessions.py`.
   `get_valid` is one read-only query joining `users`; writes are single atomic statements. Tested on real PostgreSQL,
-  including a one-connection pool. No session service, route, command or composition root uses it yet.
+  including a one-connection pool. Used by `SessionService`; no route, command or composition root wires either yet.
 - **Credentials verified on real PostgreSQL (M2.8)** — `trutina-storage-postgres`'s
   `shared/tests/test_credentials_integration.py` runs the real `RegistrationService`,
   `PasswordAuthenticator` and `ThrottledAuthenticator` over the real user and login-attempt repositories and a real
@@ -108,6 +108,12 @@ contract (independent siblings), so neither can import the other.
   failures, the dummy-hash verify, throttling including the window boundary, and a sweep proving no password or
   hash reaches logs, error contexts, events or the `login_attempts` and `audit_events` tables. Service level only:
   route-level proof (the 422 body, `Retry-After`, the structlog pipeline) waits for M3.7.
+- **Session service** — `SessionService` in `trutina-authentication` with `Sha256SessionTokenHasher`: login after the
+  throttled authenticator succeeds, validation with one indistinguishable `AUTH_TOKEN_INVALID`, strict `api`/`cli` kinds,
+  per-kind lifetimes, touch at most once per interval, step-up (`require_recent_auth`, `AUTH_REAUTH_REQUIRED`),
+  re-authentication through the throttle without rotating the token, idempotent logout and revoke-all, and a purge of dead
+  sessions on each login. Verified against fakes and on real PostgreSQL (one-connection pool included). No route,
+  command or composition root uses it yet.
 
 ## What Is Partial or Explicitly Out of Scope
 
@@ -136,10 +142,10 @@ contract (independent siblings), so neither can import the other.
 - Identity and authentication — `trutina-authentication` provides contracts, test fakes and one concrete `Argon2PasswordHasher`,
   the service-only `RegistrationService`, `PasswordAuthenticator` and `ThrottledAuthenticator`
   (the `UserRepo` and `LoginAttemptRepo` adapters live in `trutina-storage-postgres`).
-  No session service, route or command exists, two `AUTH_*` `ErrorCode` members exist
-  (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`) with catalog entries;
+  No route or command exists, four `AUTH_*` `ErrorCode` members exist
+  (`AUTH_INVALID_CREDENTIALS`, `AUTH_THROTTLED`, `AUTH_TOKEN_INVALID`, `AUTH_REAUTH_REQUIRED`) with catalog entries;
   only `PasswordAuthenticator` raises `AUTH_INVALID_CREDENTIALS` and only `ThrottledAuthenticator` raises `AUTH_THROTTLED`
-  and no app depends on the package. The token and refresh-token contracts were replaced in M3.1 by frozen session contracts, which `PostgresSessionRepo` implements since M3.3 (no session service or route exists)
+  and no app depends on the package. The token and refresh-token contracts were replaced in M3.1 by frozen session contracts, which `PostgresSessionRepo` implements since M3.3 (`SessionService` uses them since M3.4; no route exists)
   (ADR 0001, [0001-session-mechanism.md](../../docs/adr/0001-session-mechanism.md), amended by
   ADR 0002, [0002-session-lifetimes-step-up-and-connection-use.md](../../docs/adr/0002-session-lifetimes-step-up-and-connection-use.md)); `LoginAttemptRepo` was frozen in M2.4.
   Separately from that package, `trutina-core`'s journal, posting and account write services require a non-blank `actor: str`

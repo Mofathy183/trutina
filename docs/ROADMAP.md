@@ -100,9 +100,12 @@ Still missing:
   verification (`PasswordAuthenticator`: one indistinguishable failure, dummy-hash verify, rehash on login) and the
   throttling wrapper (`ThrottledAuthenticator`) exist; nothing wires any of the three use cases into an app.
 - Opaque database-backed sessions (ADR 0001, amended by ADR 0002: strict `api`/`cli` client kinds, per-kind lifetimes;
-  the contracts and lifetime settings exist since M3.1 and `PostgresSessionRepo` since M3.3, the service does not),
+  the contracts and lifetime settings exist since M3.1, `PostgresSessionRepo` since M3.3 and the service-only `SessionService` since M3.4;
+  routes, wiring and the request-level connection rule do not),
   auth routes (login, logout, re-authentication, `GET /auth/me`) and endpoint protection.
-- Step-up re-authentication on posting and account delete (ADR 0002), with a new 403 code `AUTH_REAUTH_REQUIRED`.
+- Step-up re-authentication on posting and account delete (ADR 0002).
+  `SessionService.require_recent_auth` and the 403 code `AUTH_REAUTH_REQUIRED` exist (M3.4);
+  the route dependency (M4a.2) does not.
   Still open: whether account update needs it.
 - A CLI `auth` group.
 - Authorization (roles and a permission matrix).

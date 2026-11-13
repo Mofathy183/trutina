@@ -53,7 +53,7 @@
 
 ### 5. Session purge
 
-A session is dead when revoked, idle-expired or absolute-expired. Dead rows older than 7 days are deleted by `tools/purge-sessions.py` (run by hand, as for login attempts) and by a bounded opportunistic batch when a session is created. Indexes on `token_hash` (unique), `user_id` and the expiry columns are decided in M3.3. Revoked rows are kept for the retention period for forensics, and the secret-free events below carry the audit trail.
+A session is dead when revoked, idle-expired or absolute-expired. Dead rows older than 7 days are deleted by `tools/purge-sessions.py` (run by hand, as for login attempts) and by `SessionService` on every login (M3.4): one `purge_before` call with a cutoff of now minus the 7-day retention window. It is not batched, because the frozen `SessionRepo.purge_before` has no limit; revisit with load data in M4c.2. Indexes on `token_hash` (unique), `user_id` and the expiry columns are decided in M3.3. Revoked rows are kept for the retention period for forensics, and the secret-free events below carry the audit trail.
 
 ### 6. Events, revocation and deferrals
 

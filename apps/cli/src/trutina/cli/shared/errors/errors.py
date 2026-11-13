@@ -186,6 +186,14 @@ ERRORS: ErrorMap = {
         code=ErrorCode.AUTH_THROTTLED,
         message="Too many sign-in attempts.",
     ),
+    ErrorCode.AUTH_TOKEN_INVALID: ErrorDetail(
+        code=ErrorCode.AUTH_TOKEN_INVALID,
+        message="The session is missing, invalid or expired.",
+    ),
+    ErrorCode.AUTH_REAUTH_REQUIRED: ErrorDetail(
+        code=ErrorCode.AUTH_REAUTH_REQUIRED,
+        message="Confirm your password to continue.",
+    ),
     #
     # Storage
     #

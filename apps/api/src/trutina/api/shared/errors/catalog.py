@@ -209,6 +209,18 @@ ERROR_CATALOG: dict[ErrorCode, ErrorCatalogEntry] = {
         "Too many sign-in attempts.",
         hint="Wait before trying again.",
     ),
+    # Neither message interpolates context: a bad session token must not
+    # reveal why it failed, and re-authentication carries no identifier.
+    ErrorCode.AUTH_TOKEN_INVALID: ErrorCatalogEntry(
+        status.HTTP_401_UNAUTHORIZED,
+        "The session is missing, invalid or expired.",
+        hint="Sign in again.",
+    ),
+    ErrorCode.AUTH_REAUTH_REQUIRED: ErrorCatalogEntry(
+        status.HTTP_403_FORBIDDEN,
+        "Confirm your password to continue.",
+        hint="Re-authenticate, then repeat the request.",
+    ),
     # ── Storage ──────────────────────────────────────────────────────
     ErrorCode.STORAGE_UNAVAILABLE: ErrorCatalogEntry(
         status.HTTP_503_SERVICE_UNAVAILABLE,

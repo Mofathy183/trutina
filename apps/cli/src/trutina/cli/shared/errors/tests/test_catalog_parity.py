@@ -43,3 +43,9 @@ class TestCliCatalogParity:
 
     def test_throttled_has_no_field_label(self):
         assert ErrorCode.AUTH_THROTTLED not in FIELD_LABELS
+
+    @pytest.mark.parametrize(
+        "code", [ErrorCode.AUTH_TOKEN_INVALID, ErrorCode.AUTH_REAUTH_REQUIRED]
+    )
+    def test_session_codes_have_no_field_label(self, code):
+        assert code not in FIELD_LABELS

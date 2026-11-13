@@ -6,7 +6,7 @@ For usage, see README.md. This document explains why, not how.
 
 Trutina needs to know who performed a write, without the accounting domain learning what a user,
 a password or a token is. This package holds the vocabulary for identity and authentication so that `trutina-core` never has to.
-Today it is contracts and models plus four concrete pieces: the Argon2id password hasher,
+Today it is contracts and models plus six concrete pieces: the Argon2id password hasher, the SHA-256 session-token hasher, the session service,
 the registration use case, the login verification (`PasswordAuthenticator`) and the login throttle (`ThrottledAuthenticator`)
 (the storage adapters, for `UserRepo`, `LoginAttemptRepo` and `SessionRepo`, live in `trutina-storage-postgres`)
 it fixes the seams that later milestones fill in, and gives tests fakes to build against before an implementation exists.
@@ -23,10 +23,10 @@ Four small folders group the contracts by what they are for. Every public symbol
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
 | `identity/`    | `Identity`, `AccessState`, `UserStatusChecker`                                                                                                                                                                                                                                                                                                                                         | Who is acting, and whether they may |
 | `credentials/` | Grouped into `passwords/` (`PasswordHasher`, `Argon2PasswordHasher`, `normalize_password`, `MAX_PASSWORD_LENGTH`), `users/` (`User`, `UserRepo`, `normalize_email`, `MAX_EMAIL_LENGTH`, and the registration use case: `RegistrationService`, `RegisterInput`, `RegisteredUser`) and `login/` (`LoginAttemptRepo`, `Authenticator`, `PasswordAuthenticator`, `ThrottledAuthenticator`) | Checking a login                    |
-| `sessions/`    | `session.py` (`ClientKind`, `SessionRecord`, `ValidSession`, `SessionRepo`); `hasher.py` (`SessionTokenHasher`)                                                                                                                                                                                                                                                                        | Sessions after login                |
+| `sessions/`    | `session.py` (`ClientKind`, `SessionRecord`, `ValidSession`, `SessionRepo`); `hasher.py` (`SessionTokenHasher`); `sha256_hasher.py` (`Sha256SessionTokenHasher`); `service.py` (`SessionService`, `IssuedSession`, `SessionLifetime`)                                                                                                                                                  | Sessions after login                |
 | `shared/`      | `Clock`, `AuthEvent`, `AuthEventSink`, `NoOpAuthEventSink`                                                                                                                                                                                                                                                                                                                             | Cross-cutting ports                 |
 
-Internal direction: `credentials` and `sessions` may import `identity`; `identity` and `shared` import nothing from their siblings. This is observed convention, not an import-linter contract. A folder exists only where two or more related modules do; do not create a folder for a single file.
+Internal direction: `credentials` and `sessions` may import `identity`; `identity` and `shared` import nothing from their siblings. `sessions/service.py` also imports `credentials` (`Authenticator`, `UserRepo`) by submodule path; `credentials` never imports `sessions`. This is observed convention, not an import-linter contract. A folder exists only where two or more related modules do; do not create a folder for a single file.
 `credentials/` is itself split into three subfolders, each holding two or more related modules:
 `passwords/` (how a password becomes a hash), `users/` (who a user is) and `login/` (checking a login).
 Inside it, `login` may import `users` and `passwords`, `users` may import `passwords`, and `passwords` imports no sibling.
@@ -48,7 +48,7 @@ Contracts and their concrete implementations share a role folder, each in its ow
 
 ### Two hashers, never interchangeable
 
-`PasswordHasher` is slow, salted and verified; `SessionTokenHasher` is fast and deterministic because session tokens are 256-bit random values that are looked up by hash. Using the password hasher for lookup is impossible by design (it is not deterministic), and using the fast hash for passwords would be a security defect, so the two are separate ports. M3.1 renamed the port that was first named for refresh tokens; nothing implements it yet.
+`PasswordHasher` is slow, salted and verified; `SessionTokenHasher` is fast and deterministic because session tokens are 256-bit random values that are looked up by hash. Using the password hasher for lookup is impossible by design (it is not deterministic), and using the fast hash for passwords would be a security defect, so the two are separate ports. M3.1 renamed the port that was first named for refresh tokens; `Sha256SessionTokenHasher` implements it (M3.4): hex SHA-256 of the UTF-8 token, no salt and no pepper.
 
 ### Argon2id through `argon2-cffi`, parameters supplied by the caller
 
@@ -147,11 +147,27 @@ Authentication timestamps are always aware. The accounting domain's posting date
 
 Lifetimes, whether a touch is due, and the retention cutoff are service policy, not repository behavior, so an adapter holds no authentication rules. `touch`, `mark_reauthenticated` and `revoke` never move a stored time backward and are no-ops on a miss, so concurrent touches cannot shorten a session and logout never fails on a repeat. No method raises a domain error. The contract does not define what a duplicate token hash does, because 256-bit random tokens make one a defect.
 
-`touch` is a separate call after `get_valid`, so one request makes two short, sequential database borrows and never nests them. ADR 0002 section 4 was amended in M3.3 to say so. The session contracts were frozen in M3.1; `PostgresSessionRepo` implements them (M3.3) and no service uses it yet.
+`touch` is a separate call after `get_valid`, so one request makes two short, sequential database borrows and never nests them. ADR 0002 section 4 was amended in M3.3 to say so. The session contracts were frozen in M3.1; `PostgresSessionRepo` implements them (M3.3) and `SessionService` uses them (M3.4).
 
 ### Events carry no secrets
 
 `AuthEvent.context` is a frozen string-to-string mapping, the same rule `AppError.context` follows, so an event is safe to log by construction. `AuthEventSink.emit` must never raise.
+
+### The session service owns every session policy
+
+`SessionService` takes plain keyword-only values, not `AuthSettings` (this package does not import `trutina-config`; the composition root maps the settings, M3.6): a `SessionLifetime` (idle and absolute `timedelta`) for every `ClientKind`, `touch_interval`, `reauth_window` and `purge_retention`, each positive, plus an `Authenticator` (the composition root passes `ThrottledAuthenticator`), a `SessionRepo`, a `UserRepo`, a `SessionTokenHasher`, a `Clock`, an optional event sink and an optional token factory (default `secrets.token_urlsafe(32)`, 256 bits; replace it only in tests).
+
+`login` authenticates first, so only a success creates a session. It then makes one `purge_before` call with a cutoff of now minus `purge_retention`, before the insert so a failed purge leaves no orphan row, and stores a record whose `created_at`, `last_used_at` and `authenticated_at` are now, whose `absolute_expires_at` is now plus the kind's absolute lifetime and whose `idle_expires_at` is `min(now + idle, absolute)`. The raw token exists only in the returned `IssuedSession`, wrapped in `SecretStr`; the store holds its hash. The purge is not batched, because the frozen `SessionRepo.purge_before` has no limit (ADR 0002 section 5 was amended to say so).
+
+`validate` rejects a blank or over-`MAX_SESSION_TOKEN_LENGTH` token without hashing or storage, then looks the token up with its client kind. Every failure is the same `AUTH_TOKEN_INVALID` with an empty context, so a bad token never says why it failed, and a session of the other client kind fails exactly like an unknown one. A use is recorded with a separate `touch` only when `touch_interval` has passed (inclusive), with `idle_expires_at = min(now + idle, absolute)`. The adapter does not re-check expiry on a touch, so the service touches only after a successful lookup. The returned `ValidSession` is the one read, before the touch.
+
+Step-up is a fixed window counted from `authenticated_at`, which only login and re-authentication set, so ordinary use never extends it. `require_recent_auth` is synchronous and exclusive: a session whose last password check is exactly `reauth_window` old raises `AUTH_REAUTH_REQUIRED` (empty context). The API route dependency (M4a.2) calls it; the CLI never does (ADR 0002).
+
+`reauthenticate` takes its identity from the session, never from the caller: it loads the session's user, then verifies the password through the authenticator, so the throttle applies, then writes `authenticated_at` with a second short borrow. No connection is held while hashing. A wrong password or a throttled attempt leaves the session valid and unchanged. The token is not rotated.
+
+`logout` is idempotent and bound to the client kind: an unknown, already revoked, expired or other-kind token is a silent no-op with no event. `revoke_all_for_user` ends every session of both kinds. Nothing calls it yet (no change-password route, and deactivation does not go through a service).
+
+Events (`auth.session_created`, `auth.session_revoked`, `auth.session_reauthenticated`) carry `subject_id` and `client_kind` only. `revoke_all_for_user` emits `auth.session_revoked` with `client_kind` set to `"all"`, because it spans both kinds. No token, hash, email or IP ever appears in an event or an error.
 
 ## Provisional Contracts
 
@@ -159,8 +175,8 @@ Lifetimes, whether a touch is due, and the retention cutoff are service policy, 
 
 The session contracts are frozen. They follow ADR 0001 ([0001-session-mechanism.md](../../docs/adr/0001-session-mechanism.md))
 and ADR 0002 ([0002-session-lifetimes-step-up-and-connection-use.md](../../docs/adr/0002-session-lifetimes-step-up-and-connection-use.md)):
-strict `api` and `cli` client kinds and `authenticated_at` for step-up. They have a PostgreSQL adapter (`PostgresSessionRepo`, M3.3) but no service or route yet, so do not describe the
-session service, the step-up check or the request-level connection rule as built.
+strict `api` and `cli` client kinds and `authenticated_at` for step-up. They have a PostgreSQL adapter (`PostgresSessionRepo`, M3.3) and a service-only `SessionService` (M3.4) but no route, so do not describe the
+request-level connection rule, the step-up route dependency or any `/auth` route as built.
 
 ## Allowed and Forbidden Dependencies
 
@@ -176,8 +192,8 @@ session service, the step-up check or the request-level connection rule as built
 - `UserRepo` (`PostgresUserRepo`), `LoginAttemptRepo` (`PostgresLoginAttemptRepo`) and `SessionRepo` (`PostgresSessionRepo`)
   have adapters in `trutina-storage-postgres`,
   which declares the dependency on this package, and `PasswordHasher` has `Argon2PasswordHasher` here.
-  No session service, session-token hasher, route or command exists,
-  nothing outside tests uses the hasher, the login-attempt repository or the throttle,
+  No route or command exists,
+  nothing outside tests uses the hashers, the login-attempt repository, the throttle or the session service,
   and no app depends on this package.
 - `LoginAttemptRepo` itself does not cap the email. `ThrottledAuthenticator` records only emails within `MAX_EMAIL_LENGTH`,
   so any other caller must do the same.
@@ -185,10 +201,10 @@ session service, the step-up check or the request-level connection rule as built
   including addresses that belong to no user.
   Retention is bounded only by the purge tool and `ThrottledAuthenticator`'s opportunistic purge.
 - A naive datetime passed to `LoginAttemptRepo` is a caller bug and is not guarded.
-- Only two `AUTH_*` `ErrorCode` members exist, `AUTH_INVALID_CREDENTIALS` and `AUTH_THROTTLED`,
+- Four `AUTH_*` `ErrorCode` members exist. The login pair, `AUTH_INVALID_CREDENTIALS` and `AUTH_THROTTLED`,
   with API and CLI catalog entries. `PasswordAuthenticator` raises the first and `ThrottledAuthenticator` the second.
   The user codes `DUPLICATE_USER_EMAIL`, `UNKNOWN_USER` and `INVALID_EMAIL` also exist.
-  The token codes and `AUTH_USER_DISABLED` land with M3.
+  `AUTH_TOKEN_INVALID` and `AUTH_REAUTH_REQUIRED` exist too (M3.4) and are raised by `SessionService`. `AUTH_USER_DISABLED` is decided in M3.5.
 - Once password login ships there is no self-service recovery for a locked-out user until password reset is built
   (deferred past core authentication).
 - `FakeUserRepo.create` does not reject duplicate emails; the service pre-check and the storage unique index are the real guards.
@@ -203,7 +219,7 @@ session service, the step-up check or the request-level connection rule as built
 - If a caller is cancelled while its hash is running, the worker thread finishes but the concurrency slot is released at once,
   so concurrency can briefly exceed the bound under cancellation.
 - The hasher does not reject weak parameters. Rejecting weak values in production is API startup validation (M3.6).
-- Nothing wires `RegistrationService`, `PasswordAuthenticator` or `ThrottledAuthenticator` into an app yet,
+- Nothing wires `RegistrationService`, `PasswordAuthenticator`, `ThrottledAuthenticator` or `SessionService` into an app yet,
   and no route or command calls either.
 - Passwords are checked for length only. There is no complexity rule and no breached-password check.
   Over-limit input is rejected faster than a wrong password. A rehash write failure fails the login.
@@ -222,10 +238,16 @@ session service, the step-up check or the request-level connection rule as built
 - The register, login and throttle flow is verified end to end on real PostgreSQL (M2.8), but no route or command
   calls it. Route-level proof is M3.7.
 - Session contract caveats: `touch` is a separate call after `get_valid`, so one request makes two short, sequential borrows.
-  `purge_before` has no batch limit, so a bounded purge on session creation needs an optional limit or another approach.
+  `purge_before` has no batch limit, so `SessionService` purges every session dead for longer than its retention window on each login, unbounded.
   A naive datetime passed to `SessionRepo` is a caller bug and is not guarded. `FakeSessionRepo`
   stands in for the join to `users` with a `FakeUserRepo`; the PostgreSQL adapter adds a foreign key, so a session for a
   nonexistent user can exist in the fake and cannot in PostgreSQL. `create` raises `UNKNOWN_ERROR` for a duplicate hash or an unknown user.
+- `SessionService` (M3.4) known gaps: the purge on login is one unbounded `DELETE` per login, revisited with load data in M4c.2; a failed
+  re-authentication counts toward the same IP and email bucket as a failed login, so with an unresolved client IP (`"unknown"`) a flood of failed
+  re-authentications can throttle that email's login; nothing calls `revoke_all_for_user`; `logout` of an expired but unrevoked session is a
+  no-op, so that row stays until a purge; a failed touch fails the request; `validate` returns the session as read, before its touch; a token
+  factory other than the default is a test hook with no guard; `sessions/service.py` imports `credentials`, an observed-convention dependency no
+  contract pins.
 
 ## Verification
 
@@ -233,6 +255,10 @@ The end-to-end test is `packages/storage-postgres/.../shared/tests/test_credenti
 storage package because authentication must never import storage, and it uses a stdlib log handler because storage
 may not import `trutina-observability`. It uses the real hasher with the cheapest parameters and a fake clock, so the
 throttle window is deterministic (`attempted_at` is caller-supplied). The `AuthEventSink` is a fake.
+
+The session service is verified the same way in `packages/storage-postgres/.../session/tests/test_service_integration.py`:
+login, validation, touch, re-authentication, logout, revoke-all, purge on login, a one-connection pool and a leak sweep, on real PostgreSQL.
+Route-level proof is M3.7 and M3.8.
 
 ## Extension Points
 
@@ -253,3 +279,5 @@ throttle window is deterministic (`attempted_at` is caller-supplied). The `AuthE
 - Putting a field key in the `AUTH_INVALID_CREDENTIALS` context. Making the dummy hash from a literal.
 - Counting a throttled attempt as a failure, or recording an email longer than `MAX_EMAIL_LENGTH`.
 - Putting the email or client IP into an `auth.login_throttled` event.
+- Putting a token, its hash, an email or an IP into an `auth.session_*` event, or a `field` key into the `AUTH_TOKEN_INVALID` context.
+- Calling `SessionRepo.touch` or `mark_reauthenticated` without a successful `get_valid`: the adapter does not re-check expiry.

@@ -15,3 +15,12 @@ class TestAuthErrorCodes:
 class TestUserErrorCodes:
     def test_invalid_email_value_is_stable(self):
         assert ErrorCode.INVALID_EMAIL.value == "user.invalid_email"
+
+
+@pytest.mark.unit
+class TestSessionErrorCodes:
+    def test_token_invalid_value_is_stable(self):
+        assert ErrorCode.AUTH_TOKEN_INVALID.value == "auth.token_invalid"
+
+    def test_reauth_required_value_is_stable(self):
+        assert ErrorCode.AUTH_REAUTH_REQUIRED.value == "auth.reauth_required"
