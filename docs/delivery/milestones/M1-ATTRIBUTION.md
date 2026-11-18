@@ -54,7 +54,17 @@
 - Acceptance test: a failed `audit_events` insert rolls back the account write
 - Lands before M4b, because API handlers pass an actor to every write route
 
+## Milestone summary
+
+**M1b**
+Outcome: A PostgreSQL user store exists. Status: done (issue #55, PR #56, merge commit `fb541c2`). Gate: squash-merge with CI green.
+
+**M1c**
+Outcome: Every account create, update and delete records its actor in an audit trail. Status: M1c done (M1c.1 and M1c.2 merged). Gate: met; M1c merged before M4b.
+
 ## Cards
+
+### WP M1b-A: Landing
 
 ### M1b.1 — Open and land the M1b PR
 
@@ -80,6 +90,8 @@ Issue #55 closed. PR #56 merged to `main` as merge commit `fb541c2` (branch `fea
 Evidence: G0, G-DOCKER, `alembic check` clean
 
 ---
+
+### WP M1c-A: Contract and plumbing
 
 ### M1c.1 — Required actor on account write services
 
@@ -107,6 +119,8 @@ Issue #57 closed. PR #61 merged to `main` as merge commit `d433a5a` (branch `fea
 Evidence: G0, lanes core, api, cli, infra
 
 ---
+
+### WP M1c-B: Audit persistence
 
 ### M1c.2 — `audit_events` table written in the same transaction
 
