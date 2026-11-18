@@ -68,9 +68,7 @@ Outcome: Every account create, update and delete records its actor in an audit t
 
 ### M1b.1 — Open and land the M1b PR
 
-**Package:** storage-postgres, authentication, shared, api, cli
 **Needs:** none; implementation is complete
-**Decisions / Gaps:** D16, D17, D18, D19, D20
 
 #### Spec
 
@@ -94,9 +92,7 @@ Evidence: G0, G-DOCKER, `alembic check` clean
 
 ### M1c.1 — Required actor on account write services
 
-**Package:** core, storage-postgres, api, cli
 **Needs:** M1b.1 (not required; ran in parallel)
-**Decisions / Gaps:** D12, D15, R3
 
 #### Spec
 
@@ -122,9 +118,7 @@ Evidence: G0, lanes core, api, cli, infra
 
 ### M1c.2 — `audit_events` table written in the same transaction
 
-**Package:** storage-postgres
 **Needs:** M1c.1 (done)
-**Decisions / Gaps:** D3, D5, D15, D21, D22, R3
 
 #### Spec
 
