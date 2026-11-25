@@ -1,0 +1,149 @@
+# Trutina GitHub labels.
+#
+# Groups are encoded in the label name prefix so a human or an agent can tell
+# what a label means without a lookup table:
+#
+#   type/*  exactly ONE per issue. Sets the commit type and branch prefix.
+#   area/*  ONE OR MORE per issue. Says what is touched; selects docs and test lane.
+#   flag/*  ZERO OR MORE per issue. Modifiers; some trigger extra gates or a stop.
+#   (none)  process labels. The agent ignores any label without a known prefix.
+#
+# Disambiguation:
+#   type/test        tests added or improved for behavior.
+#   area/test-infra  shared fixtures, factories, fakes, markers, lanes.
+#   type/feature     a new capability. type/enhancement improves something that exists.
+#
+# Two ticket fields have no label and are declared on the ticket card instead:
+#   contract-change, decision-open.
+
+# ---------------------------------------------------------------- type/*
+- title: "type/bug"
+  description: "Something isn't working as intended. Commit type: fix."
+  color: "D73A4A"
+
+- title: "type/feature"
+  description: "New capability or behavior. Commit type: feat."
+  color: "1D76DB"
+
+- title: "type/enhancement"
+  description: "Improves existing behavior or performance. Commit type: feat or perf."
+  color: "9FE9EA"
+
+- title: "type/refactor"
+  description: "Restructures code without changing behavior. Commit type: refactor."
+  color: "E6B605"
+
+- title: "type/documentation"
+  description: "Documentation only, no behavior change. Commit type: docs."
+  color: "0075CA"
+
+- title: "type/test"
+  description: "Adds or improves tests, no production change. Commit type: test."
+  color: "9BB2D0"
+
+- title: "type/build"
+  description: "Build system, dependencies, packaging, lockfile. Commit type: build."
+  color: "8A9BA8"
+
+- title: "type/ci"
+  description: "CI workflows, test lanes, pipeline checks. Commit type: ci."
+  color: "6FA8E8"
+
+- title: "type/chore"
+  description: "Maintenance with no runtime change. Commit type: chore."
+  color: "5C6670"
+
+- title: "type/investigation"
+  description: "Research or decision work; output is a decision or tickets, not code. Branch prefix: chore."
+  color: "C2B6E2"
+
+# ---------------------------------------------------------------- area/*
+- title: "area/api"
+  description: "trutina-api: FastAPI routes and API composition root."
+  color: "0E8A16"
+
+- title: "area/cli"
+  description: "trutina-cli: Typer commands, shell and CLI composition root."
+  color: "7AD36B"
+
+- title: "area/core"
+  description: "trutina-core: domain schemas, services and repository contracts."
+  color: "0052CC"
+
+- title: "area/shared"
+  description: "trutina-shared: validation rules and the shared error model."
+  color: "BFDADC"
+
+- title: "area/config"
+  description: "trutina-config: typed, environment-driven settings."
+  color: "F9D0C4"
+
+- title: "area/storage"
+  description: "trutina-storage-postgres: repositories, models and Alembic migrations."
+  color: "00A8A8"
+
+- title: "area/auth"
+  description: "trutina-authentication, and later authorization: identity, credentials, sessions."
+  color: "5319E7"
+
+- title: "area/observability"
+  description: "trutina-observability: logging configuration and correlation."
+  color: "D4C5F9"
+
+- title: "area/docker"
+  description: "Docker images, compose files and container tooling."
+  color: "37A6F6"
+
+- title: "area/test-infra"
+  description: "Shared test infrastructure: fixtures, factories, fakes, markers, lanes."
+  color: "BFD4F2"
+
+- title: "area/validation"
+  description: "Missing, incorrect or insufficient input or domain validation."
+  color: "F38C20"
+
+# ---------------------------------------------------------------- flag/*
+- title: "flag/migration"
+  description: "Changes an Alembic migration or the schema. Triggers the migration gates."
+  color: "F5C503"
+
+- title: "flag/security"
+  description: "Touches credentials, secrets, tokens, sessions or access. Triggers the security gates."
+  color: "E07B54"
+
+- title: "flag/architecture"
+  description: "Touches a layer boundary, import contract or locked decision. Stop and confirm."
+  color: "ADA4E7"
+
+- title: "flag/technical-debt"
+  description: "Cleanup or rework to avoid future risk. Informational, no extra gates."
+  color: "DE8687"
+
+# ---------------------------------------------------------------- process (no prefix; agent ignores)
+- title: "epic"
+  description: "Large initiative spanning multiple PRs or phases. Not a ticket card."
+  color: "E58A61"
+
+- title: "duplicate"
+  description: "This issue or pull request already exists"
+  color: "CFD3D7"
+
+- title: "invalid"
+  description: "This doesn't seem right"
+  color: "D0D263"
+
+- title: "question"
+  description: "Further information is requested"
+  color: "D68AD9"
+
+- title: "wontfix"
+  description: "This will not be worked on"
+  color: "FFFFFF"
+
+- title: "help wanted"
+  description: "Extra attention is needed"
+  color: "00DFBE"
+
+- title: "good first issue"
+  description: "Good for newcomers"
+  color: "BDB2F9"
