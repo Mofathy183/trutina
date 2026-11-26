@@ -10,13 +10,13 @@
 | M2.0 | Done | — | #64 | #65 | `0ab8974` | `feat/64-redact-credential-log-keys` |
 | M2.1 | Done | — | #66 | #67 | `a348d50` | `feat/66-secret-safe-validation-errors` |
 | M2.3 | Done | — | #68 | #69 | `919c131` | `feat/68-auth-error-codes` |
-| M2.2 | Done | M0b (done) | #70 | Not recorded | Not recorded | `feat/70-password-hasher` |
+| M2.2 | Done | M0b (done) | #70 | #71 | `42b2dd8` | `feat/70-password-hasher` |
 | M2.4 | Done | M1b.1; ran in parallel with M2.2 | #72 | #73 | `5bb169e` | `feat/72-login-attempt-storage` |
 | M2.5 | Done | M2.1, M2.2 | #74 | #75 | `7bce020` | `feat/74-register-use-case` |
 | M2.6 | Done | M2.2, M2.3, M2.5 (done) | #76 | #77 | `b0c1f9c` | `feat/76-login-verification` |
 | M2.7 | Done | M2.4, M2.6 (done) | #78 | #79 | `92a6982` | `feat/78-login-throttling` |
 | M2.8 | Done | M2.0 to M2.7 (done) | #80 | #81 | `fe4928e` | `test/80-credentials-integration-verification` |
-| M3.0 | Done | owner: you (approved 2026-10-30) | #82 | #83 | Not recorded | `chore/82-token-key-rotation-adr` |
+| M3.0 | Done | owner: you (approved 2026-10-30) | #82 | #83 | `acbdba4` | `chore/82-token-key-rotation-adr` |
 | M3.1 | Done | M3.0 (done); ADR 0002 accepted by the owner | #86 | #87 | `8c53487` | `feat/86-session-contracts-and-settings` |
 | M3.2 | Removed | — | — | — | — | — |
 | M3.3 | Done | M3.1 (done); M4c.1 (not done, so the pool test builds its own one-connection pool) | #88 | #89 | `62c7210` | `feat/88-postgres-session-store` |

@@ -99,9 +99,9 @@
 | GAP-UNASSIGNED-04 | Known gap | UNASSIGNED | PR #75's commits mix the scopes `auth` and `authentication`, and no list… |
 | GAP-UNASSIGNED-05 | Open (ADR 0002) | UNASSIGNED | whether account update, which can change the category and so the normal-balance… |
 | GAP-UNASSIGNED-06 | Deferred (ADR 0002) | UNASSIGNED | cookie transport, the Origin check, CORS, CSP and cookie redaction markers wait… |
-| GAP-UNASSIGNED-07 | Known gap | UNASSIGNED | the merge commit for PR #83 (ADR 0001, M3.0) is not recorded… |
+| GAP-UNASSIGNED-07 | Closed (recorded 2026-11-26) | UNASSIGNED | the merge commit for PR #83 (ADR 0001, M3.0) is not recorded… |
 | GAP-UNASSIGNED-08 | Deferred to the OAuth milestone | UNASSIGNED | drop `NOT NULL` on `password_hash` (the model field becomes `str \| None`),… |
-| GAP-UNASSIGNED-09 | Known gap | UNASSIGNED | the CLI hint for `STORAGE_UNAVAILABLE` still says to check that the MongoDB… |
+| GAP-UNASSIGNED-09 | Closed (already fixed, verified 2026-11-26) | UNASSIGNED | the CLI hint for `STORAGE_UNAVAILABLE` still says to check that the MongoDB… |
 
 ## Items
 
@@ -867,11 +867,13 @@ cookie transport, the Origin check, CORS, CSP and cookie redaction markers wait 
 
 ### GAP-UNASSIGNED-07
 
-kind: Known gap
+kind: Closed (recorded 2026-11-26)
 milestone: UNASSIGNED (owner review)
 source: item 87 of 98
 
 the merge commit for PR #83 (ADR 0001, M3.0) is not recorded here yet, and neither are M2.2's PR number and merge commit. Whether PR #83 was squashed is not confirmed.
+
+resolution: PR #83 merged as `acbdba4` (parents `fe4928e` and `8fffc6f`, a merge commit). M2.2 is PR #71, merge commit `42b2dd8` (parents `919c131` and `a245203`, a merge commit). Both are now recorded in `STATUS.md`.
 
 ### GAP-UNASSIGNED-08
 
@@ -883,8 +885,10 @@ drop `NOT NULL` on `password_hash` (the model field becomes `str | None`), add `
 
 ### GAP-UNASSIGNED-09
 
-kind: Known gap
+kind: Closed (already fixed, verified 2026-11-26)
 milestone: UNASSIGNED (owner review)
 source: item 89 of 98
 
 the CLI hint for `STORAGE_UNAVAILABLE` still says to check that the MongoDB server is running, which is stale since the PostgreSQL cutover. Fix as its own small PR.
+
+resolution: The CLI hint for `STORAGE_UNAVAILABLE` now reads "Check that the server is running and reachable, then try again." and `git grep -in mongo -- apps packages docs/adr` finds no match.

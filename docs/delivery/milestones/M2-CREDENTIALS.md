@@ -7,7 +7,7 @@
 - **M2.0 done** (issue #64, PR #65, merge commit `0ab8974`, 8 of 8 checks green): nested credential redaction in `trutina-observability`. See the M2.0 ticket card
 - **M2.1 done** (issue #66, PR #67, merge commit `a348d50`, 8 of 8 checks green): secret-safe validation errors. `get_field_violations()` masks a credential-shaped input before it reaches `FieldViolation.value`, and the API and CLI are proven not to echo it. See the M2.1 ticket card
 - **M2.3 done** (issue #68, PR #69, merge commit `919c131`, 8 of 8 checks green): the first `AUTH_*` codes, `AUTH_INVALID_CREDENTIALS` (401) and `AUTH_THROTTLED` (429 with `Retry-After`), with API and CLI catalog entries and parity tests. Nothing raises them until M2.6 and M2.7. See the M2.3 ticket card
-- **M2.2 done** (issue #70, branch `feat/70-password-hasher`, CI green; PR number and merge commit not recorded here yet): `Argon2PasswordHasher`, Argon2id through `argon2-cffi`, with four `AuthSettings` fields. Nothing uses it yet. See the M2.2 ticket card
+- **M2.2 done** (issue #70, PR #71, merge commit `42b2dd8`, branch `feat/70-password-hasher`, CI green): `Argon2PasswordHasher`, Argon2id through `argon2-cffi`, with four `AuthSettings` fields. Nothing uses it yet. See the M2.2 ticket card
 - **M2.4 done** (issue #72, PR #73, merge commit `5bb169e`, 8 of 8 checks green): `LoginAttemptRepo` frozen, `PostgresLoginAttemptRepo` over a `login_attempts` table, and a purge script. Nothing writes to the table until M2.7. See the M2.4 ticket card
 - **M2.5 done** (issue #74, PR #75, merge commit `7bce020`, 11 commits, 8 of 8 checks green): `RegistrationService`, `RegisterInput` and `RegisteredUser` in `credentials/users/`, the shared input rules (`normalize_password()`, password and email limits, a registration-only email shape check) and `ErrorCode.INVALID_EMAIL`. Service only; nothing calls it yet. See the M2.5 ticket card
 - **M2.6 done** (issue #76, PR #77, merge commit `b0c1f9c`, 6 commits, 8 of 8 checks green): `PasswordAuthenticator` in `credentials/login/`: one indistinguishable failure, a dummy-hash verify on the unknown-user path, rehash on login. Service only; nothing calls it yet. See the M2.6 ticket card
@@ -25,7 +25,7 @@
 ## Milestone summary
 
 **M2**
-Outcome: Services can register a user and verify credentials safely; no HTTP route or token exists. Status: M2.0 done (PR #65), M2.1 done (PR #67), M2.2 done (issue #70), M2.3 done (PR #69), M2.4 done (issue #72, PR #73), M2.5 done (issue #74, PR #75), M2.6 done (issue #76, PR #77), M2.7 done (issue #78, PR #79); M2.8 done (issue #80, PR #81). M2 is complete. Gate: dev and test only; nothing here is exposed by a route.
+Outcome: Services can register a user and verify credentials safely; no HTTP route or token exists. Status: M2.0 done (PR #65), M2.1 done (PR #67), M2.2 done (issue #70, PR #71), M2.3 done (PR #69), M2.4 done (issue #72, PR #73), M2.5 done (issue #74, PR #75), M2.6 done (issue #76, PR #77), M2.7 done (issue #78, PR #79); M2.8 done (issue #80, PR #81). M2 is complete. Gate: dev and test only; nothing here is exposed by a route.
 
 ## Cards
 
@@ -121,7 +121,7 @@ Evidence: G0, lanes shared, api, cli. 844 unit tests passed locally in these lan
 
 #### Outcome
 
-Issue #70 closed. Branch `feat/70-password-hasher` (12 commits) merged to `main` with CI green; the PR number and merge commit are not recorded here yet. Unblocks M2.5 and M2.6; the end-to-end security criteria close in M2.8 (R4).
+Issue #70 closed. PR #71 merged to `main` as merge commit `42b2dd8` (branch `feat/70-password-hasher`, 12 commits, CI green). Unblocks M2.5 and M2.6; the end-to-end security criteria close in M2.8 (R4).
 
 Evidence: G0, G-DOCKER, lanes authentication, config
 

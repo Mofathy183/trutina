@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (owner approval 2026-10-30). Partially superseded by [ADR 0002](0002-session-lifetimes-step-up-and-connection-use.md); see Amendments at the end
 - **Date:** 2026-10-30
-- **Recorded in:** issue #82, PR #83 (merge commit not recorded yet)
+- **Recorded in:** issue #82, PR #83 (merge commit `acbdba4`)
 - **Deciders:** project owner
 - **Settles:** D1 in the identity and authentication plan (v3.23)
 - **Supersedes:** P8 (token lifetime and key rotation) and the JWT-specific parts of M3

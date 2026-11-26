@@ -4,7 +4,7 @@
 
 ### M3 — Sessions and auth routes (re-scoped by ADR 0001)
 
-- **M3.0 done**: `docs/adr/0001-session-mechanism.md` written and approved by the owner on 2026-10-30. It settles D1: one opaque, database-backed session mechanism for API and CLI (D34). Issue #82, PR #83, branch `chore/82-token-key-rotation-adr`; the merge id done
+- **M3.0 done**: `docs/adr/0001-session-mechanism.md` written and approved by the owner on 2026-10-30. It settles D1: one opaque, database-backed session mechanism for API and CLI (D34). Issue #82, PR #83, branch `chore/82-token-key-rotation-adr`, merge commit `acbdba4`
 - **M3.1 done** (issue #86, PR #87, merge commit `8c53487`, 6 commits, 8 of 8 checks green, branch `feat/86-session-contracts-and-settings` deleted): frozen session contracts in `sessions/` (the folder was `tokens/`), the session and trusted-proxy settings, `PostgresSettings.pool_timeout_s` declared and not read, and the token contracts, token fakes and signing-key settings removed. Contracts and settings only; nothing implements or reads them yet. See the M3.1 ticket card and D36
 - **M3.3 done** (issue #88, PR #89, merge commit `62c7210`, 6 commits, 8 of 8 checks green, branch `feat/88-postgres-session-store` deleted): `PostgresSessionRepo` over a `sessions` table with migration `5bdeae152b29`, and `tools/purge-sessions.py`. Nothing calls the adapter yet. See the M3.3 ticket card and D37
 - **M3.4 done** (issue #90, PR #91, merge commit `710539a`, 5 commits, 8 of 8 checks green, branch `feat/90-session-service` deleted): `SessionService` and `Sha256SessionTokenHasher` in `trutina-authentication`'s `sessions/` folder, with `AUTH_TOKEN_INVALID` and `AUTH_REAUTH_REQUIRED` and their API and CLI catalog entries. Service only; nothing calls it yet. See the M3.4 ticket card and D38
@@ -45,7 +45,7 @@ Outcome: Login and logout work over HTTP with opaque, database-backed sessions; 
 
 #### Outcome
 
-Issue #82. PR #83 (branch `chore/82-token-key-rotation-adr`). The merge commit is not recorded here yet; record it after merge.
+Issue #82. PR #83 merged to `main` as merge commit `acbdba4` (branch `chore/82-token-key-rotation-adr`).
 
 Evidence: Reviewed and approved ADR
 
